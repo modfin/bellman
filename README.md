@@ -21,7 +21,7 @@ Just normal conversation mode
 
 ```go 
 
-llm := openai.New(apiKey).Generate()
+llm := openai.New(apiKey).Generator()
 res, err := llm.
     Model(openai.GenModel_gpt4o_mini).
     Prompt(
@@ -47,7 +47,7 @@ Just normal conversation mode
 
 ```go 
 
-llm := openai.New(apiKey).Generate()
+llm := openai.New(apiKey).Generator()
 res, err := llm.
     Model(openai.GenModel_gpt4o_mini).
     System("You are a expert movie quoter and lite fo finish peoples sentences with a movie reference").
@@ -72,7 +72,7 @@ Setting things like temperature, max tokens, top p, and stop secuences
 
 ```go 
 
-llm := openai.New(apiKey).Generate()
+llm := openai.New(apiKey).Generator()
 res, err := llm.
     Model(openai.GenModel_gpt4o_mini).
 	    Temperature(0.5).
@@ -111,7 +111,7 @@ type Responese struct {
 }
 
 
-llm := vertexai.New(googleConfig).Generate()
+llm := vertexai.New(googleConfig).Generator()
 res, err := llm.
     Model(vertexai.GenModel_gemini_1_5_pro).
     Output(Responese{}).
@@ -182,7 +182,7 @@ Here is an example of how to define and use a tool:
 
 2. Use the tool in a prompt:
 ```go
-   llm := anthopic.New(apiKey).Generate()
+   llm := anthopic.New(apiKey).Generator()
    res, err := llm.
        Model(anthropic.GenModel_3_5_haiku_latest)).
        System("You are a Shakespeare quote generator").
@@ -258,7 +258,7 @@ PDFs is only supported by Gemini and Anthropic
       t.Fatalf("could not decode image %v", err)
    }
 
-   llm := anthopic.New(apiKey).Generate()
+   llm := anthopic.New(apiKey).Generator()
    
    res, err := llm.
       Prompt(
