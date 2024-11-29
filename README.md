@@ -155,7 +155,8 @@ fmt.Println(result, err)
 
 
 ## Tools
-The Bellman library allows you to define and use tools in your prompts. Here is an example of how to define and use a tool:
+The Bellman library allows you to define and use tools in your prompts. 
+Here is an example of how to define and use a tool:
 
 1. Define a tool:
    ```go
@@ -165,7 +166,9 @@ The Bellman library allows you to define and use tools in your prompts. Here is 
     }
 
     getQuote := tools.NewTool("get_quote",
-       tools.WithDescription("a function to get a quote from a person or character in Hamlet"),
+       tools.WithDescription(
+            "a function to get a quote from a person or character in Hamlet",
+       ),
        tools.WithSchema(Args{}),
        tools.WithCallback(func(jsondata string) error {
            var arg Args
@@ -184,7 +187,8 @@ The Bellman library allows you to define and use tools in your prompts. Here is 
        Model(anthropic.GenModel_3_5_haiku_latest)).
        System("You are a Shakespeare quote generator").
        Tools(getQuote).
-       Tool(tools.RequiredTool). // Congifure a specific too to be used, or the setting for it
+	   // Configure a specific too to be used, or the setting for it
+       Tool(tools.RequiredTool). 
        Prompt(
            prompt.AsUser("Give me 3 quotes from different characters"),
        )
