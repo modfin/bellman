@@ -1,13 +1,37 @@
 package vertexai
 
-import "github.com/modfin/bellman/schema"
+import (
+	"encoding/base64"
+	"encoding/json"
+	"github.com/modfin/bellman/schema"
+	"io"
+)
 
 type genRequestContent struct {
 	Role  string                  `json:"role"`
 	Parts []genRequestContentPart `json:"parts"`
 }
 type genRequestContentPart struct {
-	Text string `json:"text"`
+	Text string `json:"text,omitempty"`
+
+	InlineDate *inlineDate `json:"inlineData,omitempty"`
+}
+
+type inlineDate struct {
+	MimeType string    `json:"mimeType,omitempty"`
+	Data     io.Reader `json:"data,omitempty"` // base64 encoded. Max 20mb
+}
+
+func (i inlineDate) MarshalJSON() ([]byte, error) {
+	d, err := io.ReadAll(i.Data)
+	if err != nil {
+		return nil, err
+	}
+	mime, err := json.Marshal(i.MimeType)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(`{"mimeType":` + string(mime) + `,"data":"` + base64.StdEncoding.EncodeToString(d) + `"}`), nil
 }
 
 type genConfig struct {

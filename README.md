@@ -221,6 +221,61 @@ Here is an example of how to define and use a tool:
 ```
 
 
+## Binary Data
+Images is supported by Gemini, OpenAI and Anthropic.\
+PDFs is only supported by Gemini and Anthropic
+
+#### Image
+```go 
+
+   image := "/9j/4AAQSkZJRgABAQEBLAEsAAD//g......gM4OToWbsBg5mGu0veCcRZO6f0EjK5Jv5X/AP/Z"
+   data, err := base64.StdEncoding.DecodeString(image)
+   if err != nil {
+      t.Fatalf("could not decode image %v", err)
+   }
+   res, err := llm.
+      Prompt(
+          prompt.AsUserWithData(prompt.MimeImageJPEG, bytes.NewBuffer(data)),
+          prompt.AsUser("Describe the image to me"),
+      )
+   
+   if err != nil {
+      t.Fatalf("Prompt() error = %v", err)
+   }
+   fmt.Println(res.AsText())
+   // The image contains the word "Hot!" in red text. The text is centered on a white background. 
+   // The exclamation point is after the word.  The image is a simple and straightforward 
+   // depiction of the word "hot." <nil>
+
+```
+
+
+#### PDF
+```go 
+
+   pdf := os.Open("path/to/pdf")
+   if err != nil {
+      t.Fatalf("could not decode image %v", err)
+   }
+
+   llm := anthopic.New(apiKey).Generate()
+   
+   res, err := llm.
+      Prompt(
+          prompt.AsUserWithData(prompt.MimeApplicationPDF, pdf),
+          prompt.AsUser("Describe to me what is in the PDF"),
+      )
+   
+   if err != nil {
+      t.Fatalf("Prompt() error = %v", err)
+   }
+   fmt.Println(res.AsText())
+   // The image contains the word "Hot!" in red text. The text is centered on a white background. 
+   // The exclamation point is after the word.  The image is a simple and straightforward 
+   // depiction of the word "hot." <nil>
+
+```
+
 
 ## License
 

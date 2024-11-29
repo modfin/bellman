@@ -1,12 +1,40 @@
 package openai
 
-import schema "github.com/modfin/bellman/schema"
+import (
+	"encoding/base64"
+	"encoding/json"
+	schema "github.com/modfin/bellman/schema"
+	"io"
+)
 
 type genRequestMessage struct {
 	// https://platform.openai.com/docs/guides/text-generation?lang=curl&text-generation-quickstart-example=json#building-prompts
 	// system,assistant or user
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string              `json:"role"`
+	Content []genMessageContent `json:"content"`
+}
+
+type genMessageContent struct {
+	Type     string    `json:"type"` // text or image_url
+	Text     string    `json:"text,omitempty"`
+	ImageUrl *ImageUrl `json:"image_url,omitempty"`
+}
+
+type ImageUrl struct {
+	Url    string `json:"url"` /// data:image/jpeg;base64,......
+	reader io.Reader
+}
+
+func (i ImageUrl) MarshalJSON() ([]byte, error) {
+	if len(i.Url) > 0 {
+		return json.Marshal(i.Url)
+	}
+	d, err := io.ReadAll(i.reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(`{"url": "data:image/jpeg;base64,` + base64.StdEncoding.EncodeToString(d) + `"}`), nil
 }
 
 type genRequest struct {

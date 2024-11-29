@@ -181,10 +181,18 @@ func (b *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	// Dealing with Prompt Messages
 	messages := []genRequestMessage{}
 	for _, c := range conversation {
-		messages = append(messages, genRequestMessage{
-			Role:    string(c.Role),
-			Content: c.Text,
-		})
+		message := genRequestMessage{
+			Role: string(c.Role),
+			Content: []genMessageContent{
+				{Type: "text", Text: c.Text},
+			},
+		}
+		if c.Payload != nil {
+			message.Content[0].Type = "image_url"
+			message.Content[0].ImageUrl = &ImageUrl{reader: c.Payload.Data}
+		}
+
+		messages = append(messages, message)
 	}
 	reqModel.Messages = messages
 

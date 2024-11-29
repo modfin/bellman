@@ -9,6 +9,7 @@ import (
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
 	"io"
+	"strings"
 
 	"net/http"
 )
@@ -143,6 +144,9 @@ func (g *generator) Output(element any) bellman.Generator {
 }
 
 func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, error) {
+
+	var pdfBeta bool
+
 	model := request{
 		Model:       g.model.Name,
 		Temperature: g.temperature,
@@ -217,13 +221,39 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	}
 
 	for _, t := range conversation {
-		model.Messages = append(model.Messages, reqMessages{
+
+		message := reqMessages{
 			Role: string(t.Role),
 			Content: []reqContent{{
 				Type: "text",
 				Text: t.Text,
 			}},
-		})
+		}
+
+		if t.Payload != nil {
+			message.Content[0].Text = ""
+
+			if t.Payload.Mime == "application/pdf" {
+				pdfBeta = true
+				message.Content[0].Type = "document"
+				message.Content[0].Source = &reqContentSource{
+					Type:      "base64",
+					MediaType: t.Payload.Mime,
+					Data:      t.Payload.Data,
+				}
+			}
+
+			if strings.HasPrefix(t.Payload.Mime, "image/") {
+				message.Content[0].Type = "image"
+				message.Content[0].Source = &reqContentSource{
+					Type:      "base64",
+					MediaType: t.Payload.Mime,
+					Data:      t.Payload.Data,
+				}
+			}
+		}
+
+		model.Messages = append(model.Messages, message)
 	}
 	//if g.schema != nil {
 	//	model.Output = g.schema
@@ -242,6 +272,9 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	req.Header.Set("x-api-key", g.a.apiKey)
 	req.Header.Set("anthropic-version", AnthropicVersion)
 	req.Header.Set("content-type", "application/json")
+	if pdfBeta {
+		req.Header.Add("anthropic-beta", "pdfs-2024-09-25")
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

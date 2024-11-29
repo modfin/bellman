@@ -201,14 +201,23 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 		default:
 			role = "user"
 		}
-		model.Contents = append(model.Contents, genRequestContent{
+		content := genRequestContent{
 			Role: role,
 			Parts: []genRequestContentPart{
 				{
 					Text: p.Text,
 				},
 			},
-		})
+		}
+
+		if p.Payload != nil {
+			content.Parts[0].InlineDate = &inlineDate{
+				MimeType: p.Payload.Mime,
+				Data:     p.Payload.Data,
+			}
+		}
+
+		model.Contents = append(model.Contents, content)
 	}
 
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
