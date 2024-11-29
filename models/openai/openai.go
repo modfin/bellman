@@ -92,7 +92,7 @@ func (g *OpenAI) Embed(text string, model string) ([]float64, error) {
 	return respModel.Data[0].Embedding, nil
 }
 
-func (g *OpenAI) Generate(options ...bellman.GeneratorOption) bellman.Generator {
+func (g *OpenAI) Generator(options ...bellman.GeneratorOption) bellman.Generator {
 	var gen bellman.Generator = &generator{
 		g: g,
 

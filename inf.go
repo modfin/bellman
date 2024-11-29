@@ -6,7 +6,7 @@ import (
 )
 
 type LLM interface {
-	Generate(options ...GeneratorOption) Generator
+	Generator(options ...GeneratorOption) Generator
 }
 
 type Generator interface {

@@ -96,7 +96,7 @@ func (g *Google) Embed(text string, model string) ([]float64, error) {
 	return embeddings.Predictions[0].Embeddings.Values, nil
 }
 
-func (g *Google) Generate(options ...bellman.GeneratorOption) bellman.Generator {
+func (g *Google) Generator(options ...bellman.GeneratorOption) bellman.Generator {
 	var gen bellman.Generator = &generator{
 		g:           g,
 		topP:        -1,

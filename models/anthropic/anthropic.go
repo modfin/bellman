@@ -24,7 +24,7 @@ func New(apiKey string) *Anthropic {
 	}
 }
 
-func (a *Anthropic) Generate(options ...bellman.GeneratorOption) bellman.Generator {
+func (a *Anthropic) Generator(options ...bellman.GeneratorOption) bellman.Generator {
 	var gen bellman.Generator = &generator{
 		a: a,
 
