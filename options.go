@@ -12,13 +12,13 @@ func WithModel(model GenModel) GeneratorOption {
 
 func WithTools(tools ...tools.Tool) GeneratorOption {
 	return func(g Generator) Generator {
-		return g.Tools(tools...)
+		return g.SetTools(tools...)
 	}
 }
 
-func WithTool(tool tools.Tool) GeneratorOption {
+func WithToolConfig(tool tools.Tool) GeneratorOption {
 	return func(g Generator) Generator {
-		return g.Tool(tool)
+		return g.SetToolConfig(tool)
 	}
 }
 

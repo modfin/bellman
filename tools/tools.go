@@ -16,7 +16,7 @@ var AutoTool = Tool{
 	Name: "auto",
 }
 
-// RequiredTool  means the model must call one or more tools.
+// RequiredTool means the model must call one or more tools.
 var RequiredTool = Tool{
 	Name: "required",
 }
@@ -36,14 +36,14 @@ func WithDescription(description string) ToolOption {
 	}
 }
 
-func WithCallback(callback func(jsonArgument string) error) ToolOption {
+func WithCallback(callback func(jsonArgument string) (string, error)) ToolOption {
 	return func(tool Tool) Tool {
 		tool.Callback = callback
 		return tool
 	}
 }
 
-func WithSchema(arg any) ToolOption {
+func WithArgSchema(arg any) ToolOption {
 	return func(tool Tool) Tool {
 		tool.ArgumentSchema = schema.New(arg)
 		return tool
@@ -64,5 +64,5 @@ type Tool struct {
 	Name           string
 	Description    string
 	ArgumentSchema *schema.JSON
-	Callback       func(jsonArg string) error
+	Callback       func(jsonArg string) (string, error)
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/modfin/bellman"
 	"io"
 	"net/http"
 )
@@ -39,12 +40,7 @@ type response struct {
 	} `json:"usage"`
 }
 
-func (v *VoyageAI) Embed(text string) ([]float64, error) {
-
-	model, ok := Models[v.config.EmbeddingModel]
-	if !ok {
-		return nil, fmt.Errorf("unknown model %s", v.config.EmbeddingModel)
-	}
+func (v *VoyageAI) Embed(text string, model bellman.EmbedModel) ([]float64, error) {
 
 	u := `https://api.voyageai.com/v1/embeddings`
 

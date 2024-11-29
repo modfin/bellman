@@ -71,13 +71,12 @@ func (r *response) Eval() (err error) {
 				return fmt.Errorf("tool %s has no callback", tool)
 			}
 			count++
-			err = t.Callback(tool.Argument)
+			_, err = t.Callback(tool.Argument)
 			if err != nil {
 				return fmt.Errorf("tool %s failed: %w", tool, err)
 			}
 			break
 		}
-
 	}
 	if count != len(callbacks) {
 		return fmt.Errorf("not all callbacks were evaluated")
@@ -98,6 +97,11 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 
 	var res []bellman.ToolCallback
 
+	belt := map[string]*tools.Tool{}
+	for _, t := range r.tools {
+		belt[t.Name] = &t
+	}
+
 	for _, c := range candidates[0].Content.Parts {
 
 		arg, err := json.Marshal(c.FunctionCall.Arg)
@@ -109,6 +113,7 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 
 			Name:     c.FunctionCall.Name,
 			Argument: string(arg),
+			Local:    belt[c.FunctionCall.Name],
 		})
 	}
 

@@ -56,7 +56,7 @@ func (r *respone) Eval() (err error) {
 				return fmt.Errorf("tool %s has no callback", tool)
 			}
 			count++
-			err = t.Callback(tool.Argument)
+			_, err = t.Callback(tool.Argument)
 			if err != nil {
 				return fmt.Errorf("tool %s failed: %w", tool, err)
 			}
@@ -78,12 +78,17 @@ func (r *respone) AsTools() ([]bellman.ToolCallback, error) {
 		return nil, fmt.Errorf("no tool call in response")
 	}
 
+	belt := map[string]*tools.Tool{}
+	for _, t := range r.tools {
+		belt[t.Name] = &t
+	}
 	var res []bellman.ToolCallback
 
 	for _, c := range r.llm.Choices[0].Message.ToolCalls {
 		res = append(res, bellman.ToolCallback{
 			Name:     c.Function.Name,
 			Argument: c.Function.Arguments,
+			Local:    belt[c.Function.Name],
 		})
 	}
 

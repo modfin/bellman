@@ -57,21 +57,21 @@ func New(config GoogleConfig) (*Google, error) {
 	}, nil
 }
 
-func (g *Google) Embed(text string, model string) ([]float64, error) {
+func (g *Google) Embed(text string, model bellman.EmbedModel) ([]float64, error) {
 	req := GoogleEmbedRequest{
 		Instances: []struct {
 			TaskType string `json:"task_type"`
 			Content  string `json:"content"`
 		}{
 			{
-				TaskType: model,
+				TaskType: model.Name,
 				Content:  text,
 			},
 		},
 	}
 
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict",
-		g.config.Region, g.config.Project, g.config.Region, model)
+		g.config.Region, g.config.Project, g.config.Region, model.Name)
 
 	body, err := json.Marshal(req)
 	if err != nil {

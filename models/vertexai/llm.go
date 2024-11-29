@@ -64,14 +64,21 @@ func (b *generator) Output(element any) bellman.Generator {
 	bb.schema = schema.New(element)
 	return bb
 }
-func (b *generator) Tools(tool ...tools.Tool) bellman.Generator {
+func (g *generator) Tools() []tools.Tool {
+	return g.tools
+}
+
+func (b *generator) SetTools(tool ...tools.Tool) bellman.Generator {
 	bb := b.clone()
 
 	bb.tools = append([]tools.Tool{}, tool...)
 	return bb
 }
+func (g *generator) AddTools(tool ...tools.Tool) bellman.Generator {
+	return g.SetTools(append(g.tools, tool...)...)
+}
 
-func (b *generator) Tool(tool tools.Tool) bellman.Generator {
+func (b *generator) SetToolConfig(tool tools.Tool) bellman.Generator {
 	bb := b.clone()
 	bb.tool = &tool
 
@@ -172,7 +179,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 		}
 	}
 
-	// Dealing with Tool config
+	// Dealing with SetToolConfig config
 	if g.tool != nil {
 		model.ToolConfig = &genToolConfig{
 			GoogleFunctionCallingConfig: genFunctionCallingConfig{

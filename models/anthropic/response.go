@@ -47,6 +47,11 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 		return nil, fmt.Errorf("response is structured output, use AsText of unmarshal instead")
 	}
 
+	belt := map[string]*tools.Tool{}
+	for _, t := range r.tools {
+		belt[t.Name] = &t
+	}
+
 	var ret []bellman.ToolCallback
 	for _, c := range r.llm.Content {
 		if c.Type == "tool_use" {
@@ -54,9 +59,11 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal input: %w", err)
 			}
+
 			ret = append(ret, bellman.ToolCallback{
 				Name:     c.Name,
 				Argument: string(jsondata),
+				Local:    belt[c.Name],
 			})
 		}
 	}
@@ -83,7 +90,7 @@ func (r *response) Eval() (err error) {
 				return fmt.Errorf("tool %s has no callback", tool)
 			}
 			count++
-			err = t.Callback(tool.Argument)
+			_, err = t.Callback(tool.Argument)
 			if err != nil {
 				return fmt.Errorf("tool %s failed: %w", tool, err)
 			}

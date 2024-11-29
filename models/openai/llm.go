@@ -29,15 +29,22 @@ type generator struct {
 	tool   *tools.Tool
 }
 
-func (b *generator) Tools(tool ...tools.Tool) bellman.Generator {
-	bb := b.clone()
+func (g *generator) Tools() []tools.Tool {
+	return g.tools
+}
+
+func (g *generator) AddTools(tool ...tools.Tool) bellman.Generator {
+	return g.SetTools(append(g.tools, tool...)...)
+}
+func (g *generator) SetTools(tool ...tools.Tool) bellman.Generator {
+	bb := g.clone()
 
 	bb.tools = append([]tools.Tool{}, tool...)
 	return bb
 }
 
-func (b *generator) Tool(tool tools.Tool) bellman.Generator {
-	bb := b.clone()
+func (g *generator) SetToolConfig(tool tools.Tool) bellman.Generator {
+	bb := g.clone()
 	bb.tool = &tool
 
 	for _, t := range tools.ControlTools {
@@ -49,8 +56,8 @@ func (b *generator) Tool(tool tools.Tool) bellman.Generator {
 	return bb
 }
 
-func (b *generator) StopAt(stop ...string) bellman.Generator {
-	bb := b.clone()
+func (g *generator) StopAt(stop ...string) bellman.Generator {
+	bb := g.clone()
 	bb.stopSequences = append([]string{}, stop...)
 	if len(bb.stopSequences) > 4 {
 		bb.stopSequences = bb.stopSequences[:4]
@@ -59,88 +66,88 @@ func (b *generator) StopAt(stop ...string) bellman.Generator {
 	return bb
 }
 
-func (b *generator) Temperature(temperature float64) bellman.Generator {
-	bb := b.clone()
+func (g *generator) Temperature(temperature float64) bellman.Generator {
+	bb := g.clone()
 	bb.temperature = temperature
 
 	return bb
 }
 
-func (b *generator) TopP(topP float64) bellman.Generator {
-	bb := b.clone()
+func (g *generator) TopP(topP float64) bellman.Generator {
+	bb := g.clone()
 	bb.topP = topP
 
 	return bb
 }
 
-func (b *generator) MaxTokens(maxTokens int) bellman.Generator {
-	bb := b.clone()
+func (g *generator) MaxTokens(maxTokens int) bellman.Generator {
+	bb := g.clone()
 	bb.maxTokens = maxTokens
 
 	return bb
 }
 
-func (b *generator) clone() *generator {
+func (g *generator) clone() *generator {
 	var bb generator
-	bb = *b
-	if b.schema != nil {
-		cp := *b.schema
+	bb = *g
+	if g.schema != nil {
+		cp := *g.schema
 		bb.schema = &cp
 	}
-	if b.tool != nil {
-		cp := *b.tool
+	if g.tool != nil {
+		cp := *g.tool
 		bb.tool = &cp
 	}
-	if b.tools != nil {
-		bb.tools = append([]tools.Tool{}, b.tools...)
+	if g.tools != nil {
+		bb.tools = append([]tools.Tool{}, g.tools...)
 	}
 
 	return &bb
 }
 
-func (b *generator) Model(model bellman.GenModel) bellman.Generator {
-	bb := b.clone()
+func (g *generator) Model(model bellman.GenModel) bellman.Generator {
+	bb := g.clone()
 	bb.model = model
 	return bb
 }
 
-func (b *generator) System(prompt string) bellman.Generator {
-	bb := b.clone()
+func (g *generator) System(prompt string) bellman.Generator {
+	bb := g.clone()
 	bb.systemPrompt = prompt
 	return bb
 }
 
-func (b *generator) Output(element any) bellman.Generator {
-	bb := b.clone()
+func (g *generator) Output(element any) bellman.Generator {
+	bb := g.clone()
 	bb.schema = schema.New(element)
 	return bb
 }
 
-func (b *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, error) {
+func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, error) {
 
 	// Open Ai specific
-	if b.systemPrompt != "" {
-		conversation = append([]prompt.Prompt{{Role: "system", Text: b.systemPrompt}}, conversation...)
+	if g.systemPrompt != "" {
+		conversation = append([]prompt.Prompt{{Role: "system", Text: g.systemPrompt}}, conversation...)
 	}
 
 	reqModel := genRequest{
-		Stop:        b.stopSequences,
-		Temperature: b.temperature,
-		TopP:        b.topP,
-		MaxTokens:   b.maxTokens,
+		Stop:        g.stopSequences,
+		Temperature: g.temperature,
+		TopP:        g.topP,
+		MaxTokens:   g.maxTokens,
 	}
 
 	// Dealing with Model
-	if b.model.Name != "" {
-		reqModel.Model = b.model.Name
+	if g.model.Name != "" {
+		reqModel.Model = g.model.Name
 	}
 
-	if b.model.Name == "" {
+	if g.model.Name == "" {
 		return nil, fmt.Errorf("model is required")
 	}
 
 	// Dealing with Tools
-	for _, t := range b.tools {
+	for _, t := range g.tools {
 		reqModel.Tools = append(reqModel.Tools, requestTool{
 			Type: "function",
 			Function: toolFunc{
@@ -152,28 +159,28 @@ func (b *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 		})
 	}
 	// Selecting specific tool
-	if b.tool != nil {
-		switch b.tool.Name {
+	if g.tool != nil {
+		switch g.tool.Name {
 		case tools.NoTool.Name, tools.AutoTool.Name, tools.RequiredTool.Name:
-			reqModel.ToolChoice = b.tool.Name
+			reqModel.ToolChoice = g.tool.Name
 		default:
 			reqModel.ToolChoice = requestTool{
 				Type: "function",
 				Function: toolFunc{
-					Name: b.tool.Name,
+					Name: g.tool.Name,
 				},
 			}
 		}
 	}
 
 	// Dealing with Output Schema
-	if b.schema != nil {
+	if g.schema != nil {
 		reqModel.ResponseFormat = &responseFormat{
 			Type: "json_schema",
 			ResponseFormatSchema: responseFormatSchema{
 				Name:   "response",
 				Strict: false,
-				Schema: b.schema,
+				Schema: g.schema,
 			},
 		}
 	}
@@ -207,7 +214,7 @@ func (b *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	if err != nil {
 		return nil, fmt.Errorf("could not create openai request, %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+b.g.apiKey)
+	req.Header.Set("Authorization", "Bearer "+g.g.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -229,7 +236,7 @@ func (b *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 		return nil, fmt.Errorf("no choices in response")
 	}
 	return &respone{
-		tools: b.tools,
+		tools: g.tools,
 		llm:   respModel,
 	}, nil
 }

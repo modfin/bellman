@@ -20,11 +20,14 @@ type Generator interface {
 	// Output lets you specify the output schema, eg for unmarshalling reuslt into a struct.
 	Output(element any) Generator
 
-	// Tools lets you specifics a selection of tools that the ai may use
-	Tools(tool ...tools.Tool) Generator
+	// SetTools lets you specifics a selection of tools that the ai may use
+	SetTools(tool ...tools.Tool) Generator
 
-	// Tool lets you specifics which tool to use, eg, ai.NoTool, ai.AutoTool, ai.RequiredTool or a specific tool
-	Tool(tool tools.Tool) Generator
+	// AddTools lets add tools to the generator
+	AddTools(tool ...tools.Tool) Generator
+
+	// SetToolConfig lets you specifics which tool to use, eg, ai.NoTool, ai.AutoTool, ai.RequiredTool or a specific tool
+	SetToolConfig(tool tools.Tool) Generator
 
 	StopAt(stop ...string) Generator
 	Temperature(temperature float64) Generator
@@ -32,6 +35,8 @@ type Generator interface {
 	MaxTokens(maxTokens int) Generator
 
 	Prompt(prompt ...prompt.Prompt) (Response, error)
+
+	Tools() []tools.Tool
 }
 
 type Response interface {
@@ -48,9 +53,4 @@ type Response interface {
 
 	// Unmarshal will unmarshal the response into the provided reference
 	Unmarshal(ref any) error
-}
-
-type ToolCallback struct {
-	Name     string
-	Argument string
 }

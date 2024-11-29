@@ -46,10 +46,10 @@ func New(key string) *OpenAI {
 	}
 }
 
-func (g *OpenAI) Embed(text string, model string) ([]float64, error) {
+func (g *OpenAI) Embed(text string, model bellman.EmbedModel) ([]float64, error) {
 	reqModel := embedRequest{
 		Input:          text,
-		Model:          model,
+		Model:          model.Name,
 		EncodingFormat: "float",
 	}
 
