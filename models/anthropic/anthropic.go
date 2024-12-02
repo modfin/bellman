@@ -14,13 +14,16 @@ func New(apiKey string) *Anthropic {
 	}
 }
 
-func (a *Anthropic) Generator(options ...bellman.GeneratorOption) bellman.Generator {
-	var gen bellman.Generator = &generator{
-		a: a,
-
-		topP:        -1,
-		temperature: 1,
-		maxTokens:   1024,
+func (a *Anthropic) Generator(options ...bellman.GeneratorOption) *bellman.Generator {
+	var gen = &bellman.Generator{
+		Prompter: &generator{
+			anthropic: a,
+		},
+		Config: bellman.Config{
+			TopP:        -1,
+			Temperature: 1,
+			MaxTokens:   1024,
+		},
 	}
 
 	for _, op := range options {

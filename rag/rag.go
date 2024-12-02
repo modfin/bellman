@@ -10,15 +10,15 @@ import (
 
 const respone_output_callback_name = "__bellman__rag_result_callback"
 
-func tool2promt(t bellman.ToolCallback) prompt.Prompt {
+func tool2promt(t tools.Call) prompt.Prompt {
 
 	return prompt.Prompt{
 		Role: prompt.Assistant,
-		Text: "tool function call: " + t.Name + " with argument: " + t.Argument,
+		Text: "function call: " + t.Name + " with argument: " + t.Argument,
 	}
 }
 
-func Run[T any](depth int, g bellman.Generator, prompts ...prompt.Prompt) (*Result[T], error) {
+func Run[T any](depth int, g *bellman.Generator, prompts ...prompt.Prompt) (*Result[T], error) {
 
 	var zero T
 
@@ -56,14 +56,14 @@ func Run[T any](depth int, g bellman.Generator, prompts ...prompt.Prompt) (*Resu
 				}, err
 			}
 
-			if callback.Local == nil {
+			if callback.Ref == nil {
 				return nil, fmt.Errorf("tool %s not found in local setup", callback.Name)
 			}
-			if callback.Local.Callback == nil {
+			if callback.Ref.Function == nil {
 				return nil, fmt.Errorf("tool %s has no callback function attached", callback.Name)
 			}
 
-			respstr, err := callback.Local.Callback(callback.Argument)
+			respstr, err := callback.Ref.Function(callback.Argument)
 			if err != nil {
 				return nil, fmt.Errorf("tool %s failed: %w", callback.Name, err)
 			}

@@ -6,148 +6,56 @@ import (
 	"fmt"
 	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
 	"io"
 	"net/http"
 	"os"
+	"sync/atomic"
 )
 
+var requestNo int64
+
 type generator struct {
-	g *OpenAI
-	// Cloneable...
-	model        bellman.GenModel
-	systemPrompt string
-
-	stopSequences []string
-	topP          float64
-	temperature   float64
-	maxTokens     int
-
-	schema *schema.JSON
-	tools  []tools.Tool
-	tool   *tools.Tool
+	openai *OpenAI
+	config bellman.Config
 }
 
-func (g *generator) Tools() []tools.Tool {
-	return g.tools
+func (g *generator) SetConfig(config bellman.Config) {
+	g.config = config
 }
 
-func (g *generator) AddTools(tool ...tools.Tool) bellman.Generator {
-	return g.SetTools(append(g.tools, tool...)...)
-}
-func (g *generator) SetTools(tool ...tools.Tool) bellman.Generator {
-	bb := g.clone()
-
-	bb.tools = append([]tools.Tool{}, tool...)
-	return bb
-}
-
-func (g *generator) SetToolConfig(tool tools.Tool) bellman.Generator {
-	bb := g.clone()
-	bb.tool = &tool
-
-	for _, t := range tools.ControlTools {
-		if t.Name == tool.Name {
-			return bb
-		}
+func (g *generator) log(msg string, args ...any) {
+	if g.config.Log == nil {
+		return
 	}
-	bb.tools = []tools.Tool{tool}
-	return bb
-}
-
-func (g *generator) StopAt(stop ...string) bellman.Generator {
-	bb := g.clone()
-	bb.stopSequences = append([]string{}, stop...)
-	if len(bb.stopSequences) > 4 {
-		bb.stopSequences = bb.stopSequences[:4]
-	}
-
-	return bb
-}
-
-func (g *generator) Temperature(temperature float64) bellman.Generator {
-	bb := g.clone()
-	bb.temperature = temperature
-
-	return bb
-}
-
-func (g *generator) TopP(topP float64) bellman.Generator {
-	bb := g.clone()
-	bb.topP = topP
-
-	return bb
-}
-
-func (g *generator) MaxTokens(maxTokens int) bellman.Generator {
-	bb := g.clone()
-	bb.maxTokens = maxTokens
-
-	return bb
-}
-
-func (g *generator) clone() *generator {
-	var bb generator
-	bb = *g
-	if g.schema != nil {
-		cp := *g.schema
-		bb.schema = &cp
-	}
-	if g.tool != nil {
-		cp := *g.tool
-		bb.tool = &cp
-	}
-	if g.tools != nil {
-		bb.tools = append([]tools.Tool{}, g.tools...)
-	}
-
-	return &bb
-}
-
-func (g *generator) Model(model bellman.GenModel) bellman.Generator {
-	bb := g.clone()
-	bb.model = model
-	return bb
-}
-
-func (g *generator) System(prompt string) bellman.Generator {
-	bb := g.clone()
-	bb.systemPrompt = prompt
-	return bb
-}
-
-func (g *generator) Output(element any) bellman.Generator {
-	bb := g.clone()
-	bb.schema = schema.New(element)
-	return bb
+	g.config.Log.Debug("[bellman/open_ai] "+msg, args...)
 }
 
 func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, error) {
 
 	// Open Ai specific
-	if g.systemPrompt != "" {
-		conversation = append([]prompt.Prompt{{Role: "system", Text: g.systemPrompt}}, conversation...)
+	if g.config.SystemPrompt != "" {
+		conversation = append([]prompt.Prompt{{Role: "system", Text: g.config.SystemPrompt}}, conversation...)
 	}
 
 	reqModel := genRequest{
-		Stop:        g.stopSequences,
-		Temperature: g.temperature,
-		TopP:        g.topP,
-		MaxTokens:   g.maxTokens,
+		Stop:        g.config.StopSequences,
+		Temperature: g.config.Temperature,
+		TopP:        g.config.TopP,
+		MaxTokens:   g.config.MaxTokens,
 	}
 
 	// Dealing with Model
-	if g.model.Name != "" {
-		reqModel.Model = g.model.Name
+	if g.config.Model.Name != "" {
+		reqModel.Model = g.config.Model.Name
 	}
 
-	if g.model.Name == "" {
-		return nil, fmt.Errorf("model is required")
+	if g.config.Model.Name == "" {
+		return nil, fmt.Errorf("Model is required")
 	}
 
 	// Dealing with Tools
-	for _, t := range g.tools {
+	for _, t := range g.config.Tools {
 		reqModel.Tools = append(reqModel.Tools, requestTool{
 			Type: "function",
 			Function: toolFunc{
@@ -159,28 +67,28 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 		})
 	}
 	// Selecting specific tool
-	if g.tool != nil {
-		switch g.tool.Name {
+	if g.config.ToolConfig != nil {
+		switch g.config.ToolConfig.Name {
 		case tools.NoTool.Name, tools.AutoTool.Name, tools.RequiredTool.Name:
-			reqModel.ToolChoice = g.tool.Name
+			reqModel.ToolChoice = g.config.ToolConfig.Name
 		default:
 			reqModel.ToolChoice = requestTool{
 				Type: "function",
 				Function: toolFunc{
-					Name: g.tool.Name,
+					Name: g.config.ToolConfig.Name,
 				},
 			}
 		}
 	}
 
-	// Dealing with Output Schema
-	if g.schema != nil {
+	// Dealing with SetOutputSchema Schema
+	if g.config.OutputSchema != nil {
 		reqModel.ResponseFormat = &responseFormat{
 			Type: "json_schema",
 			ResponseFormatSchema: responseFormatSchema{
 				Name:   "response",
 				Strict: false,
-				Schema: g.schema,
+				Schema: g.config.OutputSchema,
 			},
 		}
 	}
@@ -214,8 +122,21 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	if err != nil {
 		return nil, fmt.Errorf("could not create openai request, %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+g.g.apiKey)
+	req.Header.Set("Authorization", "Bearer "+g.openai.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+
+	g.log("sending request",
+		"request", atomic.AddInt64(&requestNo, 1),
+		"model", g.config.Model.Name,
+		"tools", len(g.config.Tools) > 0,
+		"tool_choice", g.config.ToolConfig != nil,
+		"output_schema", g.config.OutputSchema != nil,
+		"system_prompt", g.config.SystemPrompt != "",
+		"temperature", g.config.Temperature,
+		"top_p", g.config.TopP,
+		"max_tokens", g.config.MaxTokens,
+		"stop_sequences", g.config.StopSequences,
+	)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -236,7 +157,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 		return nil, fmt.Errorf("no choices in response")
 	}
 	return &respone{
-		tools: g.tools,
+		tools: g.config.Tools,
 		llm:   respModel,
 	}, nil
 }

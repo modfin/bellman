@@ -6,121 +6,29 @@ import (
 	"fmt"
 	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 )
 
+var requestNo int64
+
 type generator struct {
-	a *Anthropic
-	// Cloneable...
-	model        bellman.GenModel
-	systemPrompt string
-
-	stopSequences []string
-	topP          float64
-	temperature   float64
-	maxTokens     int
-
-	schema *schema.JSON
-	tools  []tools.Tool
-	tool   *tools.Tool
+	anthropic *Anthropic
+	config    bellman.Config
 }
 
-func (g *generator) clone() *generator {
-	var bb generator
-	bb = *g
-	if g.schema != nil {
-		cp := *g.schema
-		bb.schema = &cp
+func (g *generator) SetConfig(config bellman.Config) {
+	g.config = config
+}
+
+func (g *generator) log(msg string, args ...any) {
+	if g.config.Log == nil {
+		return
 	}
-	if g.tool != nil {
-		cp := *g.tool
-		bb.tool = &cp
-	}
-	if g.tools != nil {
-		bb.tools = append([]tools.Tool{}, g.tools...)
-	}
-
-	return &bb
-}
-func (g *generator) Tools() []tools.Tool {
-	return g.tools
-}
-
-func (g *generator) SetTools(tool ...tools.Tool) bellman.Generator {
-	bb := g.clone()
-
-	bb.tools = append([]tools.Tool{}, tool...)
-	return bb
-}
-
-func (g *generator) AddTools(tool ...tools.Tool) bellman.Generator {
-	return g.SetTools(append(g.tools, tool...)...)
-}
-
-func (g *generator) SetToolConfig(tool tools.Tool) bellman.Generator {
-	bb := g.clone()
-	bb.tool = &tool
-
-	for _, t := range tools.ControlTools {
-		if t.Name == tool.Name {
-			return bb
-		}
-	}
-	bb.tools = []tools.Tool{tool}
-	return bb
-}
-
-func (g *generator) StopAt(stop ...string) bellman.Generator {
-	bb := g.clone()
-	bb.stopSequences = append([]string{}, stop...)
-	if len(bb.stopSequences) > 4 {
-		bb.stopSequences = bb.stopSequences[:4]
-	}
-
-	return bb
-}
-
-func (g *generator) Temperature(temperature float64) bellman.Generator {
-	bb := g.clone()
-	bb.temperature = temperature
-
-	return bb
-}
-
-func (g *generator) TopP(topP float64) bellman.Generator {
-	bb := g.clone()
-	bb.topP = topP
-
-	return bb
-}
-
-func (g *generator) MaxTokens(maxTokens int) bellman.Generator {
-	bb := g.clone()
-	bb.maxTokens = maxTokens
-
-	return bb
-}
-
-func (g *generator) Model(model bellman.GenModel) bellman.Generator {
-	bb := g.clone()
-	bb.model = model
-	return bb
-}
-
-func (g *generator) System(prompt string) bellman.Generator {
-	bb := g.clone()
-	bb.systemPrompt = prompt
-	return bb
-}
-
-func (g *generator) Output(element any) bellman.Generator {
-	bb := g.clone()
-	bb.schema = schema.New(element)
-	return bb
+	g.config.Log.Debug("[bellman/anthropic] "+msg, args...)
 }
 
 func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, error) {
@@ -128,31 +36,31 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	var pdfBeta bool
 
 	model := request{
-		Model:       g.model.Name,
-		Temperature: g.temperature,
-		MaxTokens:   g.maxTokens,
+		Model:       g.config.Model.Name,
+		Temperature: g.config.Temperature,
+		MaxTokens:   g.config.MaxTokens,
 	}
 
-	if g.temperature != -1 {
-		model.Temperature = g.temperature
+	if g.config.Temperature != -1 {
+		model.Temperature = g.config.Temperature
 	}
-	if g.topP != -1 {
-		model.TopP = &g.topP
+	if g.config.TopP != -1 {
+		model.TopP = &g.config.TopP
 	}
-	if g.systemPrompt != "" {
-		model.System = g.systemPrompt
-	}
-
-	if len(g.stopSequences) > 0 {
-		model.StopSequences = g.stopSequences
+	if g.config.SystemPrompt != "" {
+		model.System = g.config.SystemPrompt
 	}
 
-	if g.schema != nil {
+	if len(g.config.StopSequences) > 0 {
+		model.StopSequences = g.config.StopSequences
+	}
+
+	if g.config.OutputSchema != nil {
 		model.Tools = []reqTool{
 			{
 				Name:        respone_output_callback_name,
 				Description: "function that is called with the result of the llm query",
-				InputSchema: g.schema,
+				InputSchema: g.config.OutputSchema,
 			},
 		}
 		model.Tool = &reqToolChoice{
@@ -161,12 +69,12 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 		}
 	}
 
-	if len(g.tools) > 0 {
+	if len(g.config.Tools) > 0 {
 
 		model.Tools = nil // If output is specified, tools override it.
 		model.Tool = nil
 
-		for _, t := range g.tools {
+		for _, t := range g.config.Tools {
 			model.Tools = append(model.Tools, reqTool{
 				Name:        t.Name,
 				Description: t.Description,
@@ -175,11 +83,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 		}
 	}
 
-	if g.tool != nil {
+	if g.config.ToolConfig != nil {
 		_name := ""
 		_type := ""
 
-		switch g.tool.Name {
+		switch g.config.ToolConfig.Name {
 		case tools.NoTool.Name:
 		case tools.AutoTool.Name:
 			_type = "auto"
@@ -187,14 +95,14 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 			_type = "any"
 		default:
 			_type = "tool"
-			_name = g.tool.Name
+			_name = g.config.ToolConfig.Name
 		}
 		model.Tool = &reqToolChoice{
 			Type: _type, // // "auto, any, tool"
 			Name: _name,
 		}
 
-		if g.tool.Name == tools.NoTool.Name { // None is not supporded by Anthropic, so lets just remove the toolks.
+		if g.config.ToolConfig.Name == tools.NoTool.Name { // None is not supporded by Anthropic, so lets just remove the toolks.
 			model.Tool = nil
 			model.Tools = nil
 		}
@@ -235,9 +143,6 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 
 		model.Messages = append(model.Messages, message)
 	}
-	//if g.schema != nil {
-	//	model.Output = g.schema
-	//}
 
 	reqdata, err := json.Marshal(model)
 	if err != nil {
@@ -249,12 +154,26 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 		return nil, fmt.Errorf("could not create request, %w", err)
 	}
 
-	req.Header.Set("x-api-key", g.a.apiKey)
+	req.Header.Set("x-api-key", g.anthropic.apiKey)
 	req.Header.Set("anthropic-version", AnthropicVersion)
 	req.Header.Set("content-type", "application/json")
 	if pdfBeta {
 		req.Header.Add("anthropic-beta", "pdfs-2024-09-25")
 	}
+
+	g.log("sending request",
+		"request", atomic.AddInt64(&requestNo, 1),
+		"model", g.config.Model.Name,
+		"tools", len(g.config.Tools) > 0,
+		"tool_choice", g.config.ToolConfig != nil,
+		"output_schema", g.config.OutputSchema != nil,
+		"system_prompt", g.config.SystemPrompt != "",
+		"temperature", g.config.Temperature,
+		"top_p", g.config.TopP,
+		"max_tokens", g.config.MaxTokens,
+		"stop_sequences", g.config.StopSequences,
+		"anthropic-version", AnthropicVersion,
+	)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -278,6 +197,6 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	}
 	return &response{
 		llm:   respModel,
-		tools: g.tools,
+		tools: g.config.Tools,
 	}, nil
 }

@@ -12,7 +12,7 @@ import (
 
 type embedRequest struct {
 	Input          string `json:"input"`
-	Model          string `json:"model"`
+	Model          string `json:"Model"`
 	EncodingFormat string `json:"encoding_format"`
 }
 
@@ -23,7 +23,7 @@ type embedResponse struct {
 		Index     int       `json:"index"`
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
-	Model string `json:"model"`
+	Model string `json:"Model"`
 	Usage struct {
 		PromptTokens int `json:"prompt_tokens"`
 		TotalTokens  int `json:"total_tokens"`
@@ -31,8 +31,8 @@ type embedResponse struct {
 }
 
 //type Config struct {
-//	GenModel   string `cli:"ai-openai-gen-model"`
-//	EmbedModel string `cli:"ai-openai-embedding-model"`
+//	GenModel   string `cli:"ai-openai-gen-Model"`
+//	EmbedModel string `cli:"ai-openai-embedding-Model"`
 //	ApiKey string `cli:"ai-openai-api-key"`
 //}
 
@@ -92,13 +92,16 @@ func (g *OpenAI) Embed(text string, model bellman.EmbedModel) ([]float64, error)
 	return respModel.Data[0].Embedding, nil
 }
 
-func (g *OpenAI) Generator(options ...bellman.GeneratorOption) bellman.Generator {
-	var gen bellman.Generator = &generator{
-		g: g,
-
-		topP:        1,
-		temperature: 1,
-		maxTokens:   2048,
+func (g *OpenAI) Generator(options ...bellman.GeneratorOption) *bellman.Generator {
+	var gen = &bellman.Generator{
+		Prompter: &generator{
+			openai: g,
+		},
+		Config: bellman.Config{
+			Temperature: 1,
+			TopP:        1,
+			MaxTokens:   2048,
+		},
 	}
 
 	for _, op := range options {

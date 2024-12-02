@@ -3,7 +3,6 @@ package vertexai
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/tools"
 )
 
@@ -67,11 +66,11 @@ func (r *response) Eval() (err error) {
 			if t.Name != tool.Name {
 				continue
 			}
-			if t.Callback == nil {
+			if t.Function == nil {
 				return fmt.Errorf("tool %s has no callback", tool)
 			}
 			count++
-			_, err = t.Callback(tool.Argument)
+			_, err = t.Function(tool.Argument)
 			if err != nil {
 				return fmt.Errorf("tool %s failed: %w", tool, err)
 			}
@@ -84,7 +83,7 @@ func (r *response) Eval() (err error) {
 	return nil
 }
 
-func (r *response) AsTools() ([]bellman.ToolCallback, error) {
+func (r *response) AsTools() ([]tools.Call, error) {
 
 	candidates := r.llm.Candidates
 
@@ -95,7 +94,7 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 		return nil, fmt.Errorf("no tool call in response")
 	}
 
-	var res []bellman.ToolCallback
+	var res []tools.Call
 
 	belt := map[string]*tools.Tool{}
 	for _, t := range r.tools {
@@ -109,11 +108,10 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 			return nil, err
 		}
 
-		res = append(res, bellman.ToolCallback{
-
+		res = append(res, tools.Call{
 			Name:     c.FunctionCall.Name,
 			Argument: string(arg),
-			Local:    belt[c.FunctionCall.Name],
+			Ref:      belt[c.FunctionCall.Name],
 		})
 	}
 

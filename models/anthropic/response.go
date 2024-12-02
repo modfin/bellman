@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/tools"
 )
 
@@ -38,7 +37,7 @@ func (r *response) AsText() (string, error) {
 	return r.llm.Content[0].Text, nil
 }
 
-func (r *response) AsTools() ([]bellman.ToolCallback, error) {
+func (r *response) AsTools() ([]tools.Call, error) {
 	if len(r.llm.Content) == 0 {
 		return nil, errors.New("no content in response")
 	}
@@ -52,7 +51,7 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 		belt[t.Name] = &t
 	}
 
-	var ret []bellman.ToolCallback
+	var ret []tools.Call
 	for _, c := range r.llm.Content {
 		if c.Type == "tool_use" {
 			jsondata, err := json.Marshal(c.Input)
@@ -60,10 +59,10 @@ func (r *response) AsTools() ([]bellman.ToolCallback, error) {
 				return nil, fmt.Errorf("failed to marshal input: %w", err)
 			}
 
-			ret = append(ret, bellman.ToolCallback{
+			ret = append(ret, tools.Call{
 				Name:     c.Name,
 				Argument: string(jsondata),
-				Local:    belt[c.Name],
+				Ref:      belt[c.Name],
 			})
 		}
 	}
@@ -86,11 +85,11 @@ func (r *response) Eval() (err error) {
 			if t.Name != tool.Name {
 				continue
 			}
-			if t.Callback == nil {
+			if t.Function == nil {
 				return fmt.Errorf("tool %s has no callback", tool)
 			}
 			count++
-			_, err = t.Callback(tool.Argument)
+			_, err = t.Function(tool.Argument)
 			if err != nil {
 				return fmt.Errorf("tool %s failed: %w", tool, err)
 			}

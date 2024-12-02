@@ -7,127 +7,35 @@ import (
 	"fmt"
 	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
 	"io"
 	"net/http"
+	"sync/atomic"
 )
 
+var requestNo int64
+
 type generator struct {
-	g *Google
-
-	model        bellman.GenModel
-	systemPrompt string
-
-	stopSequences []string
-	topP          float64
-	temperature   float64
-	maxTokens     int
-
-	schema *schema.JSON
-	tools  []tools.Tool
-	tool   *tools.Tool
+	google *Google
+	config bellman.Config
 }
 
-func (b *generator) clone() *generator {
-	var bb generator
-	bb = *b
-	if b.schema != nil {
-		cp := *b.schema
-		bb.schema = &cp
+func (g *generator) SetConfig(config bellman.Config) {
+	g.config = config
+}
+
+func (g *generator) log(msg string, args ...any) {
+	if g.config.Log == nil {
+		return
 	}
-	if b.tool != nil {
-		cp := *b.tool
-		bb.tool = &cp
-	}
-	if b.tools != nil {
-		bb.tools = append([]tools.Tool{}, b.tools...)
-	}
-
-	return &bb
-}
-
-func (b *generator) Model(model bellman.GenModel) bellman.Generator {
-	bb := b.clone()
-	bb.model = model
-	return bb
-}
-
-func (b *generator) System(prompt string) bellman.Generator {
-	bb := b.clone()
-	bb.systemPrompt = prompt
-	return bb
-}
-
-func (b *generator) Output(element any) bellman.Generator {
-	bb := b.clone()
-	bb.schema = schema.New(element)
-	return bb
-}
-func (g *generator) Tools() []tools.Tool {
-	return g.tools
-}
-
-func (b *generator) SetTools(tool ...tools.Tool) bellman.Generator {
-	bb := b.clone()
-
-	bb.tools = append([]tools.Tool{}, tool...)
-	return bb
-}
-func (g *generator) AddTools(tool ...tools.Tool) bellman.Generator {
-	return g.SetTools(append(g.tools, tool...)...)
-}
-
-func (b *generator) SetToolConfig(tool tools.Tool) bellman.Generator {
-	bb := b.clone()
-	bb.tool = &tool
-
-	for _, t := range tools.ControlTools {
-		if t.Name == tool.Name {
-			return bb
-		}
-	}
-	bb.tools = []tools.Tool{tool}
-	return bb
-}
-
-func (b *generator) StopAt(stop ...string) bellman.Generator {
-	bb := b.clone()
-	bb.stopSequences = append([]string{}, stop...)
-
-	if len(bb.stopSequences) > 5 {
-		bb.stopSequences = bb.stopSequences[:5]
-	}
-
-	return bb
-}
-
-func (b *generator) Temperature(temperature float64) bellman.Generator {
-	bb := b.clone()
-	bb.temperature = temperature
-
-	return bb
-}
-
-func (b *generator) TopP(topP float64) bellman.Generator {
-	bb := b.clone()
-	bb.topP = topP
-
-	return bb
-}
-
-func (b *generator) MaxTokens(maxTokens int) bellman.Generator {
-	bb := b.clone()
-	bb.maxTokens = maxTokens
-
-	return bb
+	g.config.Log.Debug("[bellman/vertex_ai] "+msg, args...)
 }
 
 func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 
 	//https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference
 
-	if g.model.Name == "" {
+	if g.config.Model.Name == "" {
 		return nil, errors.New("model is required")
 	}
 
@@ -136,41 +44,41 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 		GenerationConfig: genConfig{},
 	}
 
-	if g.maxTokens != -1 {
-		model.GenerationConfig.MaxOutputTokens = &g.maxTokens
+	if g.config.MaxTokens != -1 {
+		model.GenerationConfig.MaxOutputTokens = &g.config.MaxTokens
 	}
-	if g.topP != -1 {
-		model.GenerationConfig.TopP = &g.topP
+	if g.config.TopP != -1 {
+		model.GenerationConfig.TopP = &g.config.TopP
 	}
-	if g.temperature != -1 {
-		model.GenerationConfig.Temperature = &g.temperature
+	if g.config.Temperature != -1 {
+		model.GenerationConfig.Temperature = &g.config.Temperature
 	}
-	if len(g.stopSequences) > 0 {
-		model.GenerationConfig.StopSequences = &g.stopSequences
+	if len(g.config.StopSequences) > 0 {
+		model.GenerationConfig.StopSequences = &g.config.StopSequences
 	}
 
-	if g.systemPrompt != "" {
+	if g.config.SystemPrompt != "" {
 		model.SystemInstruction = genRequestContent{
 			Role: "system", // does not take role into account, it can be anything?
 			Parts: []genRequestContentPart{
 				{
-					Text: g.systemPrompt,
+					Text: g.config.SystemPrompt,
 				},
 			},
 		}
 	}
 
 	// Adding output schema to model
-	if g.schema != nil {
+	if g.config.OutputSchema != nil {
 		ct := "application/json"
 		model.GenerationConfig.ResponseMimeType = &ct
-		model.GenerationConfig.ResponseSchema = g.schema
+		model.GenerationConfig.ResponseSchema = g.config.OutputSchema
 	}
 
 	// Adding tools to model
-	if len(g.tools) > 0 {
+	if len(g.config.Tools) > 0 {
 		model.Tools = []genTool{{FunctionDeclaration: []genToolFunc{}}}
-		for _, t := range g.tools {
+		for _, t := range g.config.Tools {
 			model.Tools[0].FunctionDeclaration = append(model.Tools[0].FunctionDeclaration, genToolFunc{
 				Name:        t.Name,
 				Description: t.Description,
@@ -180,14 +88,14 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 	}
 
 	// Dealing with SetToolConfig config
-	if g.tool != nil {
+	if g.config.ToolConfig != nil {
 		model.ToolConfig = &genToolConfig{
 			GoogleFunctionCallingConfig: genFunctionCallingConfig{
 				Mode: "ANY",
 			},
 		}
 		// https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling#functioncallingconfig
-		switch g.tool.Name {
+		switch g.config.ToolConfig.Name {
 		case tools.NoTool.Name:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "NONE"
 		case tools.AutoTool.Name:
@@ -196,7 +104,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
 		default:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
-			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.tool.Name}
+			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.config.ToolConfig.Name}
 		}
 	}
 
@@ -228,13 +136,28 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 	}
 
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-		g.g.config.Region, g.g.config.Project, g.g.config.Region, g.model.Name)
+		g.google.config.Region, g.google.config.Project, g.google.config.Region, g.config.Model.Name)
 
 	body, err := json.Marshal(model)
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal google request, %w", err)
 	}
-	resp, err := g.g.client.Post(u, "application/json", bytes.NewReader(body))
+
+	g.log("sending request",
+		"request", atomic.AddInt64(&requestNo, 1),
+		"model", g.config.Model.Name,
+		"tools", len(g.config.Tools) > 0,
+		"tool_choice", g.config.ToolConfig != nil,
+		"output_schema", g.config.OutputSchema != nil,
+		"system_prompt", g.config.SystemPrompt != "",
+		"temperature", g.config.Temperature,
+		"top_p", g.config.TopP,
+		"max_tokens", g.config.MaxTokens,
+		"stop_sequences", g.config.StopSequences,
+		"url", u,
+	)
+
+	resp, err := g.google.client.Post(u, "application/json", bytes.NewReader(body))
 
 	if err != nil {
 		return nil, fmt.Errorf("could not post google request, %w", err)
@@ -262,7 +185,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 
 	return &response{
 		llm:   respModel,
-		tools: g.tools,
+		tools: g.config.Tools,
 	}, nil
 
 }

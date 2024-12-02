@@ -96,13 +96,19 @@ func (g *Google) Embed(text string, model bellman.EmbedModel) ([]float64, error)
 	return embeddings.Predictions[0].Embeddings.Values, nil
 }
 
-func (g *Google) Generator(options ...bellman.GeneratorOption) bellman.Generator {
-	var gen bellman.Generator = &generator{
-		g:           g,
-		topP:        -1,
-		temperature: -1,
-		maxTokens:   -1,
+func (g *Google) Generator(options ...bellman.GeneratorOption) *bellman.Generator {
+
+	var gen = &bellman.Generator{
+		Prompter: &generator{
+			google: g,
+		},
+		Config: bellman.Config{
+			Temperature: -1,
+			MaxTokens:   -1,
+			TopP:        -1,
+		},
 	}
+
 	for _, o := range options {
 		gen = o(gen)
 	}

@@ -29,6 +29,8 @@ var ControlTools = []Tool{
 
 type ToolOption func(tool Tool) Tool
 
+type Function func(jsonArgument string) (response string, err error)
+
 func WithDescription(description string) ToolOption {
 	return func(tool Tool) Tool {
 		tool.Description = description
@@ -36,9 +38,9 @@ func WithDescription(description string) ToolOption {
 	}
 }
 
-func WithCallback(callback func(jsonArgument string) (string, error)) ToolOption {
+func WithFunction(callback Function) ToolOption {
 	return func(tool Tool) Tool {
-		tool.Callback = callback
+		tool.Function = callback
 		return tool
 	}
 }
@@ -64,5 +66,12 @@ type Tool struct {
 	Name           string
 	Description    string
 	ArgumentSchema *schema.JSON
-	Callback       func(jsonArg string) (string, error)
+	Function       func(jsonArg string) (string, error)
+}
+
+type Call struct {
+	Name     string
+	Argument string
+
+	Ref *Tool
 }

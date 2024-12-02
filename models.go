@@ -1,7 +1,5 @@
 package bellman
 
-import "github.com/modfin/bellman/tools"
-
 type EmbedModel struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -21,11 +19,4 @@ type GenModel struct {
 
 	SupportTools            bool `json:"support_tools,omitempty"`
 	SupportStructuredOutput bool `json:"support_structured_output,omitempty"`
-}
-
-type ToolCallback struct {
-	Name     string
-	Argument string
-
-	Local *tools.Tool
 }

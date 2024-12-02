@@ -3,7 +3,6 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
 )
@@ -52,11 +51,11 @@ func (r *respone) Eval() (err error) {
 			if t.Name != tool.Name {
 				continue
 			}
-			if t.Callback == nil {
+			if t.Function == nil {
 				return fmt.Errorf("tool %s has no callback", tool)
 			}
 			count++
-			_, err = t.Callback(tool.Argument)
+			_, err = t.Function(tool.Argument)
 			if err != nil {
 				return fmt.Errorf("tool %s failed: %w", tool, err)
 			}
@@ -70,7 +69,7 @@ func (r *respone) Eval() (err error) {
 	return nil
 }
 
-func (r *respone) AsTools() ([]bellman.ToolCallback, error) {
+func (r *respone) AsTools() ([]tools.Call, error) {
 	if len(r.llm.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
@@ -82,13 +81,13 @@ func (r *respone) AsTools() ([]bellman.ToolCallback, error) {
 	for _, t := range r.tools {
 		belt[t.Name] = &t
 	}
-	var res []bellman.ToolCallback
+	var res []tools.Call
 
 	for _, c := range r.llm.Choices[0].Message.ToolCalls {
-		res = append(res, bellman.ToolCallback{
+		res = append(res, tools.Call{
 			Name:     c.Function.Name,
 			Argument: c.Function.Arguments,
-			Local:    belt[c.Function.Name],
+			Ref:      belt[c.Function.Name],
 		})
 	}
 
