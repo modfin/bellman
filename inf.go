@@ -5,6 +5,10 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
+type Embeder interface {
+	Embed(text string, model EmbedModel) ([]float64, error)
+}
+
 type LLM interface {
 	Generator(options ...GeneratorOption) Generator
 }

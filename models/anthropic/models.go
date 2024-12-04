@@ -90,3 +90,15 @@ var GenModel_3_opus_20240229 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
+
+var GenModels = map[string]bellman.GenModel{
+	GenModel_3_5_sonnet_latest.Name:   GenModel_3_5_sonnet_latest,
+	GenModel_3_5_sonnet_20241022.Name: GenModel_3_5_sonnet_20241022,
+	GenModel_3_5_sonnet_20240620.Name: GenModel_3_5_sonnet_20240620,
+	GenModel_3_sonnet_20241022.Name:   GenModel_3_sonnet_20241022,
+	GenModel_3_5_haiku_latest.Name:    GenModel_3_5_haiku_latest,
+	GenModel_3_5_haiku_20241022.Name:  GenModel_3_5_haiku_20241022,
+	GenModel_3_haiku_20240307.Name:    GenModel_3_haiku_20240307,
+	GenModel_3_opus_latest.Name:       GenModel_3_opus_latest,
+	GenModel_3_opus_20240229.Name:     GenModel_3_opus_20240229,
+}

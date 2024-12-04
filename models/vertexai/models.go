@@ -43,8 +43,6 @@ var GenModel_gemini_1_5_flash_002 = bellman.GenModel{
 	SupportStructuredOutput: false,
 }
 
-//var GenModel_gemini_1_5_flash_8b_latest = bellman.GenModel{Name: "gemini-1.5-flash-8b-latest",}
-
 var GenModel_gemini_1_5_flash_8b = bellman.GenModel{
 	Name:                    "gemini-1.5-flash-8b",
 	Description:             "High volume and lower intelligence tasks",
@@ -145,3 +143,24 @@ const EmbedTypeClustring EmbedType = "CLUSTERING"
 const EmbedTypeQA EmbedType = "QUESTION_ANSWERING"
 const EmbedTypeVerification EmbedType = "FACT_VERIFICATION"
 const EmbedTypeCode EmbedType = "CODE_RETRIEVAL_QUERY"
+
+var EmbedModels = map[string]bellman.EmbedModel{
+	EmbedModel_text_005.Name:                 EmbedModel_text_005,
+	EmbedModel_text_004.Name:                 EmbedModel_text_004,
+	EmbedMode_multilang_002.Name:             EmbedMode_multilang_002,
+	EmbedModel_text_gecko_001.Name:           EmbedModel_text_gecko_001,
+	EmbedModel_text_gecko_003.Name:           EmbedModel_text_gecko_003,
+	EmbedModel_text_gecko_multilang_001.Name: EmbedModel_text_gecko_multilang_001,
+}
+
+var GenModels = map[string]bellman.GenModel{
+	GenModel_gemini_Experiment_114.Name:   GenModel_gemini_Experiment_114,
+	GenModel_gemini_1_5_flash.Name:        GenModel_gemini_1_5_flash,
+	GenModel_gemini_1_5_flash_001.Name:    GenModel_gemini_1_5_flash_001,
+	GenModel_gemini_1_5_flash_002.Name:    GenModel_gemini_1_5_flash_002,
+	GenModel_gemini_1_5_flash_8b.Name:     GenModel_gemini_1_5_flash_8b,
+	GenModel_gemini_1_5_flash_8b_001.Name: GenModel_gemini_1_5_flash_8b_001,
+	GenModel_gemini_1_5_pro.Name:          GenModel_gemini_1_5_pro,
+	GenModel_gemini_1_5_pro_002.Name:      GenModel_gemini_1_5_pro_002,
+	GenModel_gemini_1_5_pro_001.Name:      GenModel_gemini_1_5_pro_001,
+}

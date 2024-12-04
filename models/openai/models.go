@@ -227,3 +227,29 @@ var EmbedModel_text_ada_002 = bellman.EmbedModel{
 	InputMaxTokens:   8191,
 	OutputDimensions: 1536,
 }
+
+var EmbedModels = map[string]bellman.EmbedModel{
+	EmbedModel_text3_small.Name:  EmbedModel_text3_small,
+	EmbedModel_text3_large.Name:  EmbedModel_text3_large,
+	EmbedModel_text_ada_002.Name: EmbedModel_text_ada_002,
+}
+
+var GenModels = map[string]bellman.GenModel{
+	GenModel_gpt4o_latest.Name:       GenModel_gpt4o_latest,
+	GenModel_gpt4o.Name:              GenModel_gpt4o,
+	GenModel_gpt4o_240806.Name:       GenModel_gpt4o_240806,
+	GenModel_gpt4o_240513.Name:       GenModel_gpt4o_240513,
+	GenModel_gpt4o_mini.Name:         GenModel_gpt4o_mini,
+	GenModel_gpt4o_mini_240718.Name:  GenModel_gpt4o_mini_240718,
+	GenModel_o1_preview.Name:         GenModel_o1_preview,
+	GenModel_o1_preview_240912.Name:  GenModel_o1_preview_240912,
+	GenModel_o1_mini.Name:            GenModel_o1_mini,
+	GenModel_o1_mini_240912.Name:     GenModel_o1_mini_240912,
+	GenModel_gpt4_turbo.Name:         GenModel_gpt4_turbo,
+	GenModel_gpt4_turbo_240409.Name:  GenModel_gpt4_turbo_240409,
+	GenModel_gpt4_turbo_preview.Name: GenModel_gpt4_turbo_preview,
+	GenModel_gpt4_preview_0125.Name:  GenModel_gpt4_preview_0125,
+	GenModel_gpt4_preview_1106.Name:  GenModel_gpt4_preview_1106,
+	GenModel_gpt4.Name:               GenModel_gpt4,
+	GenModel_gpt4_0613.Name:          GenModel_gpt4_0613,
+}

@@ -66,7 +66,7 @@ var EmbedModel_voyage_2 = bellman.EmbedModel{
 	Description:      "General-purpose embedding model optimized for a balance between cost, latency, and retrieval quality. Please transition to voyage-3-lite.",
 }
 
-var Models = map[string]bellman.EmbedModel{
+var EmbedModels = map[string]bellman.EmbedModel{
 	EmbedModel_voyage_3.Name:              EmbedModel_voyage_3,
 	EmbedModel_voyage_3_lite.Name:         EmbedModel_voyage_3_lite,
 	EmbedModel_voyage_finance_2.Name:      EmbedModel_voyage_finance_2,
