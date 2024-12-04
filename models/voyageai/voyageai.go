@@ -9,17 +9,12 @@ import (
 	"net/http"
 )
 
-type Config struct {
-	ApiKey         string `cli:"ai-voyage-api-key"`
-	EmbeddingModel string `cli:"ai-voyage-embedding-model"`
-}
-
 type VoyageAI struct {
-	config Config
+	apiKey string
 }
 
-func New(config Config) (*VoyageAI, error) {
-	return &VoyageAI{config: config}, nil
+func New(apiKey string) *VoyageAI {
+	return &VoyageAI{apiKey: apiKey}
 }
 
 type request struct {
@@ -58,7 +53,7 @@ func (v *VoyageAI) Embed(text string, model bellman.EmbedModel) ([]float64, erro
 		return nil, fmt.Errorf("could not create request, %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.config.ApiKey)
+	req.Header.Set("Authorization", "Bearer "+v.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
