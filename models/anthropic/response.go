@@ -15,6 +15,14 @@ type response struct {
 	tools []tools.Tool
 }
 
+func (r *response) IsText() bool {
+	return len(r.llm.Content) > 0 && r.llm.Content[0].Type != "tool_use"
+}
+
+func (r *response) IsTools() bool {
+	return len(r.llm.Content) > 0 && r.llm.Content[0].Type != "tool_use"
+}
+
 func (r *response) outputCallback() bool {
 	// TODO check response
 	return len(r.llm.Content) > 0 && r.llm.Content[0].Type == "tool_use" && r.llm.Content[0].Name == respone_output_callback_name

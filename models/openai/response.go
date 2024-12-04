@@ -7,7 +7,7 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-type respone struct {
+type response struct {
 	tools []tools.Tool
 	llm   openaiResponse
 }
@@ -39,7 +39,7 @@ type openaiResponse struct {
 	} `json:"choices"`
 }
 
-func (r *respone) Eval() (err error) {
+func (r *response) Eval() (err error) {
 	callbacks, err := r.AsTools()
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func (r *respone) Eval() (err error) {
 	return nil
 }
 
-func (r *respone) AsTools() ([]tools.Call, error) {
+func (r *response) AsTools() ([]tools.Call, error) {
 	if len(r.llm.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
@@ -94,18 +94,27 @@ func (r *respone) AsTools() ([]tools.Call, error) {
 	return res, nil
 }
 
-func (r *respone) AsText() (string, error) {
+func (r *response) AsText() (string, error) {
 	if len(r.llm.Choices) == 0 {
 		return "", fmt.Errorf("no choices in response")
 	}
 	return r.llm.Choices[0].Message.Content, nil
 }
-func (r *respone) Unmarshal(ref any) error {
+func (r *response) Unmarshal(ref any) error {
 	text, err := r.AsText()
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal([]byte(text), ref)
+}
+
+func (r *response) IsText() bool {
+	return len(r.llm.Choices) > 0 && len(r.llm.Choices[0].Message.ToolCalls) == 0 && r.llm.Choices[0].Message.Content != ""
+}
+
+func (r *response) IsTools() bool {
+	return len(r.llm.Choices) > 0 && len(r.llm.Choices[0].Message.ToolCalls) > 0
+
 }
 
 type responseToolCall struct {

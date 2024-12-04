@@ -15,6 +15,9 @@ type Prompter interface {
 }
 
 type Response interface {
+	IsText() bool
+	IsTools() bool
+
 	// AsText will return the response as a string and an error if no response exist
 	// is the response is json, it will be present in this string
 	AsText() (string, error)

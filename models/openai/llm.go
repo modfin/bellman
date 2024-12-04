@@ -156,7 +156,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (bellman.Response, err
 	if len(respModel.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
-	return &respone{
+	return &response{
 		tools: g.config.Tools,
 		llm:   respModel,
 	}, nil

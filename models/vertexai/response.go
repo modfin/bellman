@@ -126,3 +126,12 @@ func (r *response) Unmarshal(ref any) error {
 
 	return json.Unmarshal([]byte(text), ref)
 }
+
+func (r *response) IsText() bool {
+	return len(r.llm.Candidates) > 0 && len(r.llm.Candidates[0].Content.Parts) > 0 && r.llm.Candidates[0].Content.Parts[0].Text != ""
+}
+
+func (r *response) IsTools() bool {
+	return len(r.llm.Candidates) > 0 && len(r.llm.Candidates[0].Content.Parts) > 0 && r.llm.Candidates[0].Content.Parts[0].FunctionCall.Name != ""
+
+}
