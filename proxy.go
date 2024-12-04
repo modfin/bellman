@@ -38,11 +38,11 @@ func (p *Proxy) Embed(text string, model EmbedModel) ([]float64, error) {
 	return embeder.Embed(text, model)
 }
 
-func (p *Proxy) LLM(model GenModel) (LLM, error) {
+func (p *Proxy) LLM(model GenModel) (*Generator, error) {
 	llm, ok := p.llms[model.Name]
 	if !ok {
 		return nil, ErrModelNotFound
 	}
 
-	return llm, nil
+	return llm.Generator(WithModel(model)), nil
 }
