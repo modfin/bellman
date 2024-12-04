@@ -10,7 +10,7 @@ type Embeder interface {
 }
 
 type LLM interface {
-	Generator(options ...GeneratorOption) Generator
+	Generator(options ...GeneratorOption) *Generator
 }
 
 type Prompter interface {
