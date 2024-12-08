@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/lmittmann/tint"
 	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
@@ -16,19 +18,33 @@ import (
 	"github.com/modfin/clix"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/push"
 	"github.com/urfave/cli/v2"
 	"log"
 	"log/slog"
 	"maps"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
+	"os/signal"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 )
 
-var logger = slog.Default()
+var logger *slog.Logger
+
+func init() {
+	slog.SetDefault(slog.New(
+		tint.NewHandler(os.Stdout, &tint.Options{
+			Level:      slog.LevelDebug,
+			TimeFormat: time.Kitchen,
+		}),
+	))
+	logger = slog.Default()
+}
 
 func main() {
 	app := &cli.App{
@@ -47,6 +63,16 @@ func main() {
 			},
 
 			&cli.StringFlag{
+				Name:    "anthropic-key",
+				EnvVars: []string{"BELLMAN_ANTHROPIC_KEY"},
+			},
+			&cli.StringFlag{
+				Name:    "anthropic-gen-models",
+				EnvVars: []string{"BELLMAN_ANTHROPIC_GEN_MODELS"},
+				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "claude-3-5-haiku-latest"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+			},
+
+			&cli.StringFlag{
 				Name:    "google-project",
 				EnvVars: []string{"BELLMAN_GOOGLE_PROJECT"},
 			},
@@ -58,22 +84,55 @@ func main() {
 				Name:    "google-credential",
 				EnvVars: []string{"BELLMAN_GOOGLE_CREDENTIAL"},
 			},
-
 			&cli.StringFlag{
-				Name:    "anthropic-key",
-				EnvVars: []string{"BELLMAN_ANTHROPIC_KEY"},
+				Name:    "google-gen-models",
+				EnvVars: []string{"BELLMAN_GOOGLE_GEN_MODELS"},
+				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "gemini-1.5-flash-002"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
 			},
+			&cli.StringFlag{
+				Name:    "google-embed-models",
+				EnvVars: []string{"BELLMAN_GOOGLE_EMBED_MODELS"},
+				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "text-embedding-005"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+			},
+
 			&cli.StringFlag{
 				Name:    "openai-key",
 				EnvVars: []string{"BELLMAN_OPENAI_KEY"},
 			},
 			&cli.StringFlag{
+				Name:    "openai-gen-models",
+				EnvVars: []string{"BELLMAN_OPENAI_GEN_MODELS"},
+				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "chatgpt-4o-latest"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+			},
+			&cli.StringFlag{
+				Name:    "openai-embed-models",
+				EnvVars: []string{"BELLMAN_OPENAI_EMBED_MODELS"},
+				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "text-embedding-ada-002"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+			},
+
+			&cli.StringFlag{
 				Name:    "voyageai-key",
 				EnvVars: []string{"BELLMAN_VOYAGEAI_KEY"},
 			},
-		},
-		Action: func(context *cli.Context) error {
+			&cli.StringFlag{
+				Name:    "voyageai-embed-models",
+				EnvVars: []string{"BELLMAN_VOYAGEAI_EMBED_MODELS"},
+				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "voyage-3-lite"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+			},
 
+			&cli.StringFlag{
+				Name:    "prometheus-metrics-basic-auth",
+				EnvVars: []string{"BELLMAN_PROMETHEUS_METRICS_BASIC_AUTH"},
+				Usage:   "protects /metrics endpoint, format is 'user:password'. /metrics not enabled if not set. No basic auth is just a colon, eg ':'",
+			},
+			&cli.StringFlag{
+				Name:    "prometheus-push-url",
+				EnvVars: []string{"BELLMAN_PROMETHEUS_PUSH_URL"},
+				Usage:   "User https://user:password@example.com to push metrics to prometheus push gateway",
+			},
+		},
+
+		Action: func(context *cli.Context) error {
 			logger.Info("Start", "action", "parsing config")
 			cfg := clix.Parse[Config](context)
 			return serve(cfg)
@@ -104,11 +163,22 @@ type Config struct {
 
 	HttpPort int `cli:"http-port"`
 
-	AnthropicKey string `cli:"anthropic-key"`
-	OpenAiKey    string `cli:"openai-key"`
-	VoyageAiKey  string `cli:"voyageai-key"`
+	AnthropicKey       string `cli:"anthropic-key"`
+	AnthropicGenModels string `cli:"anthropic-gen-models"`
 
-	Google GoogleConfig
+	OpenAiKey         string `cli:"openai-key"`
+	OpenAiGenModels   string `cli:"openai-gen-models"`
+	OpenAiEmbedModels string `cli:"openai-embed-models"`
+
+	Google            GoogleConfig
+	GoogleGenModels   string `cli:"google-gen-models"`
+	GoogleEmbedModels string `cli:"google-embed-models"`
+
+	VoyageAiKey         string `cli:"voyageai-key"`
+	VoyageAiEmbedModels string `cli:"voyageai-embed-models"`
+
+	PrometheusMetricsBasicAuth string `cli:"prometheus-metrics-basic-auth"`
+	PrometheusPushUrl          string `cli:"prometheus-push-url"`
 }
 
 func auth(cfg Config) func(next http.Handler) http.Handler {
@@ -149,6 +219,69 @@ func auth(cfg Config) func(next http.Handler) http.Handler {
 	}
 }
 
+func metricsAuth(userpass string) func(http.Handler) http.Handler {
+
+	active := len(userpass) > 0
+	open := userpass == ":"
+	user, pass, _ := strings.Cut(userpass, ":")
+
+	if !active {
+		logger.Info("/metrics endpoint is disabled")
+	}
+
+	if open {
+		logger.Warn("/metrics endpoint is open and has no protection")
+	}
+
+	if active && !open {
+		logger.Info("/metrics endpoint is protected")
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			if !active {
+				http.NotFound(w, r)
+				return
+			}
+			if open {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			auth := r.Header.Get("Authorization")
+			if auth == "" {
+				w.Header().Set("WWW-Authenticate", `Basic realm="restricted"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			_type, pwd, found := strings.Cut(auth, " ")
+			if !found || _type != "Basic" {
+				w.Header().Set("WWW-Authenticate", `Basic realm="restricted"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			payload, err := base64.StdEncoding.DecodeString(pwd)
+			if err != nil {
+				w.Header().Set("WWW-Authenticate", `Basic realm="restricted"`)
+				http.Error(w, "Unauthorized, bad header", http.StatusUnauthorized)
+				return
+			}
+			tryuser, trypass, found := strings.Cut(string(payload), ":")
+
+			if !found || tryuser != user || trypass != pass {
+				time.Sleep(time.Duration(rand.Int63n(300)) * time.Millisecond)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func serve(cfg Config) error {
 
 	logger.Info("Start", "action", "setting up ai proxy")
@@ -160,21 +293,107 @@ func serve(cfg Config) error {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
-	r.Use(auth(cfg))
-	r.Handle("/metrics", promhttp.Handler())
 
-	r.Route("/gen", Gen(proxy))
-	r.Route("/embed", Embed(proxy))
+	r.Handle("/metrics", metricsAuth(cfg.PrometheusMetricsBasicAuth)(promhttp.Handler()))
 
-	err = http.ListenAndServe(fmt.Sprintf(":%d", cfg.HttpPort), r)
+	r.Route("/gen", Gen(proxy, cfg))
+	r.Route("/embed", Embed(proxy, cfg))
 
-	if err != nil {
-		return fmt.Errorf("could not start server, %w", err)
+	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: r}
+	go func() {
+		logger.Info("Start", "action", "starting server", "port", cfg.HttpPort)
+		err = server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			logger.Error("http server error", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	var pusher *PromPusher
+	if cfg.PrometheusPushUrl != "" {
+		pusher = &PromPusher{
+			uri:     cfg.PrometheusPushUrl,
+			stopped: make(chan struct{}),
+			done:    make(chan struct{}),
+		}
+		go pusher.Start()
+	}
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	term := <-sig
+	logger.Info("Shutdown", "action", "got signal", "signal", term)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	logger.Info("Shutdown", "action", "shutting down http server")
+	_ = server.Shutdown(ctx)
+
+	if pusher != nil {
+		logger.Info("Shutdown", "action", "shutting down prometheus pusher")
+		_ = pusher.Stop(ctx)
+	}
+	logger.Info("Shutdown", "action", "termination complete")
+
+	return nil
+}
+
+type PromPusher struct {
+	uri     string
+	stopped chan struct{}
+	done    chan struct{}
+}
+
+func (p *PromPusher) Start() {
+	var stopped bool
+	for {
+		if stopped {
+			return
+		}
+		select {
+		case <-p.stopped:
+			stopped = true
+		case <-time.After(30 * time.Second):
+		}
+
+		u, err := url.Parse(p.uri)
+		if err != nil {
+			logger.Error("[prometheus] could not parse prometheus url", "err", err)
+			continue
+		}
+
+		user := u.User
+		u.User = nil
+
+		pusher := push.New(u.String(), "bellmand").Gatherer(prometheus.DefaultGatherer)
+		if user != nil {
+			pass, _ := user.Password()
+			pusher = pusher.BasicAuth(user.Username(), pass)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+		logger.Info("[prometheus] pushing metrics")
+		err = pusher.PushContext(ctx)
+		cancel()
+		if err != nil {
+			logger.Error("[prometheus] could not push metrics to prometheus", "err", err)
+		}
+	}
+}
+
+func (p *PromPusher) Stop(ctx context.Context) error {
+	close(p.stopped)
+	select {
+	case <-p.done:
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	return nil
 }
 
-func Gen(proxy *bellman.Proxy) func(r chi.Router) {
+func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 	var reqCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -196,6 +415,8 @@ func Gen(proxy *bellman.Proxy) func(r chi.Router) {
 	prometheus.MustRegister(reqCounter, tokensCounter)
 
 	return func(r chi.Router) {
+		r.Use(auth(cfg))
+
 		r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
 			models := proxy.GenModels()
 			w.Header().Set("Content-Type", "application/json")
@@ -242,7 +463,7 @@ func Gen(proxy *bellman.Proxy) func(r chi.Router) {
 	}
 }
 
-func Embed(proxy *bellman.Proxy) func(r chi.Router) {
+func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 	var reqCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -264,6 +485,8 @@ func Embed(proxy *bellman.Proxy) func(r chi.Router) {
 	prometheus.MustRegister(reqCounter, tokensCounter)
 
 	return func(r chi.Router) {
+		r.Use(auth(cfg))
+
 		r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
 			models := proxy.EmbedModels()
 			w.Header().Set("Content-Type", "application/json")
@@ -299,7 +522,31 @@ func Embed(proxy *bellman.Proxy) func(r chi.Router) {
 	}
 }
 
+func genModelsOf(str string, provider string) ([]gen.Model, error) {
+	var models []gen.Model
+	err := json.Unmarshal([]byte(str), &models)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse gen models, %w", err)
+	}
+	for i, _ := range models {
+		models[i].Provider = provider
+	}
+	return models, nil
+}
+func embedModelsOf(str string, provider string) ([]embed.Model, error) {
+	var models []embed.Model
+	err := json.Unmarshal([]byte(str), &models)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse gen models, %w", err)
+	}
+	for i, _ := range models {
+		models[i].Provider = provider
+	}
+	return models, nil
+}
+
 func setupProxy(cfg Config) (*bellman.Proxy, error) {
+	var err error
 
 	proxy := bellman.NewProxy()
 
@@ -307,28 +554,43 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 		logger.Info("Start", "action", "proxy: adding Anthropic models")
 
 		client := anthropic.New(cfg.AnthropicKey)
-		proxy.RegisterGen(client, slices.Collect(maps.Values(anthropic.GenModels))...)
 
-		for _, model := range anthropic.GenModels {
-			logger.Info("Start", "action", "proxy: adding gen model", "model", model.FQN())
+		genModels := slices.Collect(maps.Values(anthropic.GenModels))
+		if len(cfg.AnthropicGenModels) > 0 {
+			genModels, err = genModelsOf(cfg.AnthropicGenModels, anthropic.Provider)
+			if err != nil {
+				return nil, fmt.Errorf("could not get gen models, %w", err)
+			}
+		}
+		proxy.RegisterGen(client, genModels...)
+
+		for _, model := range genModels {
+			logger.Info("Start", "action", "proxy: adding model [gen]", "model", model.FQN())
 		}
 	}
 	if cfg.OpenAiKey != "" {
-
 		client := openai.New(cfg.OpenAiKey)
-		proxy.RegisterGen(client, slices.Collect(maps.Values(openai.GenModels))...)
+
+		genModels := slices.Collect(maps.Values(openai.GenModels))
+		if len(cfg.OpenAiGenModels) > 0 {
+			genModels, err = genModelsOf(cfg.OpenAiGenModels, openai.Provider)
+			if err != nil {
+				return nil, fmt.Errorf("could not get gen models, %w", err)
+			}
+		}
+
+		proxy.RegisterGen(client, genModels...)
 		proxy.RegisterEmbeder(client, slices.Collect(maps.Values(openai.EmbedModels))...)
 
-		for _, model := range openai.GenModels {
-			logger.Info("Start", "action", "proxy: adding gen model", "model", model.FQN())
+		for _, model := range genModels {
+			logger.Info("Start", "action", "proxy: adding model [gen]", "model", model.FQN())
 		}
 		for _, model := range openai.EmbedModels {
-			logger.Info("Start", "action", "proxy: adding embed model", "model", model.FQN())
+			logger.Info("Start", "action", "proxy: adding model [embed]", "model", model.FQN())
 		}
 	}
 
 	if cfg.Google.Credentials != "" {
-
 		var err error
 		client, err := vertexai.New(vertexai.GoogleConfig{
 			Project:    cfg.Google.Project,
@@ -339,23 +601,39 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 			return nil, err
 		}
 
-		proxy.RegisterGen(client, slices.Collect(maps.Values(vertexai.GenModels))...)
+		genModels := slices.Collect(maps.Values(vertexai.GenModels))
+		if len(cfg.GoogleGenModels) > 0 {
+			genModels, err = genModelsOf(cfg.GoogleGenModels, vertexai.Provider)
+			if err != nil {
+				return nil, fmt.Errorf("could not get gen models, %w", err)
+			}
+		}
+		proxy.RegisterGen(client, genModels...)
 		proxy.RegisterEmbeder(client, slices.Collect(maps.Values(vertexai.EmbedModels))...)
 
-		for _, model := range vertexai.GenModels {
-			logger.Info("Start", "action", "proxy: adding gen model", "model", model.FQN())
+		for _, model := range genModels {
+			logger.Info("Start", "action", "proxy: adding model [gen]", "model", model.FQN())
 		}
 		for _, model := range vertexai.EmbedModels {
-			logger.Info("Start", "action", "proxy: adding embed model", "model", model.FQN())
+			logger.Info("Start", "action", "proxy: adding model [embed]", "model", model.FQN())
 		}
 	}
 
 	if cfg.VoyageAiKey != "" {
 		client := voyageai.New(cfg.VoyageAiKey)
-		proxy.RegisterEmbeder(client, slices.Collect(maps.Values(voyageai.EmbedModels))...)
 
-		for _, model := range voyageai.EmbedModels {
-			logger.Info("Start", "action", "proxy: adding embed model", "model", model.FQN())
+		embedModels := slices.Collect(maps.Values(voyageai.EmbedModels))
+		if len(cfg.VoyageAiEmbedModels) > 0 {
+			embedModels, err = embedModelsOf(cfg.VoyageAiEmbedModels, voyageai.Provider)
+			if err != nil {
+				return nil, fmt.Errorf("could not get gen models, %w", err)
+			}
+		}
+
+		proxy.RegisterEmbeder(client, embedModels...)
+
+		for _, model := range embedModels {
+			logger.Info("Start", "action", "proxy: adding model [embed]", "model", model.FQN())
 		}
 
 	}
