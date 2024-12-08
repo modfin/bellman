@@ -3,7 +3,7 @@ package rag
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman"
+	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/tools"
 )
@@ -18,13 +18,13 @@ func tool2promt(t tools.Call) prompt.Prompt {
 	}
 }
 
-func Run[T any](depth int, g *bellman.Generator, prompts ...prompt.Prompt) (*Result[T], error) {
+func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[T], error) {
 
 	var zero T
 
 	resultTool := tools.NewTool(
 		respone_output_callback_name,
-		tools.WithDescription("function is called once the LLM is finished with RAG retrieval and want to return the result to the user"),
+		tools.WithDescription("function is called once the Gen is finished with RAG retrieval and want to return the result to the user"),
 		tools.WithArgSchema(zero),
 	)
 

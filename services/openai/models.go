@@ -1,12 +1,18 @@
 package openai
 
-import "github.com/modfin/bellman"
+import (
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
+)
+
+const Provider = "OpenAI"
 
 // https://platform.openai.com/docs/models#gpt-4o-mini
 //type GenModel string
 
-var GenModel_gpt4o_latest = bellman.GenModel{
-	Name: "chatgpt-4o-latest",
+var GenModel_gpt4o_latest = gen.Model{
+	Provider: Provider,
+	Name:     "chatgpt-4o-latest",
 	Description: "Our high-intelligence flagship Model for complex, multi-step tasks. GPT-4o is cheaper and " +
 		"faster than GPT-4 Turbo.",
 	InputContentTypes:       nil,
@@ -15,8 +21,9 @@ var GenModel_gpt4o_latest = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4o = bellman.GenModel{
-	Name: "gpt-4o",
+var GenModel_gpt4o = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4o",
 	Description: "Our high-intelligence flagship Model for complex, multi-step tasks. GPT-4o is cheaper and " +
 		"faster than GPT-4 Turbo.",
 	InputContentTypes:       nil,
@@ -25,8 +32,9 @@ var GenModel_gpt4o = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4o_240806 = bellman.GenModel{
-	Name: "gpt-4o-2024-08-06",
+var GenModel_gpt4o_240806 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4o-2024-08-06",
 	Description: "Our high-intelligence flagship Model for complex, multi-step tasks. GPT-4o is cheaper and " +
 		"faster than GPT-4 Turbo.",
 	InputContentTypes:       nil,
@@ -35,8 +43,9 @@ var GenModel_gpt4o_240806 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4o_240513 = bellman.GenModel{
-	Name: "gpt-4o-2024-05-13",
+var GenModel_gpt4o_240513 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4o-2024-05-13",
 	Description: "Our high-intelligence flagship Model for complex, multi-step tasks. GPT-4o is cheaper and " +
 		"faster than GPT-4 Turbo.",
 	InputContentTypes:       nil,
@@ -47,8 +56,9 @@ var GenModel_gpt4o_240513 = bellman.GenModel{
 }
 
 // GenModel_gpt4o_mini
-var GenModel_gpt4o_mini = bellman.GenModel{
-	Name: "gpt-4o-mini",
+var GenModel_gpt4o_mini = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4o-mini",
 	Description: "Our affordable and intelligent small Model for fast, lightweight tasks. GPT-4o mini is " +
 		"cheaper and more capable,than GPT-3.5 Turbo.",
 	InputContentTypes:       nil,
@@ -57,8 +67,9 @@ var GenModel_gpt4o_mini = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4o_mini_240718 = bellman.GenModel{
-	Name: "gpt-4o-mini-2024-07-18",
+var GenModel_gpt4o_mini_240718 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4o-mini-2024-07-18",
 	Description: "Our affordable and intelligent small Model for fast, lightweight tasks. GPT-4o mini is " +
 		"cheaper and more capable,than GPT-3.5 Turbo.",
 	InputContentTypes:       nil,
@@ -69,8 +80,9 @@ var GenModel_gpt4o_mini_240718 = bellman.GenModel{
 }
 
 // GenModel_o1_preview
-var GenModel_o1_preview = bellman.GenModel{
-	Name: "o1-preview",
+var GenModel_o1_preview = gen.Model{
+	Provider: Provider,
+	Name:     "o1-preview",
 	Description: "The o1 series of large language models are trained with reinforcement learning to perform " +
 		"complex reasoning. o1 models think before they answer, producing a long internal chain of thought before " +
 		"responding to the user.",
@@ -80,8 +92,9 @@ var GenModel_o1_preview = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_o1_preview_240912 = bellman.GenModel{
-	Name: "o1-preview-2024-09-12",
+var GenModel_o1_preview_240912 = gen.Model{
+	Provider: Provider,
+	Name:     "o1-preview-2024-09-12",
 	Description: "The o1 series of large language models are trained with reinforcement learning to perform " +
 		"complex reasoning. o1 models think before they answer, producing a long internal chain of thought before " +
 		"responding to the user.",
@@ -91,8 +104,9 @@ var GenModel_o1_preview_240912 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_o1_mini = bellman.GenModel{
-	Name: "o1-mini",
+var GenModel_o1_mini = gen.Model{
+	Provider: Provider,
+	Name:     "o1-mini",
 	Description: "The o1 series of large language models are trained with reinforcement learning to perform " +
 		"complex reasoning. o1 models think before they answer, producing a long internal chain of thought before " +
 		"responding to the user.",
@@ -102,8 +116,9 @@ var GenModel_o1_mini = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_o1_mini_240912 = bellman.GenModel{
-	Name: "o1-mini-2024-09-12",
+var GenModel_o1_mini_240912 = gen.Model{
+	Provider: Provider,
+	Name:     "o1-mini-2024-09-12",
 	Description: "The o1 series of large language models are trained with reinforcement learning to perform " +
 		"complex reasoning. o1 models think before they answer, producing a long internal chain of thought before " +
 		"responding to the user.",
@@ -115,8 +130,9 @@ var GenModel_o1_mini_240912 = bellman.GenModel{
 }
 
 // GenModel_gpt4_turbo
-var GenModel_gpt4_turbo = bellman.GenModel{
-	Name: "gpt-4-turbo",
+var GenModel_gpt4_turbo = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4-turbo",
 	Description: "GPT-4 is a large multimodal Model (accepting text or image inputs and outputting text) " +
 		"that can solve difficult problems with greater accuracy than any of our previous models, thanks to its broader " +
 		"general knowledge and advanced reasoning capabilities. GPT-4 is available in the OpenAI API to paying customers. " +
@@ -128,8 +144,9 @@ var GenModel_gpt4_turbo = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4_turbo_240409 = bellman.GenModel{
-	Name: "gpt-4-turbo-2024-04-09",
+var GenModel_gpt4_turbo_240409 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4-turbo-2024-04-09",
 	Description: "GPT-4 is a large multimodal Model (accepting text or image inputs and outputting text) " +
 		"that can solve difficult problems with greater accuracy than any of our previous models, thanks to its broader " +
 		"general knowledge and advanced reasoning capabilities. GPT-4 is available in the OpenAI API to paying customers. " +
@@ -141,8 +158,9 @@ var GenModel_gpt4_turbo_240409 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4_turbo_preview = bellman.GenModel{
-	Name: "gpt-4-turbo-preview",
+var GenModel_gpt4_turbo_preview = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4-turbo-preview",
 	Description: "GPT-4 is a large multimodal Model (accepting text or image inputs and outputting text) " +
 		"that can solve difficult problems with greater accuracy than any of our previous models, thanks to its broader " +
 		"general knowledge and advanced reasoning capabilities. GPT-4 is available in the OpenAI API to paying customers. " +
@@ -154,8 +172,9 @@ var GenModel_gpt4_turbo_preview = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4_preview_0125 = bellman.GenModel{
-	Name: "gpt-4-0125-preview",
+var GenModel_gpt4_preview_0125 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4-0125-preview",
 	Description: "GPT-4 is a large multimodal Model (accepting text or image inputs and outputting text) " +
 		"that can solve difficult problems with greater accuracy than any of our previous models, thanks to its broader " +
 		"general knowledge and advanced reasoning capabilities. GPT-4 is available in the OpenAI API to paying customers. " +
@@ -167,8 +186,9 @@ var GenModel_gpt4_preview_0125 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4_preview_1106 = bellman.GenModel{
-	Name: "gpt-4-1106-preview",
+var GenModel_gpt4_preview_1106 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4-1106-preview",
 	Description: "GPT-4 is a large multimodal Model (accepting text or image inputs and outputting text) " +
 		"that can solve difficult problems with greater accuracy than any of our previous models, thanks to its broader " +
 		"general knowledge and advanced reasoning capabilities. GPT-4 is available in the OpenAI API to paying customers. " +
@@ -180,8 +200,9 @@ var GenModel_gpt4_preview_1106 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4 = bellman.GenModel{
-	Name: "gpt-4",
+var GenModel_gpt4 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4",
 	Description: "GPT-4 is a large multimodal Model (accepting text or image inputs and outputting text) " +
 		"that can solve difficult problems with greater accuracy than any of our previous models, thanks to its broader " +
 		"general knowledge and advanced reasoning capabilities. GPT-4 is available in the OpenAI API to paying customers. " +
@@ -193,8 +214,9 @@ var GenModel_gpt4 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gpt4_0613 = bellman.GenModel{
-	Name: "gpt-4-0613",
+var GenModel_gpt4_0613 = gen.Model{
+	Provider: Provider,
+	Name:     "gpt-4-0613",
 	Description: "GPT-4 is a large multimodal Model (accepting text or image inputs and outputting text) " +
 		"that can solve difficult problems with greater accuracy than any of our previous models, thanks to its broader " +
 		"general knowledge and advanced reasoning capabilities. GPT-4 is available in the OpenAI API to paying customers. " +
@@ -209,32 +231,35 @@ var GenModel_gpt4_0613 = bellman.GenModel{
 
 // https://platform.openai.com/docs/models#embeddings
 
-var EmbedModel_text3_small = bellman.EmbedModel{
+var EmbedModel_text3_small = embed.Model{
+	Provider:         Provider,
 	Name:             "text-embedding-3-small",
 	Description:      "Most capable embedding Model for both english and non-english tasks",
 	InputMaxTokens:   8191,
 	OutputDimensions: 1536,
 }
-var EmbedModel_text3_large = bellman.EmbedModel{
+var EmbedModel_text3_large = embed.Model{
+	Provider:         Provider,
 	Name:             "text-embedding-3-large",
 	Description:      "Increased performance over 2nd generation ada embedding Model",
 	InputMaxTokens:   8191,
 	OutputDimensions: 3072,
 }
-var EmbedModel_text_ada_002 = bellman.EmbedModel{
+var EmbedModel_text_ada_002 = embed.Model{
+	Provider:         Provider,
 	Name:             "text-embedding-ada-002",
 	Description:      "Most capable 2nd generation embedding Model, replacing 16 first generation models",
 	InputMaxTokens:   8191,
 	OutputDimensions: 1536,
 }
 
-var EmbedModels = map[string]bellman.EmbedModel{
+var EmbedModels = map[string]embed.Model{
 	EmbedModel_text3_small.Name:  EmbedModel_text3_small,
 	EmbedModel_text3_large.Name:  EmbedModel_text3_large,
 	EmbedModel_text_ada_002.Name: EmbedModel_text_ada_002,
 }
 
-var GenModels = map[string]bellman.GenModel{
+var GenModels = map[string]gen.Model{
 	GenModel_gpt4o_latest.Name:       GenModel_gpt4o_latest,
 	GenModel_gpt4o.Name:              GenModel_gpt4o,
 	GenModel_gpt4o_240806.Name:       GenModel_gpt4o_240806,

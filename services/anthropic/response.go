@@ -10,8 +10,7 @@ import (
 const respone_output_callback_name = "__bellman__result_callback"
 
 type response struct {
-	llm anthropicResponse
-
+	llm   anthropicResponse
 	tools []tools.Tool
 }
 

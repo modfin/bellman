@@ -5,16 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman"
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
 	"golang.org/x/oauth2"
+	"io"
+	"log/slog"
 	"net/http"
+	"sync/atomic"
 
 	"golang.org/x/oauth2/google"
 )
 
 type GoogleEmbedRequest struct {
 	Instances []struct {
-		TaskType string `json:"task_type"`
+		//TaskType string `json:"task_type"`
 		//Title    string `json:"title"`
 		Content string `json:"content"`
 	} `json:"instances"`
@@ -41,6 +46,15 @@ type GoogleConfig struct {
 type Google struct {
 	config GoogleConfig
 	client *http.Client
+
+	Log *slog.Logger `json:"-"`
+}
+
+func (g *Google) log(msg string, args ...any) {
+	if g.Log == nil {
+		return
+	}
+	g.Log.Debug("[bellman/vertex_ai] "+msg, args...)
 }
 
 func New(config GoogleConfig) (*Google, error) {
@@ -57,21 +71,23 @@ func New(config GoogleConfig) (*Google, error) {
 	}, nil
 }
 
-func (g *Google) Embed(text string, model bellman.EmbedModel) ([]float64, error) {
+func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
+	var reqc = atomic.AddInt64(&requestNo, 1)
+
 	req := GoogleEmbedRequest{
 		Instances: []struct {
-			TaskType string `json:"task_type"`
-			Content  string `json:"content"`
+			//TaskType string `json:"task_type"`
+			Content string `json:"content"`
 		}{
 			{
-				TaskType: model.Name,
-				Content:  text,
+				//TaskType: model.Name,
+				Content: request.Text,
 			},
 		},
 	}
 
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict",
-		g.config.Region, g.config.Project, g.config.Region, model.Name)
+		g.config.Region, g.config.Project, g.config.Region, request.Model.Name)
 
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -84,7 +100,15 @@ func (g *Google) Embed(text string, model bellman.EmbedModel) ([]float64, error)
 	defer resp.Body.Close()
 
 	var embeddings GoogleEmbedResponse
-	err = json.NewDecoder(resp.Body).Decode(&embeddings)
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read google response, %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, string(body))
+	}
+
+	err = json.Unmarshal(body, &embeddings)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not decode google response, %w", err)
@@ -93,16 +117,24 @@ func (g *Google) Embed(text string, model bellman.EmbedModel) ([]float64, error)
 		return nil, fmt.Errorf("wrong number of predictions, %d, expected 1", len(embeddings.Predictions))
 	}
 
-	return embeddings.Predictions[0].Embeddings.Values, nil
+	g.log("[embed] response", "request", reqc, "token-total", embeddings.Predictions[0].Embeddings.Statistics.TokenCount)
+
+	return &embed.Response{
+		Embedding: embeddings.Predictions[0].Embeddings.Values,
+		Metadata: models.Metadata{
+			Model:       request.Model.FQN(),
+			TotalTokens: embeddings.Predictions[0].Embeddings.Statistics.TokenCount,
+		},
+	}, nil
 }
 
-func (g *Google) Generator(options ...bellman.GeneratorOption) *bellman.Generator {
+func (g *Google) Generator(options ...gen.Option) *gen.Generator {
 
-	var gen = &bellman.Generator{
+	var gen = &gen.Generator{
 		Prompter: &generator{
 			google: g,
 		},
-		Config: bellman.Config{
+		Request: gen.Request{
 			Temperature: -1,
 			MaxTokens:   -1,
 			TopP:        -1,
@@ -113,5 +145,11 @@ func (g *Google) Generator(options ...bellman.GeneratorOption) *bellman.Generato
 		gen = o(gen)
 	}
 	return gen
+
+}
+
+func (g *Google) SetLogger(logger *slog.Logger) *Google {
+	g.Log = logger
+	return g
 
 }

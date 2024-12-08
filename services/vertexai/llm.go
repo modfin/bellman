@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman"
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/tools"
 	"io"
@@ -16,26 +17,19 @@ import (
 var requestNo int64
 
 type generator struct {
-	google *Google
-	config bellman.Config
+	google  *Google
+	request gen.Request
 }
 
-func (g *generator) SetConfig(config bellman.Config) {
-	g.config = config
+func (g *generator) SetRequest(config gen.Request) {
+	g.request = config
 }
 
-func (g *generator) log(msg string, args ...any) {
-	if g.config.Log == nil {
-		return
-	}
-	g.config.Log.Debug("[bellman/vertex_ai] "+msg, args...)
-}
-
-func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
+func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 	//https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference
 
-	if g.config.Model.Name == "" {
+	if g.request.Model.Name == "" {
 		return nil, errors.New("model is required")
 	}
 
@@ -44,58 +38,61 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 		GenerationConfig: genConfig{},
 	}
 
-	if g.config.MaxTokens != -1 {
-		model.GenerationConfig.MaxOutputTokens = &g.config.MaxTokens
+	if g.request.MaxTokens != -1 {
+		model.GenerationConfig.MaxOutputTokens = &g.request.MaxTokens
 	}
-	if g.config.TopP != -1 {
-		model.GenerationConfig.TopP = &g.config.TopP
+	if g.request.TopP != -1 {
+		model.GenerationConfig.TopP = &g.request.TopP
 	}
-	if g.config.Temperature != -1 {
-		model.GenerationConfig.Temperature = &g.config.Temperature
+	if g.request.Temperature != -1 {
+		model.GenerationConfig.Temperature = &g.request.Temperature
 	}
-	if len(g.config.StopSequences) > 0 {
-		model.GenerationConfig.StopSequences = &g.config.StopSequences
+	if len(g.request.StopSequences) > 0 {
+		model.GenerationConfig.StopSequences = &g.request.StopSequences
 	}
 
-	if g.config.SystemPrompt != "" {
+	if g.request.SystemPrompt != "" {
 		model.SystemInstruction = genRequestContent{
 			Role: "system", // does not take role into account, it can be anything?
 			Parts: []genRequestContentPart{
 				{
-					Text: g.config.SystemPrompt,
+					Text: g.request.SystemPrompt,
 				},
 			},
 		}
 	}
 
 	// Adding output schema to model
-	if g.config.OutputSchema != nil {
+	if g.request.OutputSchema != nil {
 		ct := "application/json"
 		model.GenerationConfig.ResponseMimeType = &ct
-		model.GenerationConfig.ResponseSchema = g.config.OutputSchema
+		model.GenerationConfig.ResponseSchema = g.request.OutputSchema
 	}
 
 	// Adding tools to model
-	if len(g.config.Tools) > 0 {
+
+	toolBelt := map[string]*tools.Tool{}
+	if len(g.request.Tools) > 0 {
 		model.Tools = []genTool{{FunctionDeclaration: []genToolFunc{}}}
-		for _, t := range g.config.Tools {
+		for _, t := range g.request.Tools {
 			model.Tools[0].FunctionDeclaration = append(model.Tools[0].FunctionDeclaration, genToolFunc{
 				Name:        t.Name,
 				Description: t.Description,
 				Parameters:  t.ArgumentSchema,
 			})
+			toolBelt[t.Name] = &t
 		}
 	}
 
-	// Dealing with SetToolConfig config
-	if g.config.ToolConfig != nil {
+	// Dealing with SetToolConfig request
+	if g.request.ToolConfig != nil {
 		model.ToolConfig = &genToolConfig{
 			GoogleFunctionCallingConfig: genFunctionCallingConfig{
 				Mode: "ANY",
 			},
 		}
 		// https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling#functioncallingconfig
-		switch g.config.ToolConfig.Name {
+		switch g.request.ToolConfig.Name {
 		case tools.NoTool.Name:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "NONE"
 		case tools.AutoTool.Name:
@@ -104,7 +101,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
 		default:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
-			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.config.ToolConfig.Name}
+			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.request.ToolConfig.Name}
 		}
 	}
 
@@ -136,24 +133,25 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 	}
 
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-		g.google.config.Region, g.google.config.Project, g.google.config.Region, g.config.Model.Name)
+		g.google.config.Region, g.google.config.Project, g.google.config.Region, g.request.Model.Name)
 
 	body, err := json.Marshal(model)
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal google request, %w", err)
 	}
 
-	g.log("sending request",
-		"request", atomic.AddInt64(&requestNo, 1),
-		"model", g.config.Model.Name,
-		"tools", len(g.config.Tools) > 0,
-		"tool_choice", g.config.ToolConfig != nil,
-		"output_schema", g.config.OutputSchema != nil,
-		"system_prompt", g.config.SystemPrompt != "",
-		"temperature", g.config.Temperature,
-		"top_p", g.config.TopP,
-		"max_tokens", g.config.MaxTokens,
-		"stop_sequences", g.config.StopSequences,
+	reqc := atomic.AddInt64(&requestNo, 1)
+	g.google.log("[gen] request",
+		"request", reqc,
+		"model", g.request.Model.FQN(),
+		"tools", len(g.request.Tools) > 0,
+		"tool_choice", g.request.ToolConfig != nil,
+		"output_schema", g.request.OutputSchema != nil,
+		"system_prompt", g.request.SystemPrompt != "",
+		"temperature", g.request.Temperature,
+		"top_p", g.request.TopP,
+		"max_tokens", g.request.MaxTokens,
+		"stop_sequences", g.request.StopSequences,
 		"url", u,
 	)
 
@@ -183,9 +181,45 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (bellman.Response, error) {
 		return nil, fmt.Errorf("no parts in response")
 	}
 
-	return &response{
-		llm:   respModel,
-		tools: g.config.Tools,
-	}, nil
+	res := &gen.Response{
+		Metadata: models.Metadata{
+			Model:        g.request.Model.FQN(),
+			InputTokens:  respModel.UsageMetadata.PromptTokenCount,
+			OutputTokens: respModel.UsageMetadata.CandidatesTokenCount,
+			TotalTokens:  respModel.UsageMetadata.TotalTokenCount,
+		},
+	}
+	for _, c := range respModel.Candidates {
+		for _, p := range c.Content.Parts {
+			if len(p.Text) > 0 {
+				res.Texts = append(res.Texts, p.Text)
+			}
+
+			if len(p.Text) == 0 && len(p.FunctionCall.Name) > 0 { // Tool calls
+				f := p.FunctionCall
+				arg, err := json.Marshal(f.Arg)
+				if err != nil {
+					return nil, fmt.Errorf("could not marshal google request, %w", err)
+				}
+				res.Tools = append(res.Tools, tools.Call{
+					Name:     f.Name,
+					Argument: string(arg),
+					Ref:      toolBelt[f.Name],
+				})
+
+			}
+
+		}
+	}
+
+	g.google.log("[gen] response",
+		"request", reqc,
+		"model", g.request.Model.FQN(),
+		"token-input", res.Metadata.InputTokens,
+		"token-output", res.Metadata.OutputTokens,
+		"token-total", res.Metadata.TotalTokens,
+	)
+
+	return res, nil
 
 }

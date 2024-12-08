@@ -70,8 +70,8 @@ type Tool struct {
 }
 
 type Call struct {
-	Name     string
-	Argument string
+	Name     string `json:"name"`
+	Argument string `json:"argument"`
 
-	Ref *Tool
+	Ref *Tool `json:"-"`
 }

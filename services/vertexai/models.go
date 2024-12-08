@@ -1,11 +1,16 @@
 package vertexai
 
-import "github.com/modfin/bellman"
+import (
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
+)
 
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-models
-//type GenModel string
 
-var GenModel_gemini_Experiment_114 = bellman.GenModel{
+const Provider = "VertexAI"
+
+var GenModel_gemini_Experiment_114 = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-exp-1114",
 	Description:             "",
 	InputContentTypes:       nil,
@@ -15,7 +20,8 @@ var GenModel_gemini_Experiment_114 = bellman.GenModel{
 	SupportStructuredOutput: false,
 }
 
-var GenModel_gemini_1_5_flash = bellman.GenModel{
+var GenModel_gemini_1_5_flash = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-flash",
 	Description:             "Fast and versatile performance across a diverse variety of tasks",
 	InputContentTypes:       nil,
@@ -24,7 +30,8 @@ var GenModel_gemini_1_5_flash = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gemini_1_5_flash_001 = bellman.GenModel{
+var GenModel_gemini_1_5_flash_001 = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-flash-002",
 	Description:             "Fast and versatile performance across a diverse variety of tasks",
 	InputContentTypes:       nil,
@@ -33,7 +40,8 @@ var GenModel_gemini_1_5_flash_001 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gemini_1_5_flash_002 = bellman.GenModel{
+var GenModel_gemini_1_5_flash_002 = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-flash-001",
 	Description:             "Fast and versatile performance across a diverse variety of tasks",
 	InputContentTypes:       nil,
@@ -43,7 +51,8 @@ var GenModel_gemini_1_5_flash_002 = bellman.GenModel{
 	SupportStructuredOutput: false,
 }
 
-var GenModel_gemini_1_5_flash_8b = bellman.GenModel{
+var GenModel_gemini_1_5_flash_8b = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-flash-8b",
 	Description:             "High volume and lower intelligence tasks",
 	InputContentTypes:       nil,
@@ -52,7 +61,8 @@ var GenModel_gemini_1_5_flash_8b = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gemini_1_5_flash_8b_001 = bellman.GenModel{
+var GenModel_gemini_1_5_flash_8b_001 = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-flash-8b-001",
 	Description:             "High volume and lower intelligence tasks",
 	InputContentTypes:       nil,
@@ -64,7 +74,8 @@ var GenModel_gemini_1_5_flash_8b_001 = bellman.GenModel{
 
 //var GenModel_gemini_1_5_pro_latest = bellman.GenModel{Name: "gemini-1.5-pro-latest",}
 
-var GenModel_gemini_1_5_pro = bellman.GenModel{
+var GenModel_gemini_1_5_pro = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-pro",
 	Description:             "Complex reasoning tasks requiring more intelligence",
 	InputContentTypes:       nil,
@@ -73,7 +84,8 @@ var GenModel_gemini_1_5_pro = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gemini_1_5_pro_002 = bellman.GenModel{
+var GenModel_gemini_1_5_pro_002 = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-pro-002",
 	Description:             "Complex reasoning tasks requiring more intelligence",
 	InputContentTypes:       nil,
@@ -82,7 +94,8 @@ var GenModel_gemini_1_5_pro_002 = bellman.GenModel{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_gemini_1_5_pro_001 = bellman.GenModel{
+var GenModel_gemini_1_5_pro_001 = gen.Model{
+	Provider:                Provider,
 	Name:                    "gemini-1.5-pro-001",
 	Description:             "Complex reasoning tasks requiring more intelligence",
 	InputContentTypes:       nil,
@@ -94,37 +107,43 @@ var GenModel_gemini_1_5_pro_001 = bellman.GenModel{
 
 // https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#supported-models
 
-var EmbedModel_text_005 = bellman.EmbedModel{
+var EmbedModel_text_005 = embed.Model{
+	Provider:         Provider,
 	Name:             "text-embedding-005",
 	Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
 	InputMaxTokens:   2048,
 	OutputDimensions: 768,
 }
-var EmbedModel_text_004 = bellman.EmbedModel{
+var EmbedModel_text_004 = embed.Model{
+	Provider:         Provider,
 	Name:             "text-embedding-004",
 	Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
 	InputMaxTokens:   2048,
 	OutputDimensions: 768,
 }
-var EmbedMode_multilang_002 = bellman.EmbedModel{
+var EmbedMode_multilang_002 = embed.Model{
+	Provider:         Provider,
 	Name:             "text-multilingual-embedding-002",
 	Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
 	InputMaxTokens:   2048,
 	OutputDimensions: 768,
 }
-var EmbedModel_text_gecko_001 = bellman.EmbedModel{
+var EmbedModel_text_gecko_001 = embed.Model{
+	Provider:         Provider,
 	Name:             "textembedding-gecko@001",
 	Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
 	InputMaxTokens:   2048,
 	OutputDimensions: 768,
 }
-var EmbedModel_text_gecko_003 = bellman.EmbedModel{
+var EmbedModel_text_gecko_003 = embed.Model{
+	Provider:         Provider,
 	Name:             "textembedding-gecko@003",
 	Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
 	InputMaxTokens:   2048,
 	OutputDimensions: 768,
 }
-var EmbedModel_text_gecko_multilang_001 = bellman.EmbedModel{
+var EmbedModel_text_gecko_multilang_001 = embed.Model{
+	Provider:         Provider,
 	Name:             "textembedding-gecko-multilingual@001",
 	Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
 	InputMaxTokens:   2048,
@@ -144,7 +163,7 @@ const EmbedTypeQA EmbedType = "QUESTION_ANSWERING"
 const EmbedTypeVerification EmbedType = "FACT_VERIFICATION"
 const EmbedTypeCode EmbedType = "CODE_RETRIEVAL_QUERY"
 
-var EmbedModels = map[string]bellman.EmbedModel{
+var EmbedModels = map[string]embed.Model{
 	EmbedModel_text_005.Name:                 EmbedModel_text_005,
 	EmbedModel_text_004.Name:                 EmbedModel_text_004,
 	EmbedMode_multilang_002.Name:             EmbedMode_multilang_002,
@@ -153,7 +172,7 @@ var EmbedModels = map[string]bellman.EmbedModel{
 	EmbedModel_text_gecko_multilang_001.Name: EmbedModel_text_gecko_multilang_001,
 }
 
-var GenModels = map[string]bellman.GenModel{
+var GenModels = map[string]gen.Model{
 	GenModel_gemini_Experiment_114.Name:   GenModel_gemini_Experiment_114,
 	GenModel_gemini_1_5_flash.Name:        GenModel_gemini_1_5_flash,
 	GenModel_gemini_1_5_flash_001.Name:    GenModel_gemini_1_5_flash_001,

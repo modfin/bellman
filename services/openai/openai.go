@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman"
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
+	"sync/atomic"
 )
 
 type embedRequest struct {
@@ -30,7 +34,7 @@ type embedResponse struct {
 	} `json:"usage"`
 }
 
-//type Config struct {
+//type Request struct {
 //	GenModel   string `cli:"ai-openai-gen-Model"`
 //	EmbedModel string `cli:"ai-openai-embedding-Model"`
 //	ApiKey string `cli:"ai-openai-api-key"`
@@ -38,6 +42,7 @@ type embedResponse struct {
 
 type OpenAI struct {
 	apiKey string
+	Log    *slog.Logger `json:"-"`
 }
 
 func New(key string) *OpenAI {
@@ -46,10 +51,19 @@ func New(key string) *OpenAI {
 	}
 }
 
-func (g *OpenAI) Embed(text string, model bellman.EmbedModel) ([]float64, error) {
+func (g *OpenAI) log(msg string, args ...any) {
+	if g.Log == nil {
+		return
+	}
+	g.Log.Debug("[bellman/open_ai] "+msg, args...)
+}
+
+func (g *OpenAI) Embed(request embed.Request) (*embed.Response, error) {
+	var reqc = atomic.AddInt64(&requestNo, 1)
+
 	reqModel := embedRequest{
-		Input:          text,
-		Model:          model.Name,
+		Input:          request.Text,
+		Model:          request.Model.Name,
 		EncodingFormat: "float",
 	}
 
@@ -89,15 +103,23 @@ func (g *OpenAI) Embed(text string, model bellman.EmbedModel) ([]float64, error)
 		return nil, fmt.Errorf("no data in response")
 	}
 
-	return respModel.Data[0].Embedding, nil
+	g.log("[embed] response", "request", reqc, "token-total", respModel.Usage.TotalTokens)
+
+	return &embed.Response{
+		Embedding: respModel.Data[0].Embedding,
+		Metadata: models.Metadata{
+			Model:       request.Model.FQN(),
+			TotalTokens: respModel.Usage.TotalTokens,
+		},
+	}, nil
 }
 
-func (g *OpenAI) Generator(options ...bellman.GeneratorOption) *bellman.Generator {
-	var gen = &bellman.Generator{
+func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
+	var gen = &gen.Generator{
 		Prompter: &generator{
 			openai: g,
 		},
-		Config: bellman.Config{
+		Request: gen.Request{
 			Temperature: 1,
 			TopP:        1,
 			MaxTokens:   2048,
@@ -109,4 +131,9 @@ func (g *OpenAI) Generator(options ...bellman.GeneratorOption) *bellman.Generato
 	}
 
 	return gen
+}
+
+func (g *OpenAI) SetLogger(logger *slog.Logger) *OpenAI {
+	g.Log = logger
+	return g
 }
