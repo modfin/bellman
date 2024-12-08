@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"github.com/urfave/cli/v2"
+	"io"
 	"log"
 	"log/slog"
 	"maps"
@@ -69,7 +70,9 @@ func main() {
 			&cli.StringFlag{
 				Name:    "anthropic-gen-models",
 				EnvVars: []string{"BELLMAN_ANTHROPIC_GEN_MODELS"},
-				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "claude-3-5-haiku-latest"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+				Usage: `A json array containing objects with the name of the model, 
+	eg [{"name": "claude-3-5-haiku-latest"}]. If not provided, all default models will be loaded. 
+	If provided, only the models in the array will be loaded.`,
 			},
 
 			&cli.StringFlag{
@@ -87,12 +90,16 @@ func main() {
 			&cli.StringFlag{
 				Name:    "google-gen-models",
 				EnvVars: []string{"BELLMAN_GOOGLE_GEN_MODELS"},
-				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "gemini-1.5-flash-002"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+				Usage: `A json array containing objects with the name of the model, 
+	eg [{"name": "gemini-1.5-flash-002"}]. If not provided, all default models will be loaded. 
+	If provided, only the models in the array will be loaded.`,
 			},
 			&cli.StringFlag{
 				Name:    "google-embed-models",
 				EnvVars: []string{"BELLMAN_GOOGLE_EMBED_MODELS"},
-				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "text-embedding-005"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+				Usage: `A json array containing objects with the name of the model, 
+	eg [{"name": "text-embedding-005"}]. If not provided, all default models will be loaded. 
+	If provided, only the models in the array will be loaded.`,
 			},
 
 			&cli.StringFlag{
@@ -102,12 +109,16 @@ func main() {
 			&cli.StringFlag{
 				Name:    "openai-gen-models",
 				EnvVars: []string{"BELLMAN_OPENAI_GEN_MODELS"},
-				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "chatgpt-4o-latest"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+				Usage: `A json array containing objects with the name of the model, 
+	eg [{"name": "chatgpt-4o-latest"}]. If not provided, all default models will be loaded. 
+	If provided, only the models in the array will be loaded.`,
 			},
 			&cli.StringFlag{
 				Name:    "openai-embed-models",
 				EnvVars: []string{"BELLMAN_OPENAI_EMBED_MODELS"},
-				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "text-embedding-ada-002"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+				Usage: `A json array containing objects with the name of the model, 
+	eg [{"name": "text-embedding-ada-002"}]. If not provided, all default models will be loaded. 
+	If provided, only the models in the array will be loaded.`,
 			},
 
 			&cli.StringFlag{
@@ -117,7 +128,9 @@ func main() {
 			&cli.StringFlag{
 				Name:    "voyageai-embed-models",
 				EnvVars: []string{"BELLMAN_VOYAGEAI_EMBED_MODELS"},
-				Usage:   `"A json array containing objects with the name of the model, eg [{"name": "voyage-3-lite"}]. If not provided, all default models will be loaded. If provided, only the models in the array will be loaded."`,
+				Usage: `A json array containing objects with the name of the model, 
+	eg [{"name": "voyage-3-lite"}]. If not provided, all default models will be loaded. 
+	If provided, only the models in the array will be loaded.`,
 			},
 
 			&cli.StringFlag{
@@ -128,7 +141,7 @@ func main() {
 			&cli.StringFlag{
 				Name:    "prometheus-push-url",
 				EnvVars: []string{"BELLMAN_PROMETHEUS_PUSH_URL"},
-				Usage:   "User https://user:password@example.com to push metrics to prometheus push gateway",
+				Usage:   "Use https://user:password@example.com to push metrics to prometheus push gateway",
 			},
 		},
 
@@ -424,8 +437,16 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 		})
 
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				err = fmt.Errorf("could not read request, %w", err)
+				httpErr(w, err, http.StatusBadRequest)
+				return
+			}
+
 			var req gen.FullRequest
-			err := json.NewDecoder(r.Body).Decode(&req)
+			err = json.Unmarshal(body, &req)
 			if err != nil {
 				err = fmt.Errorf("could not decode request, %w", err)
 				httpErr(w, err, http.StatusBadRequest)
@@ -447,8 +468,16 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			// Taking some metrics...
 			keyName := r.Context().Value("api-key-name")
+			logger.Info("gen request",
+				"model", req.Model,
+				"key", keyName,
+				"token-input", response.Metadata.InputTokens,
+				"token-output", response.Metadata.OutputTokens,
+				"token-total", response.Metadata.TotalTokens,
+			)
+
+			// Taking some metrics...
 			reqCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string), "total").Add(float64(response.Metadata.TotalTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string), "input").Add(float64(response.Metadata.InputTokens))
@@ -509,8 +538,14 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			// Taking some metrics...
 			keyName := r.Context().Value("api-key-name")
+			logger.Info("embed request",
+				"model", req.Model,
+				"key", keyName,
+				"token-total", response.Metadata.TotalTokens,
+			)
+
+			// Taking some metrics...
 			reqCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Add(float64(response.Metadata.TotalTokens))
 

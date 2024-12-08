@@ -63,10 +63,10 @@ func NewTool(name string, options ...ToolOption) Tool {
 }
 
 type Tool struct {
-	Name           string
-	Description    string
-	ArgumentSchema *schema.JSON
-	Function       func(jsonArg string) (string, error)
+	Name           string                               `json:"name"`
+	Description    string                               `json:"description"`
+	ArgumentSchema *schema.JSON                         `json:"argument_schema,omitempty"`
+	Function       func(jsonArg string) (string, error) `json:"-"`
 }
 
 type Call struct {

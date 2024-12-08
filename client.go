@@ -7,6 +7,7 @@ import (
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 	"io"
 	"log/slog"
 	"net/http"
@@ -196,6 +197,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		Prompts: conversation,
 	}
 
+	toolBelt := map[string]*tools.Tool{}
+	for _, tool := range g.request.Tools {
+		toolBelt[tool.Name] = &tool
+	}
+
 	g.bellman.log("[gen] request",
 		"request", reqc,
 		"model", g.request.Model.FQN(),
@@ -246,6 +252,13 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"token-output", response.Metadata.OutputTokens,
 		"token-total", response.Metadata.TotalTokens,
 	)
+
+	// adding reference to tools
+	for i, _ := range response.Tools {
+		tool := response.Tools[i]
+		tool.Ref = toolBelt[tool.Name]
+		response.Tools[i] = tool
+	}
 
 	return &response, nil
 
