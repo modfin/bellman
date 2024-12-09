@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/lmittmann/tint"
 	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/models/embed"
@@ -37,6 +38,8 @@ import (
 )
 
 var logger *slog.Logger
+
+var host = strings.ReplaceAll(uuid.New().String(), "-", "")[:16]
 
 func main() {
 	app := &cli.App{
@@ -193,7 +196,7 @@ func setLogging(ctx *cli.Context) {
 				Level: level,
 			})))
 	}
-	logger = slog.Default()
+	logger = slog.Default().With("host", host)
 	//logger.Error("Error Test")
 	//logger.Warn("Warm Test")
 	//logger.Info("Info Test")
@@ -409,6 +412,7 @@ type PromPusher struct {
 
 func (p *PromPusher) Start() {
 	var stopped bool
+
 	for {
 		if stopped {
 			return
@@ -428,7 +432,9 @@ func (p *PromPusher) Start() {
 		user := u.User
 		u.User = nil
 
-		pusher := push.New(u.String(), "bellmand").Gatherer(prometheus.DefaultGatherer)
+		pusher := push.New(u.String(), "bellmand").
+			Gatherer(prometheus.DefaultGatherer).
+			Grouping("host", host)
 		if user != nil {
 			pass, _ := user.Password()
 			pusher = pusher.BasicAuth(user.Username(), pass)
