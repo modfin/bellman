@@ -39,7 +39,7 @@ import (
 
 var logger *slog.Logger
 
-var host = strings.ReplaceAll(uuid.New().String(), "-", "")[:16]
+var instance = strings.ReplaceAll(uuid.New().String(), "-", "")[:16]
 
 func main() {
 	app := &cli.App{
@@ -196,7 +196,7 @@ func setLogging(ctx *cli.Context) {
 				Level: level,
 			})))
 	}
-	logger = slog.Default().With("host", host)
+	logger = slog.Default().With("instance", instance)
 	//logger.Error("Error Test")
 	//logger.Warn("Warm Test")
 	//logger.Info("Info Test")
@@ -431,10 +431,9 @@ func (p *PromPusher) Start() {
 
 		user := u.User
 		u.User = nil
-
 		pusher := push.New(u.String(), "bellmand").
 			Gatherer(prometheus.DefaultGatherer).
-			Grouping("host", host)
+			Grouping("instance", instance)
 		if user != nil {
 			pass, _ := user.Password()
 			pusher = pusher.BasicAuth(user.Username(), pass)
