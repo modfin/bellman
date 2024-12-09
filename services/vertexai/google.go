@@ -38,9 +38,9 @@ type GoogleEmbedResponse struct {
 }
 
 type GoogleConfig struct {
-	Project    string `cli:"ai-google-project"`
-	Region     string `cli:"ai-google-region"`
-	Credential string `cli:"ai-google-credential"`
+	Project    string
+	Region     string
+	Credential string
 }
 
 type Google struct {
@@ -59,11 +59,22 @@ func (g *Google) log(msg string, args ...any) {
 
 func New(config GoogleConfig) (*Google, error) {
 
-	cred, err := google.CredentialsFromJSON(context.Background(), []byte(config.Credential), "https://www.googleapis.com/auth/cloud-platform")
-	if err != nil {
-		return nil, fmt.Errorf("could not create google credentials, %w", err)
+	var client *http.Client
+	var err error
+
+	if config.Credential != "" {
+		cred, err := google.CredentialsFromJSON(context.Background(), []byte(config.Credential), "https://www.googleapis.com/auth/cloud-platform")
+		if err != nil {
+			return nil, fmt.Errorf("could not create google credentials, %w", err)
+		}
+		client = oauth2.NewClient(context.Background(), cred.TokenSource)
 	}
-	client := oauth2.NewClient(context.Background(), cred.TokenSource)
+	if config.Credential == "" {
+		client, err = google.DefaultClient(context.Background(), "https://www.googleapis.com/auth/cloud-platform")
+		if err != nil {
+			return nil, fmt.Errorf("could not create google default client, %w", err)
+		}
+	}
 
 	return &Google{
 		config: config,

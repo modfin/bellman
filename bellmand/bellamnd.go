@@ -78,14 +78,17 @@ func main() {
 			&cli.StringFlag{
 				Name:    "google-project",
 				EnvVars: []string{"BELLMAN_GOOGLE_PROJECT"},
+				Usage:   "The project which should be billed / it is executed in",
 			},
 			&cli.StringFlag{
 				Name:    "google-region",
 				EnvVars: []string{"BELLMAN_GOOGLE_REGION"},
+				Usage:   "The region where the models are deployed, eg europe-north1",
 			},
 			&cli.StringFlag{
 				Name:    "google-credential",
 				EnvVars: []string{"BELLMAN_GOOGLE_CREDENTIAL"},
+				Usage:   "Content of a service account key file, a json object. If not provided, default credentials will be used from environment. ie if its deployed on GCP",
 			},
 			&cli.StringFlag{
 				Name:    "google-gen-models",
@@ -625,7 +628,7 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 		}
 	}
 
-	if cfg.Google.Credentials != "" {
+	if cfg.Google.Region != "" && cfg.Google.Project != "" {
 		var err error
 		client, err := vertexai.New(vertexai.GoogleConfig{
 			Project:    cfg.Google.Project,
