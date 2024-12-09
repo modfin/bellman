@@ -14,4 +14,6 @@ go run -race bellamnd.go \
   \
   --api-key=qwerty \
   --api-key=12345 \
-  --prometheus-metrics-basic-auth="user:pass"
+  --prometheus-metrics-basic-auth="user:pass" \
+  --log-format=color \
+  --log-level=info \

@@ -37,16 +37,6 @@ import (
 
 var logger *slog.Logger
 
-func init() {
-	slog.SetDefault(slog.New(
-		tint.NewHandler(os.Stdout, &tint.Options{
-			Level:      slog.LevelDebug,
-			TimeFormat: time.Kitchen,
-		}),
-	))
-	logger = slog.Default()
-}
-
 func main() {
 	app := &cli.App{
 		Name: "bellman wep api server",
@@ -56,6 +46,19 @@ func main() {
 				Name:    "http-port",
 				EnvVars: []string{"BELLMAN_HTTP_PORT"},
 				Value:   8080,
+			},
+
+			&cli.StringFlag{
+				Name:    "log-format",
+				EnvVars: []string{"BELLMAN_LOG_FORMAT"},
+				Value:   "json",
+				Usage:   "log format, json, text or color",
+			},
+			&cli.StringFlag{
+				Name:    "log-level",
+				EnvVars: []string{"BELLMAN_LOG_LEVEL"},
+				Value:   "INFO",
+				Usage:   "Levels are DEBUG, INFO, WARN, ERROR",
 			},
 
 			&cli.StringSliceFlag{
@@ -149,6 +152,7 @@ func main() {
 		},
 
 		Action: func(context *cli.Context) error {
+			setLogging(context)
 			logger.Info("Start", "action", "parsing config")
 			cfg := clix.Parse[Config](context)
 			return serve(cfg)
@@ -157,6 +161,42 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func setLogging(ctx *cli.Context) {
+
+	level := slog.Level(0)
+	err := level.UnmarshalText([]byte(ctx.String("log-level")))
+	if err != nil {
+		panic(fmt.Errorf("could not parse log level, %w", err))
+	}
+
+	switch ctx.String("log-format") {
+	case "color":
+		slog.SetDefault(slog.New(
+			tint.NewHandler(os.Stdout, &tint.Options{
+				Level:      level,
+				TimeFormat: time.DateTime,
+			}),
+		))
+	case "text":
+		fmt.Println("json")
+		slog.SetDefault(slog.New(
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+				Level: level,
+			})))
+	default:
+		fmt.Println("json")
+		slog.SetDefault(slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+				Level: level,
+			})))
+	}
+	logger = slog.Default()
+	//logger.Error("Error Test")
+	//logger.Warn("Warm Test")
+	//logger.Info("Info Test")
+	//logger.Debug("Debug Test")
 }
 
 func httpErr(w http.ResponseWriter, err error, code int) {
@@ -311,6 +351,11 @@ func serve(cfg Config) error {
 	r.Use(middleware.Logger)
 
 	r.Handle("/metrics", metricsAuth(cfg.PrometheusMetricsBasicAuth)(promhttp.Handler()))
+
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	})
 
 	r.Route("/gen", Gen(proxy, cfg))
 	r.Route("/embed", Embed(proxy, cfg))
