@@ -464,7 +464,7 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 	var reqCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name:        "gen_request_count",
+			Name:        "bellman_gen_request_count",
 			Help:        "Number of request per key",
 			ConstLabels: nil,
 		},
@@ -473,7 +473,7 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 	var tokensCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name:        "gen_token_count",
+			Name:        "bellman_gen_token_count",
 			Help:        "Number of token processed by model and key",
 			ConstLabels: nil,
 		},
@@ -550,7 +550,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 	var reqCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name:        "embed_request_count",
+			Name:        "bellman_embed_request_count",
 			Help:        "Number of request per key",
 			ConstLabels: nil,
 		},
@@ -559,7 +559,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 	var tokensCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name:        "embed_token_count",
+			Name:        "bellman_embed_token_count",
 			Help:        "Number of token processed by model and key",
 			ConstLabels: nil,
 		},
