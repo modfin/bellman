@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/client_golang/prometheus/push"
+	slogchi "github.com/samber/slog-chi"
 	"github.com/urfave/cli/v2"
 	"io"
 	"log"
@@ -348,7 +349,7 @@ func serve(cfg Config) error {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Logger)
+	r.Use(slogchi.New(logger))
 
 	r.Handle("/metrics", metricsAuth(cfg.PrometheusMetricsBasicAuth)(promhttp.Handler()))
 
