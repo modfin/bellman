@@ -1,10 +1,8 @@
 package openai
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	schema "github.com/modfin/bellman/schema"
-	"io"
 )
 
 type genRequestMessage struct {
@@ -21,20 +19,15 @@ type genMessageContent struct {
 }
 
 type ImageUrl struct {
-	Url    string `json:"url"` /// data:image/jpeg;base64,......
-	reader io.Reader
+	Url  string `json:"url"` /// data:image/jpeg;base64,......
+	data string
 }
 
 func (i ImageUrl) MarshalJSON() ([]byte, error) {
 	if len(i.Url) > 0 {
 		return json.Marshal(i.Url)
 	}
-	d, err := io.ReadAll(i.reader)
-	if err != nil {
-		return nil, err
-	}
-
-	return []byte(`{"url": "data:image/jpeg;base64,` + base64.StdEncoding.EncodeToString(d) + `"}`), nil
+	return []byte(`{"url": "data:image/jpeg;base64,` + i.data + `"}`), nil
 }
 
 type genRequest struct {

@@ -109,7 +109,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		}
 		if c.Payload != nil {
 			message.Content[0].Type = "image_url"
-			message.Content[0].ImageUrl = &ImageUrl{reader: c.Payload.Data}
+			message.Content[0].ImageUrl = &ImageUrl{data: c.Payload.Data}
 		}
 
 		messages = append(messages, message)

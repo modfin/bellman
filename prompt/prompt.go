@@ -1,6 +1,6 @@
 package prompt
 
-import "io"
+import "encoding/base64"
 
 type Role string
 
@@ -8,14 +8,14 @@ const User = Role("user")
 const Assistant = Role("assistant")
 
 type Prompt struct {
-	Role    Role
-	Text    string
-	Payload *Payload
+	Role    Role     `json:"role"`
+	Text    string   `json:"text"`
+	Payload *Payload `json:"payload,omitempty"`
 }
 
 type Payload struct {
-	Mime string
-	Data io.Reader
+	Mime string `json:"mime_type"`
+	Data string `json:"data"`
 }
 
 func AsAssistant(text string) Prompt {
@@ -24,8 +24,8 @@ func AsAssistant(text string) Prompt {
 func AsUser(text string) Prompt {
 	return Prompt{Role: User, Text: text}
 }
-func AsUserWithData(mime string, reader io.Reader) Prompt {
-	return Prompt{Role: User, Payload: &Payload{Mime: mime, Data: reader}}
+func AsUserWithData(mime string, data []byte) Prompt {
+	return Prompt{Role: User, Payload: &Payload{Mime: mime, Data: base64.StdEncoding.EncodeToString(data)}}
 }
 
 const MimeApplicationPDF = "application/pdf"

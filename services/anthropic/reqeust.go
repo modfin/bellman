@@ -1,10 +1,7 @@
 package anthropic
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"github.com/modfin/bellman/schema"
-	"io"
 )
 
 // https://docs.anthropic.com/en/api/messages
@@ -52,24 +49,7 @@ type reqContent struct {
 
 // https://docs.anthropic.com/en/api/messages-examples#vision
 type reqContentSource struct {
-	Type      string    `json:"type"`           // eg base64
-	MediaType string    `json:"media_type"`     //image/jpeg, image/png, image/gif, and image/webp
-	Data      io.Reader `json:"data,omitempty"` // base64 encoded.
-}
-
-func (i reqContentSource) MarshalJSON() ([]byte, error) {
-	_type, err := json.Marshal(i.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	mime, err := json.Marshal(i.MediaType)
-	if err != nil {
-		return nil, err
-	}
-	d, err := io.ReadAll(i.Data)
-	if err != nil {
-		return nil, err
-	}
-	return []byte(`{"type":` + string(_type) + `,"media_type":` + string(mime) + `,"data":"` + base64.StdEncoding.EncodeToString(d) + `"}`), nil
+	Type      string `json:"type"`           // eg base64
+	MediaType string `json:"media_type"`     //image/jpeg, image/png, image/gif, and image/webp
+	Data      string `json:"data,omitempty"` // base64 encoded.
 }
