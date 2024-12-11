@@ -524,8 +524,8 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 			keyName := r.Context().Value("api-key-name")
 			logger.Info("gen request",
-				"model", req.Model,
 				"key", keyName,
+				"model", req.Model.FQN(),
 				"token-input", response.Metadata.InputTokens,
 				"token-output", response.Metadata.OutputTokens,
 				"token-total", response.Metadata.TotalTokens,
@@ -594,8 +594,8 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 			keyName := r.Context().Value("api-key-name")
 			logger.Info("embed request",
-				"model", req.Model,
 				"key", keyName,
+				"model", req.Model.FQN(),
 				"token-total", response.Metadata.TotalTokens,
 			)
 
