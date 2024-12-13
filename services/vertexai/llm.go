@@ -2,6 +2,7 @@ package vertexai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,25 +35,20 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	}
 
 	model := genRequest{
-		Contents:         []genRequestContent{},
-		GenerationConfig: genConfig{},
-	}
-
-	if g.request.MaxTokens != -1 {
-		model.GenerationConfig.MaxOutputTokens = &g.request.MaxTokens
-	}
-	if g.request.TopP != -1 {
-		model.GenerationConfig.TopP = &g.request.TopP
-	}
-	if g.request.Temperature != -1 {
-		model.GenerationConfig.Temperature = &g.request.Temperature
-	}
-	if len(g.request.StopSequences) > 0 {
-		model.GenerationConfig.StopSequences = &g.request.StopSequences
+		Contents: []genRequestContent{},
+		GenerationConfig: &genConfig{
+			MaxOutputTokens:  g.request.MaxTokens,
+			TopP:             g.request.TopP,
+			TopK:             g.request.TopK,
+			Temperature:      g.request.Temperature,
+			StopSequences:    g.request.StopSequences,
+			FrequencyPenalty: g.request.FrequencyPenalty,
+			PresencePenalty:  g.request.PresencePenalty,
+		},
 	}
 
 	if g.request.SystemPrompt != "" {
-		model.SystemInstruction = genRequestContent{
+		model.SystemInstruction = &genRequestContent{
 			Role: "system", // does not take role into account, it can be anything?
 			Parts: []genRequestContentPart{
 				{
@@ -155,7 +151,16 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"url", u,
 	)
 
-	resp, err := g.google.client.Post(u, "application/json", bytes.NewReader(body))
+	ctx := g.request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("could not create google request, %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := g.google.client.Do(req)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not post google request, %w", err)

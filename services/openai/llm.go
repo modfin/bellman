@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/modfin/bellman/models"
@@ -32,29 +33,18 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	}
 
 	reqModel := genRequest{
-		Stop:        g.request.StopSequences,
-		Temperature: g.request.Temperature,
-		TopP:        g.request.TopP,
-		MaxTokens:   g.request.MaxTokens,
-	}
+		Model: g.request.Model.Name,
+		Stop:  g.request.StopSequences,
 
-	if !(0 <= reqModel.TopP) {
-		reqModel.TopP = 1.0
-	}
-	if !(0 <= reqModel.Temperature && reqModel.Temperature <= 1.0) {
-		reqModel.Temperature = 1.0
-	}
-	if !(0 <= reqModel.MaxTokens) {
-		reqModel.MaxTokens = 2048
-	}
-
-	// Dealing with Model
-	if g.request.Model.Name != "" {
-		reqModel.Model = g.request.Model.Name
+		MaxTokens:        g.request.MaxTokens,
+		FrequencyPenalty: g.request.FrequencyPenalty,
+		PresencePenalty:  g.request.PresencePenalty,
+		Temperature:      g.request.Temperature,
+		TopP:             g.request.TopP,
 	}
 
 	if g.request.Model.Name == "" {
-		return nil, fmt.Errorf("Model is required")
+		return nil, fmt.Errorf("model is required")
 	}
 
 	toolBelt := map[string]*tools.Tool{}
@@ -86,7 +76,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		}
 	}
 
-	// Dealing with SetOutputSchema Schema
+	// Dealing with Output Schema
 	if g.request.OutputSchema != nil {
 		reqModel.ResponseFormat = &responseFormat{
 			Type: "json_schema",
@@ -123,7 +113,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	u := `https://api.openai.com/v1/chat/completions`
 
-	req, err := http.NewRequest("POST", u, bytes.NewReader(body))
+	ctx := g.request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("could not create openai request, %w", err)
 	}

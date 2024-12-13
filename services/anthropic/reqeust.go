@@ -7,14 +7,18 @@ import (
 // https://docs.anthropic.com/en/api/messages
 type request struct {
 	Model     string `json:"model"`
-	MaxTokens int    `json:"max_tokens"`
+	MaxTokens int    `json:"max_tokens,omitempty"`
 
-	Temperature   float64  `json:"temperature,omitempty"`
-	TopP          *float64 `json:"top_p,omitempty"`
+	Temperature      *float64 `json:"temperature,omitempty"`
+	TopP             *float64 `json:"top_p,omitempty"`
+	TopK             *int     `json:"top_k,omitempty"`
+	FrequencyPenalty *float64 `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64 `json:"presence_penalty,omitempty"`
+
 	StopSequences []string `json:"stop_sequences,omitempty"`
 
 	// System, System.type must be "text"
-	System string `json:"system"`
+	System string `json:"system,omitempty"`
 
 	Tool  *reqToolChoice `json:"tool_choice,omitempty"`
 	Tools []reqTool      `json:"tools,omitempty"`

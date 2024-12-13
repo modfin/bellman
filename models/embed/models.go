@@ -1,6 +1,7 @@
 package embed
 
 import (
+	"context"
 	"github.com/modfin/bellman/models"
 )
 
@@ -26,6 +27,8 @@ func (m Model) String() string {
 }
 
 type Request struct {
+	Ctx context.Context `json:"-"`
+	
 	Model Model `json:"model"`
 
 	Text string `json:"text"`

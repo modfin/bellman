@@ -104,7 +104,17 @@ func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal google request, %w", err)
 	}
-	resp, err := g.client.Post(u, "application/json", bytes.NewReader(body))
+
+	ctx := request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	hreq, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("could not create google request, %w", err)
+	}
+	hreq.Header.Set("Content-Type", "application/json")
+	resp, err := g.client.Do(hreq)
 	if err != nil {
 		return nil, fmt.Errorf("could not post google request, %w", err)
 	}
@@ -145,11 +155,7 @@ func (g *Google) Generator(options ...gen.Option) *gen.Generator {
 		Prompter: &generator{
 			google: g,
 		},
-		Request: gen.Request{
-			Temperature: -1,
-			MaxTokens:   -1,
-			TopP:        -1,
-		},
+		Request: gen.Request{},
 	}
 
 	for _, o := range options {

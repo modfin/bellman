@@ -6,13 +6,8 @@ import (
 	"strings"
 )
 
-func Of[T any]() *JSON {
-	var v T
-	return New(v)
-}
-
-// New converts a struct to a JSON JSON using reflection and struct tags
-func New(v interface{}) *JSON {
+// From converts a struct to a JSON JSON using reflection and struct tags
+func From(v interface{}) *JSON {
 	t := reflect.TypeOf(v)
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
@@ -136,8 +131,19 @@ func fieldToSchema(field reflect.StructField) *JSON {
 	}
 
 	// Handle enum for fields
-	if enum := field.Tag.Get("json-enum"); enum != "" {
-		schema.Enum = parseEnum(enum, field.Type.Kind())
+	switch schema.Type {
+	case "array":
+		enum := field.Tag.Get("json-enum")
+		if enum != "" && schema.Items != nil && len(schema.Items.Enum) == 0 {
+			switch schema.Items.Type {
+			case "string", "number", "integer", "boolean":
+				schema.Items.Enum = parseEnum(enum, field)
+			}
+		}
+	case "string", "number", "integer", "boolean":
+		if enum := field.Tag.Get("json-enum"); enum != "" {
+			schema.Enum = parseEnum(enum, field)
+		}
 	}
 
 	return schema
@@ -162,12 +168,20 @@ func getFloat64Ptr(v string) *float64 {
 	return nil
 }
 
-func parseEnum(enumStr string, kind reflect.Kind) []interface{} {
+func parseEnum(enumStr string, field reflect.StructField) []interface{} {
 	values := strings.Split(enumStr, ",")
 	enum := make([]interface{}, len(values))
 
+	t := field.Type
+	kind := t.Kind()
+
+	if kind == reflect.Slice {
+		kind = t.Elem().Kind()
+	}
+
 	for i, v := range values {
 		v = strings.TrimSpace(v)
+
 		switch kind {
 		case reflect.String:
 			enum[i] = v

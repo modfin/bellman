@@ -9,21 +9,22 @@ import (
 )
 
 var ErrModelNotFound = errors.New("model not found")
+var ErrClientNotFound = errors.New("client not found")
 
 type Proxy struct {
 	embedModels map[string]embed.Model
 	genModels   map[string]gen.Model
 
-	embeders map[string]embed.Embeder
-	gens     map[string]gen.Gen
+	embedersByFQN map[string]embed.Embeder
+	gensByFQN     map[string]gen.Gen
 }
 
 func NewProxy() *Proxy {
 	p := &Proxy{
-		embedModels: map[string]embed.Model{},
-		embeders:    map[string]embed.Embeder{},
-		genModels:   map[string]gen.Model{},
-		gens:        map[string]gen.Gen{},
+		embedModels:   map[string]embed.Model{},
+		embedersByFQN: map[string]embed.Embeder{},
+		genModels:     map[string]gen.Model{},
+		gensByFQN:     map[string]gen.Gen{},
 	}
 
 	return p
@@ -31,13 +32,13 @@ func NewProxy() *Proxy {
 
 func (p *Proxy) RegisterEmbeder(embeder embed.Embeder, models ...embed.Model) {
 	for _, model := range models {
-		p.embeders[model.String()] = embeder
+		p.embedersByFQN[model.String()] = embeder
 		p.embedModels[model.String()] = model
 	}
 }
 func (p *Proxy) RegisterGen(llm gen.Gen, models ...gen.Model) {
 	for _, model := range models {
-		p.gens[model.String()] = llm
+		p.gensByFQN[model.String()] = llm
 		p.genModels[model.String()] = model
 	}
 }
@@ -69,28 +70,48 @@ type Named interface {
 }
 
 func (p *Proxy) HasModel(model Named) bool {
-	_, ok := p.embeders[model.FQN()]
+	_, ok := p.embedersByFQN[model.FQN()]
 	if ok {
 		return true
 	}
-	_, ok = p.gens[model.FQN()]
+	_, ok = p.gensByFQN[model.FQN()]
 	return ok
 }
 
-func (p *Proxy) Embed(embed embed.Request) (*embed.Response, error) {
-	embeder, ok := p.embeders[embed.Model.String()]
-	if !ok {
+func (p *Proxy) Embed(embed embed.Request, allowUnknown bool) (*embed.Response, error) {
+	client := p.embedersByFQN[embed.Model.String()]
+
+	if client == nil && allowUnknown {
+		for _, m := range p.embedModels {
+			if m.Provider == embed.Model.Provider {
+				client = p.embedersByFQN[m.String()]
+				break
+			}
+		}
+	}
+
+	if client == nil {
 		return nil, ErrModelNotFound
 	}
 
-	return embeder.Embed(embed)
+	return client.Embed(embed)
 }
 
-func (p *Proxy) Gen(model gen.Model) (*gen.Generator, error) {
-	llm, ok := p.gens[model.String()]
-	if !ok {
+func (p *Proxy) Gen(model gen.Model, allowUnknown bool) (*gen.Generator, error) {
+	client := p.gensByFQN[model.String()]
+
+	if client == nil && allowUnknown {
+		for _, m := range p.genModels {
+			if m.Provider == model.Provider {
+				client = p.gensByFQN[m.String()]
+				break
+			}
+		}
+	}
+
+	if client == nil {
 		return nil, ErrModelNotFound
 	}
 
-	return llm.Generator(gen.WithModel(model)), nil
+	return client.Generator(gen.WithModel(model)), nil
 }

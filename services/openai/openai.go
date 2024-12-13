@@ -119,11 +119,7 @@ func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
 		Prompter: &generator{
 			openai: g,
 		},
-		Request: gen.Request{
-			Temperature: 1,
-			TopP:        1,
-			MaxTokens:   2048,
-		},
+		Request: gen.Request{},
 	}
 
 	for _, op := range options {

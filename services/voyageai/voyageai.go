@@ -2,6 +2,7 @@ package voyageai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/modfin/bellman/models"
@@ -65,7 +66,11 @@ func (v *VoyageAI) Embed(request embed.Request) (*embed.Response, error) {
 		return nil, fmt.Errorf("could not marshal localRequest, %w", err)
 	}
 
-	req, err := http.NewRequest("POST", u, bytes.NewReader(jsonReq))
+	ctx := request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(jsonReq))
 	if err != nil {
 		return nil, fmt.Errorf("could not create localRequest, %w", err)
 	}

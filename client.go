@@ -2,6 +2,7 @@ package bellman
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/modfin/bellman/models/embed"
@@ -123,7 +124,12 @@ func (v *Bellman) Embed(request embed.Request) (*embed.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal bellman request; %w", err)
 	}
-	req, err := http.NewRequest("POST", u, bytes.NewReader(body))
+
+	ctx := request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("could not create bellman request; %w", err)
 	}
@@ -159,11 +165,7 @@ func (a *Bellman) Generator(options ...gen.Option) *gen.Generator {
 		Prompter: &generator{
 			bellman: a,
 		},
-		Request: gen.Request{
-			TopP:        -1,
-			Temperature: 1,
-			MaxTokens:   1024,
-		},
+		Request: gen.Request{},
 	}
 	for _, op := range options {
 		gen = op(gen)
@@ -219,7 +221,13 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal bellman request; %w", err)
 	}
-	req, err := http.NewRequest("POST", u, bytes.NewReader(body))
+
+	ctx := g.request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("could not create bellman request; %w", err)
 	}

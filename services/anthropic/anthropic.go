@@ -28,11 +28,7 @@ func (a *Anthropic) Generator(options ...gen.Option) *gen.Generator {
 		Prompter: &generator{
 			anthropic: a,
 		},
-		Request: gen.Request{
-			TopP:        -1,
-			Temperature: 1,
-			MaxTokens:   1024,
-		},
+		Request: gen.Request{},
 	}
 
 	for _, op := range options {

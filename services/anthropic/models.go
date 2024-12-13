@@ -41,16 +41,17 @@ var GenModel_3_5_sonnet_20240620 = gen.Model{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_3_sonnet_20241022 = gen.Model{
-	Provider:                Provider,
-	Name:                    "claude-3-sonnet-20240229",
-	Description:             "",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
-}
+
+//var GenModel_3_sonnet_20240229 = gen.Model{
+//	Provider:                Provider,
+//	Name:                    "claude-3-sonnet-20240229",
+//	Description:             "",
+//	InputContentTypes:       nil,
+//	InputMaxToken:           0,
+//	OutputMaxToken:          0,
+//	SupportTools:            false,
+//	SupportStructuredOutput: false,
+//}
 
 var GenModel_3_5_haiku_latest = gen.Model{
 	Provider:                Provider,
@@ -107,11 +108,10 @@ var GenModel_3_opus_20240229 = gen.Model{
 var GenModels = map[string]gen.Model{
 	GenModel_3_5_sonnet_latest.Name:   GenModel_3_5_sonnet_latest,
 	GenModel_3_5_sonnet_20241022.Name: GenModel_3_5_sonnet_20241022,
-	GenModel_3_5_sonnet_20240620.Name: GenModel_3_5_sonnet_20240620,
-	GenModel_3_sonnet_20241022.Name:   GenModel_3_sonnet_20241022,
-	GenModel_3_5_haiku_latest.Name:    GenModel_3_5_haiku_latest,
-	GenModel_3_5_haiku_20241022.Name:  GenModel_3_5_haiku_20241022,
-	GenModel_3_haiku_20240307.Name:    GenModel_3_haiku_20240307,
-	GenModel_3_opus_latest.Name:       GenModel_3_opus_latest,
-	GenModel_3_opus_20240229.Name:     GenModel_3_opus_20240229,
+	//GenModel_3_5_sonnet_20240620.Name: GenModel_3_5_sonnet_20240620,
+	GenModel_3_5_haiku_latest.Name:   GenModel_3_5_haiku_latest,
+	GenModel_3_5_haiku_20241022.Name: GenModel_3_5_haiku_20241022,
+	//GenModel_3_haiku_20240307.Name:    GenModel_3_haiku_20240307,
+	GenModel_3_opus_latest.Name:   GenModel_3_opus_latest,
+	GenModel_3_opus_20240229.Name: GenModel_3_opus_20240229,
 }

@@ -13,8 +13,11 @@ type Gen interface {
 }
 
 type Model struct {
-	Provider    string `json:"provider"`
-	Name        string `json:"name"`
+	Provider string `json:"provider"`
+	Name     string `json:"name"`
+
+	Config map[string]any `json:"config,omitempty"`
+
 	Description string `json:"description,omitempty"`
 
 	InputContentTypes []string `json:"input_content_types,omitempty"`

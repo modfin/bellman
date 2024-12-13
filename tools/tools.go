@@ -47,7 +47,7 @@ func WithFunction(callback Function) ToolOption {
 
 func WithArgSchema(arg any) ToolOption {
 	return func(tool Tool) Tool {
-		tool.ArgumentSchema = schema.New(arg)
+		tool.ArgumentSchema = schema.From(arg)
 		return tool
 	}
 }

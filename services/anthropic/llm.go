@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/modfin/bellman/models"
@@ -30,23 +31,19 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	var pdfBeta bool
 
 	model := request{
-		Model:       g.request.Model.Name,
-		Temperature: g.request.Temperature,
-		MaxTokens:   g.request.MaxTokens,
+		Model:     g.request.Model.Name,
+		MaxTokens: 1024,
+
+		// Optionals..
+		Temperature:   g.request.Temperature,
+		TopP:          g.request.TopP,
+		TopK:          g.request.TopK,
+		System:        g.request.SystemPrompt,
+		StopSequences: g.request.StopSequences,
 	}
 
-	if g.request.Temperature != -1 {
-		model.Temperature = g.request.Temperature
-	}
-	if g.request.TopP != -1 {
-		model.TopP = &g.request.TopP
-	}
-	if g.request.SystemPrompt != "" {
-		model.System = g.request.SystemPrompt
-	}
-
-	if len(g.request.StopSequences) > 0 {
-		model.StopSequences = g.request.StopSequences
+	if g.request.MaxTokens != nil && *g.request.MaxTokens > 0 {
+		model.MaxTokens = *g.request.MaxTokens
 	}
 
 	if g.request.OutputSchema != nil {
@@ -144,7 +141,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		return nil, fmt.Errorf("could not marshal request, %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(reqdata))
+	ctx := g.request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(reqdata))
 	if err != nil {
 		return nil, fmt.Errorf("could not create request, %w", err)
 	}

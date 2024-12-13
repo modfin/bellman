@@ -5,8 +5,8 @@ import (
 )
 
 type genRequestContent struct {
-	Role  string                  `json:"role"`
-	Parts []genRequestContentPart `json:"parts"`
+	Role  string                  `json:"role,omitempty"`
+	Parts []genRequestContentPart `json:"parts,omitempty"`
 }
 type genRequestContentPart struct {
 	Text string `json:"text,omitempty"`
@@ -20,13 +20,18 @@ type inlineDate struct {
 }
 
 type genConfig struct {
-	MaxOutputTokens *int      `json:"maxOutputTokens,omitempty"`
-	TopP            *float64  `json:"topP,omitempty"`
-	Temperature     *float64  `json:"temperature,omitempty"`
-	StopSequences   *[]string `json:"stopSequences"`
+	MaxOutputTokens *int `json:"maxOutputTokens,omitempty"`
+
+	TopP             *float64 `json:"topP,omitempty"`
+	TopK             *int     `json:"topK,omitempty"`
+	Temperature      *float64 `json:"temperature,omitempty"`
+	FrequencyPenalty *float64 `json:"frequencyPenalty,omitempty"`
+	PresencePenalty  *float64 `json:"presencePenalty,omitempty"`
+
+	StopSequences []string `json:"stopSequences,omitempty"`
 
 	ResponseMimeType *string      `json:"responseMimeType,omitempty"`
-	ResponseSchema   *schema.JSON `json:"responseSchema"`
+	ResponseSchema   *schema.JSON `json:"responseSchema,omitempty"`
 }
 
 type genTool struct {
@@ -50,8 +55,8 @@ type genFunctionCallingConfig struct {
 
 type genRequest struct {
 	Contents          []genRequestContent `json:"contents"`
-	SystemInstruction genRequestContent   `json:"systemInstruction"`
-	GenerationConfig  genConfig           `json:"generationConfig"`
+	SystemInstruction *genRequestContent  `json:"systemInstruction,omitempty"`
+	GenerationConfig  *genConfig          `json:"generationConfig,omitempty"`
 
 	Tools      []genTool      `json:"tools,omitempty"`
 	ToolConfig *genToolConfig `json:"toolConfig,omitempty"`

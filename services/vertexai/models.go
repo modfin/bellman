@@ -9,10 +9,10 @@ import (
 
 const Provider = "VertexAI"
 
-var GenModel_gemini_Experiment_114 = gen.Model{
+var GenModel_gemini_2_0_flash = gen.Model{
 	Provider:                Provider,
-	Name:                    "gemini-exp-1114",
-	Description:             "",
+	Name:                    "gemini-2.0-flash-exp", // Region: "us-central1",
+	Description:             "Fast and versatile performance across a diverse variety of tasks",
 	InputContentTypes:       nil,
 	InputMaxToken:           0,
 	OutputMaxToken:          0,
@@ -51,26 +51,26 @@ var GenModel_gemini_1_5_flash_002 = gen.Model{
 	SupportStructuredOutput: false,
 }
 
-var GenModel_gemini_1_5_flash_8b = gen.Model{
-	Provider:                Provider,
-	Name:                    "gemini-1.5-flash-8b",
-	Description:             "High volume and lower intelligence tasks",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
-}
-var GenModel_gemini_1_5_flash_8b_001 = gen.Model{
-	Provider:                Provider,
-	Name:                    "gemini-1.5-flash-8b-001",
-	Description:             "High volume and lower intelligence tasks",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
-}
+//var GenModel_gemini_1_5_flash_8b = gen.Model{
+//	Provider:                Provider,
+//	Name:                    "gemini-1.5-flash-8b",
+//	Description:             "High volume and lower intelligence tasks",
+//	InputContentTypes:       nil,
+//	InputMaxToken:           0,
+//	OutputMaxToken:          0,
+//	SupportTools:            false,
+//	SupportStructuredOutput: false,
+//}
+//var GenModel_gemini_1_5_flash_8b_001 = gen.Model{
+//	Provider:                Provider,
+//	Name:                    "gemini-1.5-flash-8b-001",
+//	Description:             "High volume and lower intelligence tasks",
+//	InputContentTypes:       nil,
+//	InputMaxToken:           0,
+//	OutputMaxToken:          0,
+//	SupportTools:            false,
+//	SupportStructuredOutput: false,
+//}
 
 //var GenModel_gemini_1_5_pro_latest = bellman.GenModel{Name: "gemini-1.5-pro-latest",}
 
@@ -128,13 +128,15 @@ var EmbedMode_multilang_002 = embed.Model{
 	InputMaxTokens:   2048,
 	OutputDimensions: 768,
 }
-var EmbedModel_text_gecko_001 = embed.Model{
-	Provider:         Provider,
-	Name:             "textembedding-gecko@001",
-	Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
-	InputMaxTokens:   2048,
-	OutputDimensions: 768,
-}
+
+// var EmbedModel_text_gecko_001 = embed.Model{  // deprecated?
+//
+//		Provider:         Provider,
+//		Name:             "textembedding-gecko@001",
+//		Description:      "see https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api",
+//		InputMaxTokens:   2048,
+//		OutputDimensions: 768,
+//	}
 var EmbedModel_text_gecko_003 = embed.Model{
 	Provider:         Provider,
 	Name:             "textembedding-gecko@003",
@@ -142,6 +144,7 @@ var EmbedModel_text_gecko_003 = embed.Model{
 	InputMaxTokens:   2048,
 	OutputDimensions: 768,
 }
+
 var EmbedModel_text_gecko_multilang_001 = embed.Model{
 	Provider:         Provider,
 	Name:             "textembedding-gecko-multilingual@001",
@@ -164,22 +167,19 @@ const EmbedTypeVerification EmbedType = "FACT_VERIFICATION"
 const EmbedTypeCode EmbedType = "CODE_RETRIEVAL_QUERY"
 
 var EmbedModels = map[string]embed.Model{
-	EmbedModel_text_005.Name:                 EmbedModel_text_005,
-	EmbedModel_text_004.Name:                 EmbedModel_text_004,
-	EmbedMode_multilang_002.Name:             EmbedMode_multilang_002,
-	EmbedModel_text_gecko_001.Name:           EmbedModel_text_gecko_001,
+	EmbedModel_text_005.Name:     EmbedModel_text_005,
+	EmbedModel_text_004.Name:     EmbedModel_text_004,
+	EmbedMode_multilang_002.Name: EmbedMode_multilang_002,
+	//EmbedModel_text_gecko_001.Name: EmbedModel_text_gecko_001,  // deprecated?
 	EmbedModel_text_gecko_003.Name:           EmbedModel_text_gecko_003,
 	EmbedModel_text_gecko_multilang_001.Name: EmbedModel_text_gecko_multilang_001,
 }
 
 var GenModels = map[string]gen.Model{
-	GenModel_gemini_Experiment_114.Name:   GenModel_gemini_Experiment_114,
-	GenModel_gemini_1_5_flash.Name:        GenModel_gemini_1_5_flash,
-	GenModel_gemini_1_5_flash_001.Name:    GenModel_gemini_1_5_flash_001,
-	GenModel_gemini_1_5_flash_002.Name:    GenModel_gemini_1_5_flash_002,
-	GenModel_gemini_1_5_flash_8b.Name:     GenModel_gemini_1_5_flash_8b,
-	GenModel_gemini_1_5_flash_8b_001.Name: GenModel_gemini_1_5_flash_8b_001,
-	GenModel_gemini_1_5_pro.Name:          GenModel_gemini_1_5_pro,
-	GenModel_gemini_1_5_pro_002.Name:      GenModel_gemini_1_5_pro_002,
-	GenModel_gemini_1_5_pro_001.Name:      GenModel_gemini_1_5_pro_001,
+	GenModel_gemini_1_5_flash.Name:     GenModel_gemini_1_5_flash,
+	GenModel_gemini_1_5_flash_001.Name: GenModel_gemini_1_5_flash_001,
+	GenModel_gemini_1_5_flash_002.Name: GenModel_gemini_1_5_flash_002,
+	GenModel_gemini_1_5_pro.Name:       GenModel_gemini_1_5_pro,
+	GenModel_gemini_1_5_pro_002.Name:   GenModel_gemini_1_5_pro_002,
+	GenModel_gemini_1_5_pro_001.Name:   GenModel_gemini_1_5_pro_001,
 }

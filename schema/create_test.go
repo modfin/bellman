@@ -22,13 +22,15 @@ type Person struct {
 	Addresses []Address          `json:"addresses" json-min-items:"2"`
 	Tags      []string           `json:"tags" json-min-items:"1"`
 	Status    string             `json:"status" json-enum:"active,inactive,pending"`
+	Ints      int                `json:"ints" json-enum:"1,2,3"`
+	Labels    []string           `json:"labels" json-enum:"Ecstatic,Happy,Sad"`
 	AddrMap   map[string]Address `json:"map"`
 	Strmap    map[int]float64    `json:"map2"`
 }
 
 func TestOf(t *testing.T) {
-	schema := schema.Of[Person]()
-	d, err := json.Marshal(schema)
+	schema := schema.From(Person{})
+	d, err := json.MarshalIndent(schema, "", "  ")
 
 	fmt.Println(string(d), err)
 }

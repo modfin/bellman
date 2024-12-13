@@ -38,10 +38,13 @@ type genRequest struct {
 	Tools      []requestTool `json:"tools,omitempty"`
 	ToolChoice any           `json:"tool_choice,omitempty"`
 
-	Stop        []string `json:"stop,omitempty"`
-	Temperature float64  `json:"temperature"`
-	TopP        float64  `json:"top_p"`
-	MaxTokens   int      `json:"max_completion_tokens"`
+	Stop []string `json:"stop,omitempty"`
+
+	MaxTokens        *int     `json:"max_completion_tokens,omitempty"`
+	Temperature      *float64 `json:"temperature,omitempty"`
+	TopP             *float64 `json:"top_p,omitempty"`
+	FrequencyPenalty *float64 `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64 `json:"presence_penalty,omitempty"`
 }
 
 type responseFormatSchema struct {

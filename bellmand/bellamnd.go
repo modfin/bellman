@@ -143,6 +143,19 @@ func main() {
 	If provided, only the models in the array will be loaded.`,
 			},
 
+			&cli.BoolFlag{
+				Name:    "allow-user-models",
+				EnvVars: []string{"BELLMAN_ALLOW_USER_MODELS"},
+			},
+			&cli.BoolFlag{
+				Name:    "disable-gen-models",
+				EnvVars: []string{"BELLMAN_DISABLE_GEN_MODELS"},
+			},
+			&cli.BoolFlag{
+				Name:    "disable-embed-models",
+				EnvVars: []string{"BELLMAN_DISABLE_EMBED_MODELS"},
+			},
+
 			&cli.StringFlag{
 				Name:    "prometheus-metrics-basic-auth",
 				EnvVars: []string{"BELLMAN_PROMETHEUS_METRICS_BASIC_AUTH"},
@@ -197,10 +210,6 @@ func setLogging(ctx *cli.Context) {
 			})))
 	}
 	logger = slog.Default().With("instance", instance)
-	//logger.Error("Error Test")
-	//logger.Warn("Warm Test")
-	//logger.Info("Info Test")
-	//logger.Debug("Debug Test")
 }
 
 func httpErr(w http.ResponseWriter, err error, code int) {
@@ -222,6 +231,10 @@ type Config struct {
 	ApiKeys []string `cli:"api-key"`
 
 	HttpPort int `cli:"http-port"`
+
+	AllowUserModels    bool `cli:"allow-user-models"`
+	DisableGenModels   bool `cli:"disable-gen-models"`
+	DisableEmbedModels bool `cli:"disable-embed-models"`
 
 	AnthropicKey       string `cli:"anthropic-key"`
 	AnthropicGenModels string `cli:"anthropic-gen-models"`
@@ -361,8 +374,12 @@ func serve(cfg Config) error {
 		_, _ = w.Write([]byte("OK"))
 	})
 
-	r.Route("/gen", Gen(proxy, cfg))
-	r.Route("/embed", Embed(proxy, cfg))
+	if !cfg.DisableEmbedModels {
+		r.Route("/embed", Embed(proxy, cfg))
+	}
+	if !cfg.DisableGenModels {
+		r.Route("/gen", Gen(proxy, cfg))
+	}
 
 	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: r}
 	go func() {
@@ -507,16 +524,18 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			gen, err := proxy.Gen(req.Model)
+			gen, err := proxy.Gen(req.Model, cfg.AllowUserModels)
 			if err != nil {
+
 				err = fmt.Errorf("could not get generator, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
 				return
 			}
 
-			gen = gen.SetConfig(req.Request)
+			gen = gen.SetConfig(req.Request).WithContext(r.Context())
 			response, err := gen.Prompt(req.Prompts...)
 			if err != nil {
+				logger.Error("gen request", "err", err)
 				err = fmt.Errorf("could not generate text, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
 				return
@@ -584,8 +603,9 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				httpErr(w, err, http.StatusBadRequest)
 				return
 			}
+			req.Ctx = r.Context()
 
-			response, err := proxy.Embed(req)
+			response, err := proxy.Embed(req, cfg.AllowUserModels)
 			if err != nil {
 				err = fmt.Errorf("could not embed text, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)

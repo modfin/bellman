@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"context"
 	"errors"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
@@ -12,6 +13,12 @@ type Generator struct {
 	Request  Request
 }
 
+func Float(f float64) *float64 {
+	return &f
+}
+func Int(i int) *int {
+	return &i
+}
 func (b *Generator) SetConfig(config Request) *Generator {
 	bb := b.clone()
 	bb.Request = config
@@ -41,6 +48,33 @@ func (b *Generator) clone() *Generator {
 	if b.Request.Tools != nil {
 		bb.Request.Tools = append([]tools.Tool{}, b.Request.Tools...)
 	}
+	if b.Request.PresencePenalty != nil {
+		cp := *b.Request.PresencePenalty
+		bb.Request.PresencePenalty = &cp
+	}
+	if b.Request.FrequencyPenalty != nil {
+		cp := *b.Request.FrequencyPenalty
+		bb.Request.FrequencyPenalty = &cp
+	}
+	if b.Request.Temperature != nil {
+		cp := *b.Request.Temperature
+		bb.Request.Temperature = &cp
+	}
+	if b.Request.TopP != nil {
+		cp := *b.Request.TopP
+		bb.Request.TopP = &cp
+	}
+	if b.Request.TopK != nil {
+		cp := *b.Request.TopK
+		bb.Request.TopK = &cp
+	}
+	if b.Request.MaxTokens != nil {
+		cp := *b.Request.MaxTokens
+		bb.Request.MaxTokens = &cp
+	}
+	if b.Request.Ctx != nil {
+		bb.Request.Ctx = b.Request.Ctx
+	}
 
 	return &bb
 }
@@ -57,9 +91,9 @@ func (b *Generator) System(prompt string) *Generator {
 	return bb
 }
 
-func (b *Generator) SetOutputSchema(element any) *Generator {
+func (b *Generator) Output(s *schema.JSON) *Generator {
 	bb := b.clone()
-	bb.Request.OutputSchema = schema.New(element)
+	bb.Request.OutputSchema = s
 	return bb
 }
 func (g *Generator) Tools() []tools.Tool {
@@ -98,21 +132,45 @@ func (b *Generator) StopAt(stop ...string) *Generator {
 
 func (b *Generator) Temperature(temperature float64) *Generator {
 	bb := b.clone()
-	bb.Request.Temperature = temperature
+	bb.Request.Temperature = &temperature
+
+	return bb
+}
+func (b *Generator) FrequencyPenalty(freq float64) *Generator {
+	bb := b.clone()
+	bb.Request.FrequencyPenalty = &freq
+
+	return bb
+}
+func (b *Generator) PresencePenalty(prec float64) *Generator {
+	bb := b.clone()
+	bb.Request.PresencePenalty = &prec
 
 	return bb
 }
 
 func (b *Generator) TopP(topP float64) *Generator {
 	bb := b.clone()
-	bb.Request.TopP = topP
+	bb.Request.TopP = &topP
+
+	return bb
+}
+func (b *Generator) TopK(topK int) *Generator {
+	bb := b.clone()
+	bb.Request.TopK = &topK
+
+	return bb
+}
+func (b *Generator) WithContext(ctx context.Context) *Generator {
+	bb := b.clone()
+	bb.Request.Ctx = ctx
 
 	return bb
 }
 
 func (b *Generator) MaxTokens(maxTokens int) *Generator {
 	bb := b.clone()
-	bb.Request.MaxTokens = maxTokens
+	bb.Request.MaxTokens = &maxTokens
 
 	return bb
 }
@@ -149,9 +207,9 @@ func WithSystem(prompt string) Option {
 	}
 }
 
-func WithOutput(element any) Option {
+func WithOutput(s *schema.JSON) Option {
 	return func(g *Generator) *Generator {
-		return g.SetOutputSchema(element)
+		return g.Output(s)
 	}
 }
 
@@ -167,14 +225,35 @@ func WithTemperature(temperature float64) Option {
 	}
 }
 
+func WithPresencePenalty(presence float64) Option {
+	return func(g *Generator) *Generator {
+		return g.PresencePenalty(presence)
+	}
+}
+func WithFrequencyPenalty(freq float64) Option {
+	return func(g *Generator) *Generator {
+		return g.FrequencyPenalty(freq)
+	}
+}
+
 func WithTopP(topP float64) Option {
 	return func(g *Generator) *Generator {
 		return g.TopP(topP)
+	}
+}
+func WithTopK(topK int) Option {
+	return func(g *Generator) *Generator {
+		return g.TopK(topK)
 	}
 }
 
 func WithMaxTokens(maxTokens int) Option {
 	return func(g *Generator) *Generator {
 		return g.MaxTokens(maxTokens)
+	}
+}
+func WithContext(ctx context.Context) Option {
+	return func(g *Generator) *Generator {
+		return g.WithContext(ctx)
 	}
 }

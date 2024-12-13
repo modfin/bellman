@@ -17,3 +17,4 @@ go run -race bellamnd.go \
   --prometheus-metrics-basic-auth="user:pass" \
   --log-format=color \
   --log-level=info \
+  --allow-user-models \
