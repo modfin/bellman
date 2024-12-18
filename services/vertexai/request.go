@@ -12,11 +12,16 @@ type genRequestContentPart struct {
 	Text string `json:"text,omitempty"`
 
 	InlineDate *inlineDate `json:"inlineData,omitempty"`
+	FileData   *fileDate   `json:"fileData,omitempty"`
 }
 
 type inlineDate struct {
 	MimeType string `json:"mimeType,omitempty"`
 	Data     string `json:"data,omitempty"` // base64 encoded. Max 20mb
+}
+type fileDate struct {
+	MimeType string `json:"mimeType,omitempty"`
+	FileUri  string `json:"fileUri,omitempty"` // uri, eg gs://bucket/file
 }
 
 type genConfig struct {
@@ -30,8 +35,10 @@ type genConfig struct {
 
 	StopSequences []string `json:"stopSequences,omitempty"`
 
-	ResponseMimeType *string      `json:"responseMimeType,omitempty"`
-	ResponseSchema   *schema.JSON `json:"responseSchema,omitempty"`
+	ResponseMimeType   *string  `json:"responseMimeType,omitempty"`
+	ResponseModalities []string `json:"responseModalities"` // TEXT, AUDIO, IMAGE
+
+	ResponseSchema *schema.JSON `json:"responseSchema,omitempty"`
 }
 
 type genTool struct {

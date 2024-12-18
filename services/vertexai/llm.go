@@ -119,17 +119,42 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		}
 
 		if p.Payload != nil {
-			content.Parts[0].InlineDate = &inlineDate{
-				MimeType: p.Payload.Mime,
-				Data:     p.Payload.Data,
+			if len(p.Payload.Data) > 0 {
+				content.Parts[0].InlineDate = &inlineDate{
+					MimeType: p.Payload.Mime,
+					Data:     p.Payload.Data,
+				}
 			}
+			if len(p.Payload.Uri) > 0 {
+				content.Parts[0].InlineDate = nil
+				content.Parts[0].FileData = &fileDate{
+					MimeType: p.Payload.Mime,
+					FileUri:  p.Payload.Uri,
+				}
+			}
+
 		}
 
 		model.Contents = append(model.Contents, content)
 	}
 
+	region := g.google.config.Region
+	project := g.google.config.Project
+	if len(g.request.Model.Config) > 0 {
+		cfg := g.request.Model.Config
+
+		r, ok := cfg["region"].(string)
+		if ok {
+			region = r
+		}
+		p, ok := cfg["project"].(string)
+		if ok {
+			project = p
+		}
+	}
+
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-		g.google.config.Region, g.google.config.Project, g.google.config.Region, g.request.Model.Name)
+		region, project, region, g.request.Model.Name)
 
 	body, err := json.Marshal(model)
 	if err != nil {
