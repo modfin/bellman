@@ -14,7 +14,7 @@ func tool2promt(t tools.Call) prompt.Prompt {
 
 	return prompt.Prompt{
 		Role: prompt.Assistant,
-		Text: "function call: " + t.Name + " with argument: " + t.Argument,
+		Text: "call function '" + t.Name + "', argument: " + t.Argument,
 	}
 }
 
@@ -24,7 +24,7 @@ func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[
 
 	resultTool := tools.NewTool(
 		respone_output_callback_name,
-		tools.WithDescription("function is called once the Gen is finished with RAG retrieval and want to return the result to the user"),
+		tools.WithDescription("call this function to return once the original objective has been reached and the result is ready"),
 		tools.WithArgSchema(zero),
 	)
 
@@ -49,6 +49,9 @@ func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[
 			if callback.Name == respone_output_callback_name {
 				var ret T
 				err = json.Unmarshal([]byte(callback.Argument), &ret)
+				if err != nil {
+					return nil, fmt.Errorf("failed to unmarshal result: %w, %s", err, callback.Argument)
+				}
 				return &Result[T]{
 					Promps: prompts,
 					Result: ret,
@@ -65,9 +68,9 @@ func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[
 
 			respstr, err := callback.Ref.Function(callback.Argument)
 			if err != nil {
-				return nil, fmt.Errorf("tool %s failed: %w", callback.Name, err)
+				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", callback.Name, err, callback.Argument)
 			}
-			prompts = append(prompts, prompt.AsUser("result: "+callback.Name+" => "+respstr))
+			prompts = append(prompts, prompt.AsUser("result from function call '"+callback.Name+"': "+respstr))
 		}
 
 	}

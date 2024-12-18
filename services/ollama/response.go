@@ -1,8 +1,18 @@
 package ollama
 
 type genResponseMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role      string     `json:"role"`
+	Content   string     `json:"content"`
+	ToolCalls []toolCall `json:"tool_calls"`
+}
+
+type function struct {
+	Name string         `json:"name"`
+	Args map[string]any `json:"arguments"`
+}
+
+type toolCall struct {
+	Function function `json:"function"`
 }
 
 type genResponse struct {

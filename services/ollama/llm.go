@@ -8,6 +8,7 @@ import (
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 	"io"
 	"net/http"
 	"net/url"
@@ -54,20 +55,19 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		return nil, fmt.Errorf("model is required")
 	}
 
-	//toolBelt := map[string]*tools.Tool{}
-	//// Dealing with Tools
-	//for _, t := range g.request.Tools {
-	//	reqModel.Tools = append(reqModel.Tools, requestTool{
-	//		Type: "function",
-	//		Function: toolFunc{
-	//			Name:        t.Name,
-	//			Parameters:  t.ArgumentSchema,
-	//			Description: t.Description,
-	//			Strict:      false,
-	//		},
-	//	})
-	//	toolBelt[t.Name] = &t
-	//}
+	toolBelt := map[string]*tools.Tool{}
+	// Dealing with Tools
+	for _, t := range g.request.Tools {
+		reqModel.Tools = append(reqModel.Tools, tool{
+			Type: "function",
+			Function: toolFunction{
+				Name:        t.Name,
+				Parameters:  t.ArgumentSchema,
+				Description: t.Description,
+			},
+		})
+		toolBelt[t.Name] = &t
+	}
 	//// Selecting specific tool
 	//if g.request.ToolConfig != nil {
 	//	switch g.request.ToolConfig.Name {
@@ -105,22 +105,6 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		}
 		messages = append(messages, message)
 	}
-
-	//if hasPayload {
-	//	tbd := []int{}
-	//	for i := 0; i < len(messages); i++ {
-	//		if messages[i].Image != "" {
-	//			if i+1 < len(messages) {
-	//				messages[i].Content = messages[i+1].Content
-	//				tbd = append(tbd, i+1)
-	//				i++
-	//			}
-	//		}
-	//	}
-	//	for _, i := range tbd {
-	//		messages = append(messages[:i], messages[i+1:]...)
-	//	}
-	//}
 
 	reqModel.Messages = messages
 
@@ -178,7 +162,6 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	}
 
 	res := &gen.Response{
-		Texts: []string{respModel.Message.Content},
 		Metadata: models.Metadata{
 			Model:        g.request.Model.FQN(),
 			InputTokens:  respModel.PromptEvalCount,
@@ -186,22 +169,22 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			TotalTokens:  respModel.PromptEvalCount + respModel.EvalCount,
 		},
 	}
-	//for _, c := range respModel.Choices {
-	//	message := c.Message
-	//	if len(message.ToolCalls) == 0 { // Not Tools
-	//		res.Texts = append(res.Texts, c.Message.Content)
-	//	}
-	//
-	//	if len(message.ToolCalls) > 0 { // Tool calls
-	//		for _, t := range message.ToolCalls {
-	//			res.Tools = append(res.Tools, tools.Call{
-	//				Name:     t.Function.Name,
-	//				Argument: t.Function.Arguments,
-	//				Ref:      toolBelt[t.Function.Name],
-	//			})
-	//		}
-	//	}
-	//}
+	if len(respModel.Message.Content) > 0 {
+		res.Texts = []string{respModel.Message.Content}
+	}
+	if len(respModel.Message.ToolCalls) > 0 {
+		for _, t := range respModel.Message.ToolCalls {
+			args, err := json.Marshal(t.Function.Args)
+			if err != nil {
+				return nil, fmt.Errorf("could not marshal tool arguments, %w", err)
+			}
+			res.Tools = append(res.Tools, tools.Call{
+				Name:     t.Function.Name,
+				Argument: string(args),
+				Ref:      toolBelt[t.Function.Name],
+			})
+		}
+	}
 
 	g.ollama.log("[gen] response",
 		"request", reqc,

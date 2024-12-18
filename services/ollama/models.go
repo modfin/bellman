@@ -25,6 +25,12 @@ var GenModel_llama_3_2_vision_90b = gen.Model{
 	Description: "Llama 3.2 Vision is a collection of instruction-tuned image reasoning generative models in 90B sizes.",
 }
 
+var GenModel_llama_3_2 = gen.Model{
+	Provider:    Provider,
+	Name:        "llama3.2",
+	Description: "Meta's Llama 3.2 goes small with 3B models. alias for llama3.2:3b",
+}
+
 var GenModel_llama_3_2_3b = gen.Model{
 	Provider:    Provider,
 	Name:        "llama3.2:3b",

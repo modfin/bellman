@@ -3,10 +3,9 @@ package ollama
 import "github.com/modfin/bellman/schema"
 
 type genRequestMessage struct {
-	Role      string   `json:"role"` // system, user, assistant, or tool
-	Content   string   `json:"content,omitempty"`
-	Images    []string `json:"images,omitempty"`
-	ToolCalls []string `json:"tool_calls,omitempty"`
+	Role    string   `json:"role"` // system, user, assistant, or tool
+	Content string   `json:"content,omitempty"`
+	Images  []string `json:"images,omitempty"`
 }
 
 // https://github.com/ollama/ollama/blob/main/docs/modelfile.md#valid-parameters-and-values
@@ -33,4 +32,17 @@ type genRequest struct {
 
 	Option genRequestOption `json:"option,omitempty"`
 	Stream bool             `json:"stream"`
+
+	Tools []tool `json:"tools,omitempty"`
+}
+
+type toolFunction struct {
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Parameters  *schema.JSON `json:"parameters"`
+}
+
+type tool struct {
+	Type     string       `json:"type"`
+	Function toolFunction `json:"function"`
 }
