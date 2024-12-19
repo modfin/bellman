@@ -7,8 +7,17 @@ import (
 
 const Provider = "OpenAI"
 
-// https://platform.openai.com/docs/models#gpt-4o-mini
-//type GenModel string
+// curl https://api.openai.com/v1/models \                                                                                                                                                                           130 master!
+// -H "Authorization: Bearer $OPENAI_API_KEY" | jq
+//{
+//	"object": "list",
+//	"data": [
+//		{
+//		"id": "gpt-4o-realtime-preview",
+//		"object": "model",
+//		"created": 1727659998,
+//		"owned_by": "system"
+//		}, ....
 
 var GenModel_gpt4o_latest = gen.Model{
 	Provider: Provider,

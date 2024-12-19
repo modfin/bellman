@@ -72,8 +72,8 @@ func (b *Generator) clone() *Generator {
 		cp := *b.Request.MaxTokens
 		bb.Request.MaxTokens = &cp
 	}
-	if b.Request.Ctx != nil {
-		bb.Request.Ctx = b.Request.Ctx
+	if b.Request.Context != nil {
+		bb.Request.Context = b.Request.Context
 	}
 
 	return &bb
@@ -163,7 +163,7 @@ func (b *Generator) TopK(topK int) *Generator {
 }
 func (b *Generator) WithContext(ctx context.Context) *Generator {
 	bb := b.clone()
-	bb.Request.Ctx = ctx
+	bb.Request.Context = ctx
 
 	return bb
 }

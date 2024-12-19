@@ -113,7 +113,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	u := `https://api.openai.com/v1/chat/completions`
 
-	ctx := g.request.Ctx
+	ctx := g.request.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}

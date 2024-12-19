@@ -9,6 +9,7 @@ type Prompter interface {
 	Prompt(prompts ...prompt.Prompt) (*Response, error)
 }
 type Gen interface {
+	Provider() string
 	Generator(options ...Option) *Generator
 }
 

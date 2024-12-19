@@ -58,6 +58,9 @@ func (g *OpenAI) log(msg string, args ...any) {
 	g.Log.Debug("[bellman/open_ai] "+msg, args...)
 }
 
+func (g *OpenAI) Provider() string {
+	return Provider
+}
 func (g *OpenAI) Embed(request embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 

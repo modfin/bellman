@@ -2,115 +2,63 @@ package bellman
 
 import (
 	"errors"
+	"fmt"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
-	"maps"
-	"slices"
 )
 
-var ErrModelNotFound = errors.New("model not found")
+var ErrNoModelProvided = errors.New("no model was provided")
 var ErrClientNotFound = errors.New("client not found")
 
 type Proxy struct {
-	embedModels map[string]embed.Model
-	genModels   map[string]gen.Model
-
-	embedersByFQN map[string]embed.Embeder
-	gensByFQN     map[string]gen.Gen
+	embeders map[string]embed.Embeder
+	gens     map[string]gen.Gen
 }
 
 func NewProxy() *Proxy {
 	p := &Proxy{
-		embedModels:   map[string]embed.Model{},
-		embedersByFQN: map[string]embed.Embeder{},
-		genModels:     map[string]gen.Model{},
-		gensByFQN:     map[string]gen.Gen{},
+		embeders: map[string]embed.Embeder{},
+		gens:     map[string]gen.Gen{},
 	}
 
 	return p
 }
 
-func (p *Proxy) RegisterEmbeder(embeder embed.Embeder, models ...embed.Model) {
-	for _, model := range models {
-		p.embedersByFQN[model.String()] = embeder
-		p.embedModels[model.String()] = model
-	}
+func (p *Proxy) RegisterEmbeder(embeder embed.Embeder) {
+	p.embeders[embeder.Provider()] = embeder
 }
-func (p *Proxy) RegisterGen(llm gen.Gen, models ...gen.Model) {
-	for _, model := range models {
-		p.gensByFQN[model.String()] = llm
-		p.genModels[model.String()] = model
-	}
+func (p *Proxy) RegisterGen(llm gen.Gen) {
+	p.gens[llm.Provider()] = llm
 }
 
-func (p *Proxy) EmbedModels() []embed.Model {
-	models := slices.Collect(maps.Values(p.embedModels))
-	slices.SortFunc(models, func(i, j embed.Model) int {
-		if i.String() < j.String() {
-			return -1
-		}
-		return 1
-	})
-	return models
-}
-
-func (p *Proxy) GenModels() []gen.Model {
-	models := slices.Collect(maps.Values(p.genModels))
-	slices.SortFunc(models, func(i, j gen.Model) int {
-		if i.String() < j.String() {
-			return -1
-		}
-		return 1
-	})
-	return models
-}
-
-type Named interface {
-	FQN() string
-}
-
-func (p *Proxy) HasModel(model Named) bool {
-	_, ok := p.embedersByFQN[model.FQN()]
-	if ok {
-		return true
-	}
-	_, ok = p.gensByFQN[model.FQN()]
-	return ok
-}
-
-func (p *Proxy) Embed(embed embed.Request, allowUnknown bool) (*embed.Response, error) {
-	client := p.embedersByFQN[embed.Model.String()]
-
-	if client == nil && allowUnknown {
-		for _, m := range p.embedModels {
-			if m.Provider == embed.Model.Provider {
-				client = p.embedersByFQN[m.String()]
-				break
-			}
-		}
+func (p *Proxy) Embed(embed embed.Request) (*embed.Response, error) {
+	client, ok := p.embeders[embed.Model.Provider]
+	if !ok {
+		return nil, fmt.Errorf("no client registerd for provider '%s', %w", embed.Model.Provider, ErrClientNotFound)
 	}
 
 	if client == nil {
-		return nil, ErrModelNotFound
+		return nil, ErrNoModelProvided
 	}
 
+	if embed.Model.Name == "" {
+		return nil, fmt.Errorf("embed.Model.Name is not set, %w", ErrNoModelProvided)
+	}
 	return client.Embed(embed)
 }
 
-func (p *Proxy) Gen(model gen.Model, allowUnknown bool) (*gen.Generator, error) {
-	client := p.gensByFQN[model.String()]
-
-	if client == nil && allowUnknown {
-		for _, m := range p.genModels {
-			if m.Provider == model.Provider {
-				client = p.gensByFQN[m.String()]
-				break
-			}
-		}
+func (p *Proxy) Gen(model gen.Model) (*gen.Generator, error) {
+	client, ok := p.gens[model.Provider]
+	if !ok {
+		return nil, fmt.Errorf("no client registerd for provider '%s', %w", model.Provider, ErrClientNotFound)
 	}
 
 	if client == nil {
-		return nil, ErrModelNotFound
+		return nil, ErrClientNotFound
+	}
+
+	if model.Name == "" {
+		return nil, fmt.Errorf("model.Name is not set, %w", ErrNoModelProvided)
 	}
 
 	return client.Generator(gen.WithModel(model)), nil

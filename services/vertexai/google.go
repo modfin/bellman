@@ -82,6 +82,9 @@ func New(config GoogleConfig) (*Google, error) {
 	}, nil
 }
 
+func (g *Google) Provider() string {
+	return Provider
+}
 func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 

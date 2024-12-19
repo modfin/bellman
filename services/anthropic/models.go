@@ -6,7 +6,20 @@ import (
 
 const Provider = "Anthropic"
 
-const AnthropicVersion = "2023-06-01"
+const Version = "2023-06-01"
+
+//curl https://api.anthropic.com/v1/models/claude-3-5-sonnet-20241022 \
+//  --header "x-api-key: $ANTHROPIC_API_KEY" \
+//  --header "anthropic-version: 2023-06-01"
+//{
+//  "data": [
+//    {
+//      "type": "model",
+//      "id": "claude-3-5-sonnet-20241022",
+//      "display_name": "Claude 3.5 Sonnet (New)",
+//      "created_at": "2024-10-22T00:00:00Z"
+//    },
+//	{...
 
 //type GenModel string
 

@@ -49,6 +49,9 @@ type localResponse struct {
 	} `json:"usage"`
 }
 
+func (g *VoyageAI) Provider() string {
+	return Provider
+}
 func (v *VoyageAI) Embed(request embed.Request) (*embed.Response, error) {
 
 	var reqc = atomic.AddInt64(&requestNo, 1)

@@ -22,7 +22,9 @@ func (g *Anthropic) log(msg string, args ...any) {
 	}
 	g.Log.Debug("[bellman/anthropic] "+msg, args...)
 }
-
+func (g *Anthropic) Provider() string {
+	return Provider
+}
 func (a *Anthropic) Generator(options ...gen.Option) *gen.Generator {
 	var gen = &gen.Generator{
 		Prompter: &generator{

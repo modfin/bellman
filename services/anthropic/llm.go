@@ -141,7 +141,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		return nil, fmt.Errorf("could not marshal request, %w", err)
 	}
 
-	ctx := g.request.Ctx
+	ctx := g.request.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -151,7 +151,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	}
 
 	req.Header.Set("x-api-key", g.anthropic.apiKey)
-	req.Header.Set("anthropic-version", AnthropicVersion)
+	req.Header.Set("anthropic-version", Version)
 	req.Header.Set("content-type", "application/json")
 	if pdfBeta {
 		req.Header.Add("anthropic-beta", "pdfs-2024-09-25")
@@ -169,7 +169,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"anthropic-version", AnthropicVersion,
+		"anthropic-version", Version,
 	)
 
 	resp, err := http.DefaultClient.Do(req)

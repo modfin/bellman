@@ -45,6 +45,10 @@ func (g *Ollama) log(msg string, args ...any) {
 	g.Log.Debug("[bellman/ollama] "+msg, args...)
 }
 
+func (g *Ollama) Provider() string {
+	return Provider
+}
+
 func (g *Ollama) Embed(request embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 

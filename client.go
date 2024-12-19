@@ -16,10 +16,16 @@ import (
 	"sync/atomic"
 )
 
+const Provider = "Bellman"
+
 type Bellman struct {
 	Log *slog.Logger `json:"-"`
 	url string
 	key Key
+}
+
+func (g *Bellman) Provider() string {
+	return Provider
 }
 
 type Key struct {
@@ -222,7 +228,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		return nil, fmt.Errorf("could not marshal bellman request; %w", err)
 	}
 
-	ctx := g.request.Ctx
+	ctx := g.request.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}

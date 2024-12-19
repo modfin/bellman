@@ -57,6 +57,28 @@ var GenModel_llama_3_1_405b = gen.Model{
 	Description: "Llama 3.1 is a new state-of-the-art model from Meta available in 405B parameter sizes.",
 }
 
+var GenModel_gemma2 = gen.Model{
+	Provider:    Provider,
+	Name:        "gemma2",
+	Description: "Google Gemma 2 is a high-performing and efficient model available in three sizes: 9B",
+}
+
+var GenModel_gemma2_9b = gen.Model{
+	Provider:    Provider,
+	Name:        "gemma2:9b",
+	Description: "Google Gemma 2 is a high-performing and efficient model available in three sizes: 2B, 9B, and 27B.",
+}
+var GenModel_gemma2_2b = gen.Model{
+	Provider:    Provider,
+	Name:        "gemma2:2b",
+	Description: "Google Gemma 2 is a high-performing and efficient model available in three sizes: 2B, 9B, and 27B.",
+}
+var GenModel_gemma2_27b = gen.Model{
+	Provider:    Provider,
+	Name:        "gemma2:27b",
+	Description: "Google Gemma 2 is a high-performing and efficient model available in three sizes: 2B, 9B, and 27B.",
+}
+
 // https://platform.openai.com/docs/models#embeddings
 
 var EmbedModel_nomic_embed_text = embed.Model{

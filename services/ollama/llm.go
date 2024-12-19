@@ -118,7 +118,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		return nil, fmt.Errorf("could not join url, %w", err)
 	}
 
-	ctx := g.request.Ctx
+	ctx := g.request.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}

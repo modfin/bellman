@@ -176,7 +176,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"url", u,
 	)
 
-	ctx := g.request.Ctx
+	ctx := g.request.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}

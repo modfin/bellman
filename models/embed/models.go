@@ -6,6 +6,7 @@ import (
 )
 
 type Embeder interface {
+	Provider() string
 	Embed(embed Request) (*Response, error)
 }
 
@@ -28,7 +29,7 @@ func (m Model) String() string {
 
 type Request struct {
 	Ctx context.Context `json:"-"`
-	
+
 	Model Model `json:"model"`
 
 	Text string `json:"text"`

@@ -13,6 +13,7 @@ import (
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/services/anthropic"
+	"github.com/modfin/bellman/services/ollama"
 	"github.com/modfin/bellman/services/openai"
 	"github.com/modfin/bellman/services/vertexai"
 	"github.com/modfin/bellman/services/voyageai"
@@ -25,7 +26,6 @@ import (
 	"io"
 	"log"
 	"log/slog"
-	"maps"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -143,6 +143,12 @@ func main() {
 	If provided, only the models in the array will be loaded.`,
 			},
 
+			&cli.StringFlag{
+				Name:    "ollama-url",
+				EnvVars: []string{"BELLMAN_OLLAMA_URL"},
+				Usage:   `The url of the ollama service, eg http://localhost:11434`,
+			},
+
 			&cli.BoolFlag{
 				Name:    "allow-user-models",
 				EnvVars: []string{"BELLMAN_ALLOW_USER_MODELS"},
@@ -250,6 +256,8 @@ type Config struct {
 	VoyageAiKey         string `cli:"voyageai-key"`
 	VoyageAiEmbedModels string `cli:"voyageai-embed-models"`
 
+	OllamaURL string `cli:"ollama-url"`
+
 	PrometheusMetricsBasicAuth string `cli:"prometheus-metrics-basic-auth"`
 	PrometheusPushUrl          string `cli:"prometheus-push-url"`
 }
@@ -356,7 +364,7 @@ func metricsAuth(userpass string) func(http.Handler) http.Handler {
 }
 
 func serve(cfg Config) error {
-
+	var err error
 	logger.Info("Start", "action", "setting up ai proxy")
 	proxy, err := setupProxy(cfg)
 	if err != nil {
@@ -501,11 +509,11 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Use(auth(cfg))
 
-		r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
-			models := proxy.GenModels()
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(models)
-		})
+		//r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
+		//	models := proxy.GenModels()
+		//	w.Header().Set("Content-Type", "application/json")
+		//	_ = json.NewEncoder(w).Encode(models)
+		//})
 
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 
@@ -524,9 +532,8 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			gen, err := proxy.Gen(req.Model, cfg.AllowUserModels)
+			gen, err := proxy.Gen(req.Model)
 			if err != nil {
-
 				err = fmt.Errorf("could not get generator, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
 				return
@@ -589,11 +596,11 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Use(auth(cfg))
 
-		r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
-			models := proxy.EmbedModels()
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(models)
-		})
+		//r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
+		//	models := proxy.EmbedModels()
+		//	w.Header().Set("Content-Type", "application/json")
+		//	_ = json.NewEncoder(w).Encode(models)
+		//})
 
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 			var req embed.Request
@@ -605,7 +612,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			}
 			req.Ctx = r.Context()
 
-			response, err := proxy.Embed(req, cfg.AllowUserModels)
+			response, err := proxy.Embed(req)
 			if err != nil {
 				err = fmt.Errorf("could not embed text, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
@@ -655,48 +662,24 @@ func embedModelsOf(str string, provider string) ([]embed.Model, error) {
 }
 
 func setupProxy(cfg Config) (*bellman.Proxy, error) {
-	var err error
 
 	proxy := bellman.NewProxy()
 
 	if cfg.AnthropicKey != "" {
-		logger.Info("Start", "action", "proxy: adding Anthropic models")
-
 		client := anthropic.New(cfg.AnthropicKey)
 
-		genModels := slices.Collect(maps.Values(anthropic.GenModels))
-		if len(cfg.AnthropicGenModels) > 0 {
-			genModels, err = genModelsOf(cfg.AnthropicGenModels, anthropic.Provider)
-			if err != nil {
-				return nil, fmt.Errorf("could not get gen models, %w", err)
-			}
-		}
-		proxy.RegisterGen(client, genModels...)
+		proxy.RegisterGen(client)
 
-		for _, model := range genModels {
-			logger.Info("Start", "action", "proxy: adding model [gen]", "model", model.FQN())
-		}
+		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
+
 	}
 	if cfg.OpenAiKey != "" {
 		client := openai.New(cfg.OpenAiKey)
 
-		genModels := slices.Collect(maps.Values(openai.GenModels))
-		if len(cfg.OpenAiGenModels) > 0 {
-			genModels, err = genModelsOf(cfg.OpenAiGenModels, openai.Provider)
-			if err != nil {
-				return nil, fmt.Errorf("could not get gen models, %w", err)
-			}
-		}
-
-		proxy.RegisterGen(client, genModels...)
-		proxy.RegisterEmbeder(client, slices.Collect(maps.Values(openai.EmbedModels))...)
-
-		for _, model := range genModels {
-			logger.Info("Start", "action", "proxy: adding model [gen]", "model", model.FQN())
-		}
-		for _, model := range openai.EmbedModels {
-			logger.Info("Start", "action", "proxy: adding model [embed]", "model", model.FQN())
-		}
+		proxy.RegisterGen(client)
+		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
 	}
 
 	if cfg.Google.Region != "" && cfg.Google.Project != "" {
@@ -710,41 +693,24 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 			return nil, err
 		}
 
-		genModels := slices.Collect(maps.Values(vertexai.GenModels))
-		if len(cfg.GoogleGenModels) > 0 {
-			genModels, err = genModelsOf(cfg.GoogleGenModels, vertexai.Provider)
-			if err != nil {
-				return nil, fmt.Errorf("could not get gen models, %w", err)
-			}
-		}
-		proxy.RegisterGen(client, genModels...)
-		proxy.RegisterEmbeder(client, slices.Collect(maps.Values(vertexai.EmbedModels))...)
-
-		for _, model := range genModels {
-			logger.Info("Start", "action", "proxy: adding model [gen]", "model", model.FQN())
-		}
-		for _, model := range vertexai.EmbedModels {
-			logger.Info("Start", "action", "proxy: adding model [embed]", "model", model.FQN())
-		}
+		proxy.RegisterGen(client)
+		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
 	}
 
 	if cfg.VoyageAiKey != "" {
 		client := voyageai.New(cfg.VoyageAiKey)
+		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
+	}
 
-		embedModels := slices.Collect(maps.Values(voyageai.EmbedModels))
-		if len(cfg.VoyageAiEmbedModels) > 0 {
-			embedModels, err = embedModelsOf(cfg.VoyageAiEmbedModels, voyageai.Provider)
-			if err != nil {
-				return nil, fmt.Errorf("could not get gen models, %w", err)
-			}
-		}
+	if cfg.OllamaURL != "" {
+		client := ollama.New(cfg.OllamaURL)
 
-		proxy.RegisterEmbeder(client, embedModels...)
-
-		for _, model := range embedModels {
-			logger.Info("Start", "action", "proxy: adding model [embed]", "model", model.FQN())
-		}
-
+		proxy.RegisterGen(client)
+		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
 	}
 
 	return proxy, nil
