@@ -1,19 +1,127 @@
 # Bellman
 
-Unified LLM Interface for vertexai/gemini, openai and anthropic
+It tries to be unified interface to interact with LLMs and embedding models.
+In particular, it seeks to make it easier to switch between models and vendors 
+along woth lowering tha barrier to get started.
+Bellman supports  `VertexAI/Gemini`, `OpenAI`, `Anthropic`, `VoyageAI` and `Ollama`   
 
-## Prerequisites
+Bellman consists of two parts. The library and the service.
+The go library enables you to interact with the different LLM vendors directly while the service, 
+`bellmand` creates a proxy service that lets you connect to all providers with one api key.
 
-- A valid API key for each of the supported models (OpenAI, Anthropic, VertexAI/Gemini, VoyageAI)
+Bellman supports the common things that we expect in morden llm models.
+Chat, Structured, Tools and binary input.
 
-## Installation
+## Why
+This project was built to the lack of official sdk/clients for the major players along with the
+slight differences in API.
+It also became clear when we started to play around with different LLMs in our projects that the 
+differences, while slight, had implications and for each new model introduced it became an overhead.
+There are other projects out there, like go version of langchain, that deals with some of it.
+But having one proxy to hadle all types of models made things alot easier for us to iterate over 
+problems, models and solutions.
+
+## The Service
+
+`bellmand` is a simple web service that implements the bellman library and exposes it through a http api
+
+The easiest way to get started is to simply run it as a docker service.
+
+### Prerequisite
+
+- Docker being installed
+- API Keys to Anthropic, OpenAI, VertexAI(Google Gemini) and/or VoyageAI 
+- Installing Ollama, https://ollama.com/ (very cool project imho)
+
+### Run
+
+```sh
+## Help / Man
+docker run --rm -it modfin/bellman --help  
+
+## Example 
+docker run --rm -d modfin/bellman \
+  --prometheus-metrics-basic-auth="user:pass"
+  --ollama-url=http://localhost:11434 \
+  --openai-key="$(cat ./credentials/openai-api-key.txt)" \
+  --anthropic-key="$(cat ./credentials/anthropic-api-key.txt)" \
+  --voyageai-key="$(cat ./credentials/voyageai-api-key.txt)" \
+  --google-credential="$(cat ./credentials/google-service-account.json)" \
+  --google-project=your-google-project \
+  --google-region=europe-north1 \
+  --api-key=qwerty 
+```
+
+This will start the bellmand service that proxies requests to the model you define in the request.
+
+## The Library 
+
+### Installation
 
 ```bash
 go get github.com/modfin/bellman
 ```
 
-
 ## Usage
+
+The library provides clients for Anthropic, Ollama, OpenAI, VertexAI, VoyageAI and Bellmand itself.
+
+All the clients implement the same interfaces, `gen.Generator` and `embed.Embeder`, 
+and can there for be used interchangeably. 
+
+```go 
+client, err := anthropic.New(...)
+client, err := ollama.New(...)
+client, err := openai.New(...)
+client, err := vertexai.New(...)
+client, err := voyageai.New(...)
+client, err := bellman.New(...)
+```
+
+
+## bellman.New() 
+
+The benefit of using the bellman client,
+when you are running `bellmand`,
+is that we can interchangeably use any model that we wish to interact with.
+
+
+```go 
+
+client, err := bellman.New(...)
+llm := client.Generator() 
+res, err := llm.Model(openai.GenModel_gpt4o_mini).
+   Prompt(
+       prompt.AsUser("What company made you?"),
+    )
+fmt.Println(res, err)
+// OpenAI
+
+
+res, err := llm.Model(vertexai.GenModel_gemini_1_5_flash).
+    Prompt(
+        prompt.AsUser("What company made you?"),
+    )
+fmt.Println(res, err)
+// Google
+
+// or even a custom model that you created yourself (trained) 
+// or a new model that is not in the library yet
+model := gen.Model{
+    Provider: vertexai.Provider,
+    Name:     "gemini-2.0-flash-exp",
+    Config:   map[string]interface{}{"region": "us-central1"},
+}
+res, err := llm.Model(model).
+    Prompt(
+        prompt.AsUser("What company made you?"),
+    )
+fmt.Println(res, err)
+// Google
+
+
+```
+
 
 ## Prompting 
 
@@ -21,8 +129,7 @@ Just normal conversation mode
 
 ```go 
 
-llm := openai.New(apiKey).Generator()
-res, err := llm.
+res, err  := openai.New(apiKey).Generator().
     Model(openai.GenModel_gpt4o_mini).
     Prompt(
         prompt.AsUser("What is the distance to the moon?"),
@@ -32,7 +139,6 @@ if err != nil {
 }
 
 awnser, err := res.AsText()
-
 
 fmt.Println(awnser, err)
 // The average distance from Earth to the Moon is approximately 384,400 kilometers 
@@ -47,8 +153,7 @@ Just normal conversation mode
 
 ```go 
 
-llm := openai.New(apiKey).Generator()
-res, err := llm.
+res, err := openai.New(apiKey).Generator().
     Model(openai.GenModel_gpt4o_mini).
     System("You are a expert movie quoter and lite fo finish peoples sentences with a movie reference").
     Prompt(
@@ -72,8 +177,7 @@ Setting things like temperature, max tokens, top p, and stop secuences
 
 ```go 
 
-llm := openai.New(apiKey).Generator()
-res, err := llm.
+res, err := openai.New(apiKey).Generator().
     Model(openai.GenModel_gpt4o_mini).
 	    Temperature(0.5).
 	    MaxTokens(100).
@@ -98,7 +202,7 @@ fmt.Println(awnser, err)
 ## Structured Output
 From many models, you can now specify a schema that you want the models to output. 
 
-a supporting lib with transforming your go struct to json schema is provided. `github.com/modfin/bellman/schema`
+A supporting library that can transforming your go struct to json schema is provided. `github.com/modfin/bellman/schema`
 
 ```go
 
@@ -107,14 +211,14 @@ type Quote struct {
     Quote     string `json:"quote"`
 }
 type Responese struct {
-    Quote []Quote `json:"quotes"`
+    Quotes []Quote `json:"quotes"`
 }
 
 
 llm := vertexai.New(googleConfig).Generator()
 res, err := llm.
     Model(vertexai.GenModel_gemini_1_5_pro).
-    Output(Responese{}).
+    Output(schema.From(Responese{})).
     Prompt(
         prompt.AsUser("give me 3 quotes from different characters in Hamlet"),
     )
@@ -170,20 +274,20 @@ Here is an example of how to define and use a tool:
             "a function to get a quote from a person or character in Hamlet",
        ),
        tools.WithArgSchema(Args{}),
-       tools.WithCallback(func(jsondata string) error {
+       tools.WithCallback(func(jsondata string) (string, error) {
            var arg Args
            err := json.Unmarshal([]byte(jsondata), &arg)
            if err != nil {
-               return err
+               return "",err
            }
+		   return dao.GetQuoateFrom(arg.Name)
        }),
    )
    ```
 
 2. Use the tool in a prompt:
    ```go
-      llm := anthopic.New(apiKey).Generator()
-      res, err := llm.
+      res, err := anthopic.New(apiKey).Generator().
           Model(anthropic.GenModel_3_5_haiku_latest)).
           System("You are a Shakespeare quote generator").
           Tools(getQuote).
@@ -235,7 +339,7 @@ PDFs is only supported by Gemini and Anthropic
    }
    res, err := llm.
       Prompt(
-          prompt.AsUserWithData(prompt.MimeImageJPEG, bytes.NewBuffer(data)),
+          prompt.AsUserWithData(prompt.MimeImageJPEG, data),
           prompt.AsUser("Describe the image to me"),
       )
    
@@ -253,14 +357,12 @@ PDFs is only supported by Gemini and Anthropic
 #### PDF
 ```go 
 
-   pdf := os.Open("path/to/pdf")
+   pdf, err := os.ReadFile("path/to/pdf")
    if err != nil {
-      t.Fatalf("could not decode image %v", err)
+      t.Fatalf("could open file, %v", err)
    }
-
-   llm := anthopic.New(apiKey).Generator()
    
-   res, err := llm.
+   res, err := anthopic.New(apiKey).Generator().
       Prompt(
           prompt.AsUserWithData(prompt.MimeApplicationPDF, pdf),
           prompt.AsUser("Describe to me what is in the PDF"),
