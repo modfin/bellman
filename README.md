@@ -9,7 +9,7 @@ Bellman consists of two parts. The library and the service.
 The go library enables you to interact with the different LLM vendors directly while the service, 
 `bellmand` creates a proxy service that lets you connect to all providers with one api key.
 
-Bellman supports the common things that we expect in morden llm models.
+Bellman supports the common things that we expect in modern llm models.
 Chat, Structured, Tools and binary input.
 
 ## Why
