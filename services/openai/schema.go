@@ -2,7 +2,6 @@ package openai
 
 import (
 	"github.com/modfin/bellman/schema"
-	"strconv"
 )
 
 // https://platform.openai.com/docs/guides/structured-outputs#supported-schemas
@@ -26,7 +25,7 @@ type JSONSchema struct {
 	Description string `json:"description,omitempty"`
 	// Enum is used to restrict a value to a fixed set of values. It must be an array with at least
 	// one element, where each element is unique. You will probably only use this with strings.
-	Enum []string `json:"enum,omitempty"`
+	Enum []any `json:"enum,omitempty"`
 	// Properties describes the properties of an object, if the schema type is Object.
 	Properties map[string]JSONSchema `json:"properties,omitempty"`
 	// Required specifies which properties are required, if the schema type is Object.
@@ -41,10 +40,18 @@ type JSONSchema struct {
 	AdditionalProperties any `json:"additionalProperties,omitempty"`
 }
 
+func (s JSONSchema) IsObjectRequired() bool {
+	if s.Type == Object && len(s.Properties) == 0 {
+		return false
+	}
+	return true
+}
+
 func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	def := &JSONSchema{
-		Description: bellmanSchema.Description,
-		Required:    bellmanSchema.Required,
+		Description:          bellmanSchema.Description,
+		Required:             []string{},
+		AdditionalProperties: false, // openai requires this to be false
 	}
 	switch bellmanSchema.Type {
 	case schema.Object:
@@ -67,14 +74,13 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 		def.Properties = make(map[string]JSONSchema)
 		for key, prop := range bellmanSchema.Properties {
 			def.Properties[key] = *fromBellmanSchema(prop)
+			if def.Properties[key].IsObjectRequired() {
+				def.Required = append(def.Required, key)
+			}
 		}
 	}
 	if bellmanSchema.Items != nil {
 		def.Items = fromBellmanSchema(bellmanSchema.Items)
-	}
-
-	if bellmanSchema.AdditionalProperties != nil {
-		def.AdditionalProperties = *fromBellmanSchema(bellmanSchema.AdditionalProperties)
 	}
 
 	if bellmanSchema.Nullable {
@@ -82,18 +88,9 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	}
 
 	if len(bellmanSchema.Enum) > 0 {
-		def.Enum = make([]string, len(bellmanSchema.Enum))
+		def.Enum = make([]any, len(bellmanSchema.Enum))
 		for i, e := range bellmanSchema.Enum {
-			switch e.(type) {
-			case string:
-				def.Enum[i] = e.(string)
-			case bool:
-				def.Enum[i] = strconv.FormatBool(e.(bool))
-			case int, int32, int64:
-				def.Enum[i] = strconv.FormatInt(e.(int64), 10)
-			case float32, float64:
-				def.Enum[i] = strconv.FormatFloat(e.(float64), 'f', -1, 64)
-			}
+			def.Enum[i] = e
 		}
 	}
 	return def

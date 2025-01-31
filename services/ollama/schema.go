@@ -2,7 +2,6 @@ package ollama
 
 import (
 	"github.com/modfin/bellman/schema"
-	"strconv"
 )
 
 // https://github.com/ollama/ollama/blob/3f0cb36bdbe4dd6ac35a39598c7253cb0cf1349a/docs/api.md#request-structured-outputs
@@ -26,7 +25,7 @@ type JSONSchema struct {
 	Description string `json:"description,omitempty"`
 	// Enum is used to restrict a value to a fixed set of values. It must be an array with at least
 	// one element, where each element is unique. You will probably only use this with strings.
-	Enum []string `json:"enum,omitempty"`
+	Enum []any `json:"enum,omitempty"`
 	// Properties describes the properties of an object, if the schema type is Object.
 	Properties map[string]JSONSchema `json:"properties,omitempty"`
 	// Required specifies which properties are required, if the schema type is Object.
@@ -82,18 +81,9 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	}
 
 	if len(bellmanSchema.Enum) > 0 {
-		def.Enum = make([]string, len(bellmanSchema.Enum))
+		def.Enum = make([]any, len(bellmanSchema.Enum))
 		for i, e := range bellmanSchema.Enum {
-			switch e.(type) {
-			case string:
-				def.Enum[i] = e.(string)
-			case bool:
-				def.Enum[i] = strconv.FormatBool(e.(bool))
-			case int, int32, int64:
-				def.Enum[i] = strconv.FormatInt(e.(int64), 10)
-			case float32, float64:
-				def.Enum[i] = strconv.FormatFloat(e.(float64), 'f', -1, 64)
-			}
+			def.Enum[i] = e
 		}
 	}
 	return def
