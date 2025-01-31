@@ -24,7 +24,7 @@ func TestOf(t *testing.T) {
 		Ints      int                `json:"ints" json-enum:"1,2,3"`
 		Labels    []string           `json:"labels" json-enum:"Ecstatic,Happy,Sad"`
 		AddrMap   map[string]Address `json:"map"`
-		Strmap    map[int]float64    `json:"map2"`
+		Strmap    map[string]float64 `json:"map2"`
 	}
 	expected := &schema.JSON{
 		Type: schema.Object,

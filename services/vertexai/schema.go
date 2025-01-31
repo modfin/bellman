@@ -2,7 +2,6 @@ package vertexai
 
 import (
 	"github.com/modfin/bellman/schema"
-	"strconv"
 )
 
 // https://ai.google.dev/gemini-api/docs/structured-output?lang=rest
@@ -107,17 +106,11 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	}
 
 	if len(bellmanSchema.Enum) > 0 {
-		def.Enum = make([]string, len(bellmanSchema.Enum))
-		for i, e := range bellmanSchema.Enum {
+		def.Enum = make([]string, 0)
+		for _, e := range bellmanSchema.Enum {
 			switch e.(type) {
 			case string:
-				def.Enum[i] = e.(string)
-			case bool:
-				def.Enum[i] = strconv.FormatBool(e.(bool))
-			case int, int32, int64:
-				def.Enum[i] = strconv.FormatInt(e.(int64), 10)
-			case float32, float64:
-				def.Enum[i] = strconv.FormatFloat(e.(float64), 'f', -1, 64)
+				def.Enum = append(def.Enum, e.(string))
 			}
 		}
 	}
