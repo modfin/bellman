@@ -1,9 +1,5 @@
 package vertexai
 
-import (
-	"github.com/modfin/bellman/schema"
-)
-
 type genRequestContent struct {
 	Role  string                  `json:"role,omitempty"`
 	Parts []genRequestContentPart `json:"parts,omitempty"`
@@ -38,7 +34,7 @@ type genConfig struct {
 	ResponseMimeType   *string  `json:"responseMimeType,omitempty"`
 	ResponseModalities []string `json:"responseModalities"` // TEXT, AUDIO, IMAGE
 
-	ResponseSchema *schema.JSON `json:"responseSchema,omitempty"`
+	ResponseSchema *JSONSchema `json:"responseSchema,omitempty"`
 }
 
 type genTool struct {
@@ -46,9 +42,9 @@ type genTool struct {
 }
 
 type genToolFunc struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Parameters  *schema.JSON `json:"parameters"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Parameters  *JSONSchema `json:"parameters"`
 }
 
 type genToolConfig struct {

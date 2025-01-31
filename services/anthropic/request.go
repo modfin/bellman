@@ -1,9 +1,5 @@
 package anthropic
 
-import (
-	"github.com/modfin/bellman/schema"
-)
-
 // https://docs.anthropic.com/en/api/messages
 type request struct {
 	Model     string `json:"model"`
@@ -40,9 +36,9 @@ type reqToolChoice struct {
 }
 
 type reqTool struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description,omitempty"`
-	InputSchema *schema.JSON `json:"input_schema,omitempty"`
+	Name        string      `json:"name"`
+	Description string      `json:"description,omitempty"`
+	InputSchema *JSONSchema `json:"input_schema,omitempty"`
 }
 
 type reqContent struct {

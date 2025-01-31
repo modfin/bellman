@@ -1,7 +1,5 @@
 package ollama
 
-import "github.com/modfin/bellman/schema"
-
 type genRequestMessage struct {
 	Role    string   `json:"role"` // system, user, assistant, or tool
 	Content string   `json:"content,omitempty"`
@@ -28,7 +26,7 @@ type genRequest struct {
 	Model    string              `json:"model"`
 	Messages []genRequestMessage `json:"messages"`
 
-	Format *schema.JSON `json:"format,omitempty"`
+	Format *JSONSchema `json:"format,omitempty"`
 
 	Option genRequestOption `json:"option,omitempty"`
 	Stream bool             `json:"stream"`
@@ -37,9 +35,9 @@ type genRequest struct {
 }
 
 type toolFunction struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Parameters  *schema.JSON `json:"parameters"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Parameters  *JSONSchema `json:"parameters"`
 }
 
 type tool struct {

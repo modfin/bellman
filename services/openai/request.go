@@ -2,7 +2,6 @@ package openai
 
 import (
 	"encoding/json"
-	schema "github.com/modfin/bellman/schema"
 )
 
 type genRequestMessage struct {
@@ -48,9 +47,9 @@ type genRequest struct {
 }
 
 type responseFormatSchema struct {
-	Name   string       `json:"name"`
-	Strict bool         `json:"strict"`
-	Schema *schema.JSON `json:"schema"`
+	Name   string      `json:"name"`
+	Strict bool        `json:"strict"`
+	Schema *JSONSchema `json:"schema"`
 }
 
 type responseFormat struct {
