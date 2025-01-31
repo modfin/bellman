@@ -43,7 +43,7 @@ const (
 )
 
 type JSON struct {
-	Ref string `json:"$ref,omitempty"` // #/$defs/... etc, overrides everything else
+	//Ref string `json:"$ref,omitempty"` // #/$defs/... etc, overrides everything else // TODO
 
 	// JSON Metadata
 	Description string `json:"description,omitempty"`
