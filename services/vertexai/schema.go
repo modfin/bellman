@@ -5,6 +5,8 @@ import (
 	"strconv"
 )
 
+// https://ai.google.dev/gemini-api/docs/structured-output?lang=rest
+
 type Type string
 
 const (

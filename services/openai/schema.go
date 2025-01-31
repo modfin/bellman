@@ -5,6 +5,8 @@ import (
 	"strconv"
 )
 
+// https://platform.openai.com/docs/guides/structured-outputs#supported-schemas
+
 type DataType string
 
 const (

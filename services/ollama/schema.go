@@ -5,6 +5,8 @@ import (
 	"strconv"
 )
 
+// https://github.com/ollama/ollama/blob/3f0cb36bdbe4dd6ac35a39598c7253cb0cf1349a/docs/api.md#request-structured-outputs
+
 type DataType string
 
 const (
