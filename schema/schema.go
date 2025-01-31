@@ -31,13 +31,26 @@ package schema
 // propertyOrdering*
 // required
 
+type JSONType string
+
+const (
+	Object  JSONType = "object"
+	Array   JSONType = "array"
+	String  JSONType = "string"
+	Number  JSONType = "number"
+	Integer JSONType = "integer"
+	Boolean JSONType = "boolean"
+)
+
 type JSON struct {
+	Ref string `json:"$ref,omitempty"` // #/$defs/... etc, overrides everything else
 
 	// JSON Metadata
 	Description string `json:"description,omitempty"`
 
 	// Type System
-	Type string `json:"type,omitempty"` // Object / Array / String / Number / Integer / Boolean /
+	Type     JSONType `json:"type,omitempty"`
+	Nullable bool     `json:"nullable,omitempty"`
 
 	// Combinators
 	Properties           map[string]*JSON `json:"properties,omitempty"`           // for Object

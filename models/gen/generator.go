@@ -96,6 +96,11 @@ func (b *Generator) Output(s *schema.JSON) *Generator {
 	bb.Request.OutputSchema = s
 	return bb
 }
+func (b *Generator) StrictOutput(strict bool) *Generator {
+	bb := b.clone()
+	bb.Request.StrictOutput = strict
+	return bb
+}
 func (g *Generator) Tools() []tools.Tool {
 	return g.Request.Tools
 }
@@ -210,6 +215,11 @@ func WithSystem(prompt string) Option {
 func WithOutput(s *schema.JSON) Option {
 	return func(g *Generator) *Generator {
 		return g.Output(s)
+	}
+}
+func WithStrictOutput(strict bool) Option {
+	return func(g *Generator) *Generator {
+		return g.StrictOutput(strict)
 	}
 }
 
