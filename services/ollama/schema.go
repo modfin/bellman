@@ -19,6 +19,8 @@ const (
 )
 
 type JSONSchema struct {
+	Ref  string                 `json:"$ref,omitempty"`  // #/$defs/... etc, overrides everything else
+	Defs map[string]*JSONSchema `json:"$defs,omitempty"` // for $ref
 	// Type specifies the data type of the schema. OpenAI uses []string{Type, Null} to represent nullable types.
 	Type any `json:"type,omitempty"`
 	// Description is the description of the schema.
@@ -41,6 +43,11 @@ type JSONSchema struct {
 }
 
 func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
+	if bellmanSchema.Ref != "" {
+		return &JSONSchema{
+			Ref: bellmanSchema.Ref,
+		}
+	}
 	def := &JSONSchema{
 		Description: bellmanSchema.Description,
 		Required:    bellmanSchema.Required,
@@ -86,5 +93,13 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 			def.Enum[i] = e
 		}
 	}
+
+	if bellmanSchema.Defs != nil && len(bellmanSchema.Defs) > 0 {
+		def.Defs = make(map[string]*JSONSchema)
+		for key, prop := range bellmanSchema.Defs {
+			def.Defs[key] = fromBellmanSchema(prop)
+		}
+	}
+
 	return def
 }

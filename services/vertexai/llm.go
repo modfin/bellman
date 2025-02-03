@@ -9,6 +9,7 @@ import (
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
 	"io"
 	"net/http"
@@ -60,9 +61,13 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 	// Adding output schema to model
 	if g.request.OutputSchema != nil {
+		var outputSchemaDefs map[string]*schema.JSON
+		if g.request.OutputSchema.Defs != nil {
+			outputSchemaDefs = g.request.OutputSchema.Defs
+		}
 		ct := "application/json"
 		model.GenerationConfig.ResponseMimeType = &ct
-		model.GenerationConfig.ResponseSchema = fromBellmanSchema(g.request.OutputSchema)
+		model.GenerationConfig.ResponseSchema = fromBellmanSchema(g.request.OutputSchema, outputSchemaDefs)
 	}
 
 	// Adding tools to model
@@ -71,10 +76,14 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	if len(g.request.Tools) > 0 {
 		model.Tools = []genTool{{FunctionDeclaration: []genToolFunc{}}}
 		for _, t := range g.request.Tools {
+			var toolSchemaDefs map[string]*schema.JSON
+			if t.ArgumentSchema != nil {
+				toolSchemaDefs = t.ArgumentSchema.Defs
+			}
 			model.Tools[0].FunctionDeclaration = append(model.Tools[0].FunctionDeclaration, genToolFunc{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  fromBellmanSchema(t.ArgumentSchema),
+				Parameters:  fromBellmanSchema(t.ArgumentSchema, toolSchemaDefs),
 			})
 			toolBelt[t.Name] = &t
 		}

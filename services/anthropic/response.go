@@ -93,12 +93,12 @@ func (r *response) Eval() (err error) {
 				continue
 			}
 			if t.Function == nil {
-				return fmt.Errorf("tool %s has no callback", tool)
+				return fmt.Errorf("tool %s has no callback", tool.Name)
 			}
 			count++
 			_, err = t.Function(tool.Argument)
 			if err != nil {
-				return fmt.Errorf("tool %s failed: %w", tool, err)
+				return fmt.Errorf("tool %s failed: %w", tool.Name, err)
 			}
 			break
 		}
