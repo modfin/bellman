@@ -62,7 +62,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	if g.request.OutputSchema != nil {
 		ct := "application/json"
 		model.GenerationConfig.ResponseMimeType = &ct
-		model.GenerationConfig.ResponseSchema = g.request.OutputSchema
+		model.GenerationConfig.ResponseSchema = fromBellmanSchema(g.request.OutputSchema)
 	}
 
 	// Adding tools to model
@@ -74,7 +74,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 			model.Tools[0].FunctionDeclaration = append(model.Tools[0].FunctionDeclaration, genToolFunc{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  t.ArgumentSchema,
+				Parameters:  fromBellmanSchema(t.ArgumentSchema),
 			})
 			toolBelt[t.Name] = &t
 		}

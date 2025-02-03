@@ -6,26 +6,34 @@ import (
 	"strings"
 )
 
-// From converts a struct to a JSON JSON using reflection and struct tags
+// From converts a struct to a JSON using reflection and struct tags
 func From(v interface{}) *JSON {
 	t := reflect.TypeOf(v)
+	var nullable bool
 	if t.Kind() == reflect.Ptr {
+		nullable = true
 		t = t.Elem()
 	}
-	return typeToSchema(t)
+	schema := typeToSchema(t)
+	schema.Nullable = nullable
+	return schema
 }
 
 func typeToSchema(t reflect.Type) *JSON {
 	schema := &JSON{}
 
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+		schema.Nullable = true
+	}
 	switch t.Kind() {
 	case reflect.Map:
-		schema.Type = "object"
+		schema.Type = Object
 		schema.Properties = make(map[string]*JSON)
 		schema.AdditionalProperties = typeToSchema(t.Elem()) // The value type of the map, key is at t.Key()
 
 	case reflect.Struct:
-		schema.Type = "object"
+		schema.Type = Object
 		schema.Properties = make(map[string]*JSON)
 		schema.Required = []string{}
 
@@ -63,21 +71,21 @@ func typeToSchema(t reflect.Type) *JSON {
 		}
 
 	case reflect.Slice, reflect.Array:
-		schema.Type = "array"
+		schema.Type = Array
 		schema.Items = typeToSchema(t.Elem())
 
 	case reflect.String:
-		schema.Type = "string"
+		schema.Type = String
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		schema.Type = "integer"
+		schema.Type = Integer
 
 	case reflect.Float32, reflect.Float64:
-		schema.Type = "number"
+		schema.Type = Number
 
 	case reflect.Bool:
-		schema.Type = "boolean"
+		schema.Type = Boolean
 	}
 
 	return schema
@@ -91,7 +99,7 @@ func fieldToSchema(field reflect.StructField) *JSON {
 		schema.Description = desc
 	}
 	if typeName := field.Tag.Get("json-type"); typeName != "" {
-		schema.Type = typeName
+		schema.Type = JSONType(typeName)
 	}
 
 	// Handle number validation for fields

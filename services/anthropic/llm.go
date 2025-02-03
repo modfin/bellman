@@ -51,7 +51,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			{
 				Name:        respone_output_callback_name,
 				Description: "function that is called with the result of the llm query",
-				InputSchema: g.request.OutputSchema,
+				InputSchema: fromBellmanSchema(g.request.OutputSchema),
 			},
 		}
 		model.Tool = &reqToolChoice{
@@ -69,7 +69,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			model.Tools = append(model.Tools, reqTool{
 				Name:        t.Name,
 				Description: t.Description,
-				InputSchema: t.ArgumentSchema,
+				InputSchema: fromBellmanSchema(t.ArgumentSchema),
 			})
 			toolBelt[t.Name] = &t
 		}

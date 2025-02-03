@@ -62,7 +62,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			Type: "function",
 			Function: toolFunction{
 				Name:        t.Name,
-				Parameters:  t.ArgumentSchema,
+				Parameters:  fromBellmanSchema(t.ArgumentSchema),
 				Description: t.Description,
 			},
 		})
@@ -85,7 +85,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	// Dealing with Output Schema
 	if g.request.OutputSchema != nil {
-		reqModel.Format = g.request.OutputSchema
+		reqModel.Format = fromBellmanSchema(g.request.OutputSchema)
 	}
 
 	// Dealing with Prompt Messages

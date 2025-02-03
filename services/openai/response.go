@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
 )
 
@@ -47,8 +46,8 @@ type responseToolCall struct {
 }
 
 type toolFunc struct {
-	Name        string       `json:"name"`
-	Parameters  *schema.JSON `json:"parameters,omitempty"`
-	Description string       `json:"description,omitempty"`
-	Strict      bool         `json:"strict,omitempty"`
+	Name        string      `json:"name"`
+	Parameters  *JSONSchema `json:"parameters,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Strict      bool        `json:"strict,omitempty"`
 }

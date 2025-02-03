@@ -204,6 +204,23 @@ From many models, you can now specify a schema that you want the models to outpu
 
 A supporting library that can transforming your go struct to json schema is provided. `github.com/modfin/bellman/schema`
 
+There are a few different annotations that you can use on your golang structs to enrich the corresponding json schema.
+
+| Annotation | Description                                                                                         | Supported |
+|------------|-----------------------------------------------------------------------------------------------------|-----------|
+| json-description | A description of the field, overrides the default description value                                 | *         |
+| json-type | The type of the field, overrides the default type value                                             | *         |
+| json-enum | A list of possible values for the field. Can be used with: slices, string, number, integer, boolean | *         |
+| json-maximum | The maximum value for the field. Can be used with: number, integer                                  | VertexAI  |
+| json-minimum | The minimum value for the field. Can be used with: number, integer                                  | VertexAI  |
+| json-exclusive-maximum | The exclusive maximum value for the field. Can be used with: number, integer                        | VertexAI  |
+| json-exclusive-minimum | The exclusive minimum value for the field. Can be used with: number, integer                        | VertexAI  |
+| json-max-items | The maximum number of items in the array. Can be used with: slices                                  | VertexAI  |
+| json-min-items | The minimum number of items in the array. Can be used with: slices                                  | VertexAI  |
+| json-max-length | The maximum length of the string. Can be used with: string                                          | VertexAI  |
+| json-min-length | The minimum length of the string. Can be used with: string                                          | VertexAI  |
+
+
 ```go
 
 type Quote struct {

@@ -14,6 +14,7 @@ type Request struct {
 	SystemPrompt string `json:"system_prompt,omitempty"`
 
 	OutputSchema *schema.JSON `json:"output_schema,omitempty"`
+	StrictOutput bool         `json:"output_strict,omitempty"`
 
 	Tools      []tools.Tool `json:"tools,omitempty"`
 	ToolConfig *tools.Tool  `json:"tool,omitempty"`

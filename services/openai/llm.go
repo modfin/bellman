@@ -54,7 +54,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			Type: "function",
 			Function: toolFunc{
 				Name:        t.Name,
-				Parameters:  t.ArgumentSchema,
+				Parameters:  fromBellmanSchema(t.ArgumentSchema),
 				Description: t.Description,
 				Strict:      false,
 			},
@@ -82,8 +82,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			Type: "json_schema",
 			ResponseFormatSchema: responseFormatSchema{
 				Name:   "response",
-				Strict: false,
-				Schema: g.request.OutputSchema,
+				Strict: g.request.StrictOutput,
+				Schema: fromBellmanSchema(g.request.OutputSchema),
 			},
 		}
 	}
