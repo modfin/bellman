@@ -43,7 +43,9 @@ const (
 )
 
 type JSON struct {
-	//Ref string `json:"$ref,omitempty"` // #/$defs/... etc, overrides everything else // TODO
+	// Only relevant when defining a custom schema, i.e. not using schema.From
+	Ref  string           `json:"$ref,omitempty"`  // #/$defs/... etc, overrides everything else
+	Defs map[string]*JSON `json:"$defs,omitempty"` // for $ref
 
 	// JSON Metadata
 	Description string `json:"description,omitempty"`

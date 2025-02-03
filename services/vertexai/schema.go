@@ -2,6 +2,7 @@ package vertexai
 
 import (
 	"github.com/modfin/bellman/schema"
+	"strings"
 )
 
 // https://ai.google.dev/gemini-api/docs/structured-output?lang=rest
@@ -72,7 +73,17 @@ type JSONSchema struct {
 	Pattern string `json:"pattern,omitempty"`
 }
 
-func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
+func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema.JSON) *JSONSchema {
+	// vertexai does not support $ref, so we try to build the schema from the $defs properties manually instead
+	if bellmanSchema.Ref != "" && schemaDefs != nil {
+		refKey := strings.TrimLeft(bellmanSchema.Ref, "#/$defs/")
+		prop, ok := schemaDefs[refKey]
+		if !ok {
+			return nil
+		}
+		return fromBellmanSchema(prop, schemaDefs)
+	}
+
 	def := &JSONSchema{
 		Description: bellmanSchema.Description,
 		Required:    bellmanSchema.Required,
@@ -98,11 +109,11 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	if len(bellmanSchema.Properties) > 0 {
 		def.Properties = make(map[string]*JSONSchema)
 		for key, prop := range bellmanSchema.Properties {
-			def.Properties[key] = fromBellmanSchema(prop)
+			def.Properties[key] = fromBellmanSchema(prop, schemaDefs)
 		}
 	}
 	if bellmanSchema.Items != nil {
-		def.Items = fromBellmanSchema(bellmanSchema.Items)
+		def.Items = fromBellmanSchema(bellmanSchema.Items, schemaDefs)
 	}
 
 	if len(bellmanSchema.Enum) > 0 {
