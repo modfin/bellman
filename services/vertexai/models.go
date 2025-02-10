@@ -9,6 +9,17 @@ import (
 
 const Provider = "VertexAI"
 
+var GenModel_gemini_2_0_flash_001 = gen.Model{
+	Provider:                Provider,
+	Name:                    "gemini-2.0-flash-001",
+	Description:             "Fast and versatile performance across a diverse variety of tasks",
+	InputContentTypes:       nil,
+	InputMaxToken:           0,
+	OutputMaxToken:          0,
+	SupportTools:            false,
+	SupportStructuredOutput: false,
+}
+
 var GenModel_gemini_2_0_flash = gen.Model{
 	Provider:                Provider,
 	Name:                    "gemini-2.0-flash-exp", // Region: "us-central1",
@@ -176,6 +187,7 @@ var EmbedModels = map[string]embed.Model{
 }
 
 var GenModels = map[string]gen.Model{
+	GenModel_gemini_2_0_flash_001.Name: GenModel_gemini_2_0_flash_001,
 	GenModel_gemini_1_5_flash.Name:     GenModel_gemini_1_5_flash,
 	GenModel_gemini_1_5_flash_001.Name: GenModel_gemini_1_5_flash_001,
 	GenModel_gemini_1_5_flash_002.Name: GenModel_gemini_1_5_flash_002,
