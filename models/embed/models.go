@@ -39,3 +39,17 @@ type Response struct {
 	Embedding []float64       `json:"embedding"`
 	Metadata  models.Metadata `json:"metadata,omitempty"`
 }
+
+func (r *Response) AsFloat64() []float64 {
+	output := make([]float64, len(r.Embedding))
+	copy(output, r.Embedding)
+	return output
+}
+
+func (r *Response) AsFloat32() []float32 {
+	output := make([]float32, len(r.Embedding))
+	for i, v := range r.Embedding {
+		output[i] = float32(v)
+	}
+	return output
+}
