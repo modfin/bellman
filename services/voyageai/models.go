@@ -7,6 +7,15 @@ import (
 const Provider = "VoyageAI"
 
 // https://docs.voyageai.com/docs/embeddings
+
+var EmbedModel_voyage_3_large = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-3-large",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "The best general-purpose and multilingual retrieval quality",
+}
+
 var EmbedModel_voyage_3 = embed.Model{
 	Provider:         Provider,
 	Name:             "voyage-3",
@@ -80,6 +89,7 @@ var EmbedModel_voyage_2 = embed.Model{
 }
 
 var EmbedModels = map[string]embed.Model{
+	EmbedModel_voyage_3_large.Name:        EmbedModel_voyage_3_large,
 	EmbedModel_voyage_3.Name:              EmbedModel_voyage_3,
 	EmbedModel_voyage_3_lite.Name:         EmbedModel_voyage_3_lite,
 	EmbedModel_voyage_finance_2.Name:      EmbedModel_voyage_finance_2,
