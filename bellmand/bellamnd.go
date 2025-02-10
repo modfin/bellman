@@ -74,13 +74,6 @@ func main() {
 				Name:    "anthropic-key",
 				EnvVars: []string{"BELLMAN_ANTHROPIC_KEY"},
 			},
-			&cli.StringFlag{
-				Name:    "anthropic-gen-models",
-				EnvVars: []string{"BELLMAN_ANTHROPIC_GEN_MODELS"},
-				Usage: `A json array containing objects with the name of the model, 
-	eg [{"name": "claude-3-5-haiku-latest"}]. If not provided, all default models will be loaded. 
-	If provided, only the models in the array will be loaded.`,
-			},
 
 			&cli.StringFlag{
 				Name:    "google-project",
@@ -98,13 +91,6 @@ func main() {
 				Usage:   "Content of a service account key file, a json object. If not provided, default credentials will be used from environment. ie if its deployed on GCP",
 			},
 			&cli.StringFlag{
-				Name:    "google-gen-models",
-				EnvVars: []string{"BELLMAN_GOOGLE_GEN_MODELS"},
-				Usage: `A json array containing objects with the name of the model, 
-	eg [{"name": "gemini-1.5-flash-002"}]. If not provided, all default models will be loaded. 
-	If provided, only the models in the array will be loaded.`,
-			},
-			&cli.StringFlag{
 				Name:    "google-embed-models",
 				EnvVars: []string{"BELLMAN_GOOGLE_EMBED_MODELS"},
 				Usage: `A json array containing objects with the name of the model, 
@@ -116,31 +102,10 @@ func main() {
 				Name:    "openai-key",
 				EnvVars: []string{"BELLMAN_OPENAI_KEY"},
 			},
-			&cli.StringFlag{
-				Name:    "openai-gen-models",
-				EnvVars: []string{"BELLMAN_OPENAI_GEN_MODELS"},
-				Usage: `A json array containing objects with the name of the model, 
-	eg [{"name": "chatgpt-4o-latest"}]. If not provided, all default models will be loaded. 
-	If provided, only the models in the array will be loaded.`,
-			},
-			&cli.StringFlag{
-				Name:    "openai-embed-models",
-				EnvVars: []string{"BELLMAN_OPENAI_EMBED_MODELS"},
-				Usage: `A json array containing objects with the name of the model, 
-	eg [{"name": "text-embedding-ada-002"}]. If not provided, all default models will be loaded. 
-	If provided, only the models in the array will be loaded.`,
-			},
 
 			&cli.StringFlag{
 				Name:    "voyageai-key",
 				EnvVars: []string{"BELLMAN_VOYAGEAI_KEY"},
-			},
-			&cli.StringFlag{
-				Name:    "voyageai-embed-models",
-				EnvVars: []string{"BELLMAN_VOYAGEAI_EMBED_MODELS"},
-				Usage: `A json array containing objects with the name of the model, 
-	eg [{"name": "voyage-3-lite"}]. If not provided, all default models will be loaded. 
-	If provided, only the models in the array will be loaded.`,
 			},
 
 			&cli.StringFlag{
@@ -149,10 +114,6 @@ func main() {
 				Usage:   `The url of the ollama service, eg http://localhost:11434`,
 			},
 
-			&cli.BoolFlag{
-				Name:    "allow-user-models",
-				EnvVars: []string{"BELLMAN_ALLOW_USER_MODELS"},
-			},
 			&cli.BoolFlag{
 				Name:    "disable-gen-models",
 				EnvVars: []string{"BELLMAN_DISABLE_GEN_MODELS"},
@@ -238,25 +199,14 @@ type Config struct {
 
 	HttpPort int `cli:"http-port"`
 
-	AllowUserModels    bool `cli:"allow-user-models"`
 	DisableGenModels   bool `cli:"disable-gen-models"`
 	DisableEmbedModels bool `cli:"disable-embed-models"`
 
-	AnthropicKey       string `cli:"anthropic-key"`
-	AnthropicGenModels string `cli:"anthropic-gen-models"`
-
-	OpenAiKey         string `cli:"openai-key"`
-	OpenAiGenModels   string `cli:"openai-gen-models"`
-	OpenAiEmbedModels string `cli:"openai-embed-models"`
-
-	Google            GoogleConfig
-	GoogleGenModels   string `cli:"google-gen-models"`
-	GoogleEmbedModels string `cli:"google-embed-models"`
-
-	VoyageAiKey         string `cli:"voyageai-key"`
-	VoyageAiEmbedModels string `cli:"voyageai-embed-models"`
-
-	OllamaURL string `cli:"ollama-url"`
+	AnthropicKey string `cli:"anthropic-key"`
+	OpenAiKey    string `cli:"openai-key"`
+	Google       GoogleConfig
+	VoyageAiKey  string `cli:"voyageai-key"`
+	OllamaURL    string `cli:"ollama-url"`
 
 	PrometheusMetricsBasicAuth string `cli:"prometheus-metrics-basic-auth"`
 	PrometheusPushUrl          string `cli:"prometheus-push-url"`
@@ -509,12 +459,6 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Use(auth(cfg))
 
-		//r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
-		//	models := proxy.GenModels()
-		//	w.Header().Set("Content-Type", "application/json")
-		//	_ = json.NewEncoder(w).Encode(models)
-		//})
-
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 
 			body, err := io.ReadAll(r.Body)
@@ -636,29 +580,6 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 		})
 	}
-}
-
-func genModelsOf(str string, provider string) ([]gen.Model, error) {
-	var models []gen.Model
-	err := json.Unmarshal([]byte(str), &models)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse gen models, %w", err)
-	}
-	for i, _ := range models {
-		models[i].Provider = provider
-	}
-	return models, nil
-}
-func embedModelsOf(str string, provider string) ([]embed.Model, error) {
-	var models []embed.Model
-	err := json.Unmarshal([]byte(str), &models)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse gen models, %w", err)
-	}
-	for i, _ := range models {
-		models[i].Provider = provider
-	}
-	return models, nil
 }
 
 func setupProxy(cfg Config) (*bellman.Proxy, error) {
