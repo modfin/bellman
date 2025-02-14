@@ -112,36 +112,54 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 	for _, p := range prompts {
 		var role string
+		part := genRequestContentPart{}
 		switch p.Role {
 		case prompt.Assistant:
 			role = "model"
+		case prompt.Tool:
+			role = "tool"
 		default:
 			role = "user"
 		}
-		content := genRequestContent{
-			Role: role,
-			Parts: []genRequestContentPart{
-				{
-					Text: p.Text,
+
+		if p.ToolCall != nil {
+			part.FunctionCall = &functionCall{
+				Name: p.ToolCall.Name,
+				Args: p.ToolCall.Arguments,
+			}
+		} else if p.ToolResponse != nil {
+			part.FunctionResponse = &functionResponse{
+				Name: p.ToolResponse.Name,
+				Response: struct {
+					Name    string `json:"name,omitempty"`
+					Content any    `json:"content,omitempty"`
+				}{
+					Name:    p.ToolResponse.Name,
+					Content: p.ToolResponse.Response,
 				},
-			},
+			}
+		} else {
+			part.Text = p.Text
 		}
 
 		if p.Payload != nil {
 			if len(p.Payload.Data) > 0 {
-				content.Parts[0].InlineDate = &inlineDate{
+				part.InlineData = &inlineData{
 					MimeType: p.Payload.Mime,
 					Data:     p.Payload.Data,
 				}
 			}
 			if len(p.Payload.Uri) > 0 {
-				content.Parts[0].InlineDate = nil
-				content.Parts[0].FileData = &fileDate{
+				part.InlineData = nil
+				part.FileData = &fileData{
 					MimeType: p.Payload.Mime,
 					FileUri:  p.Payload.Uri,
 				}
 			}
-
+		}
+		content := genRequestContent{
+			Role:  role,
+			Parts: []genRequestContentPart{part},
 		}
 
 		model.Contents = append(model.Contents, content)
@@ -236,7 +254,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 			if len(p.Text) == 0 && len(p.FunctionCall.Name) > 0 { // Tool calls
 				f := p.FunctionCall
-				arg, err := json.Marshal(f.Arg)
+				arg, err := json.Marshal(f.Args)
 				if err != nil {
 					return nil, fmt.Errorf("could not marshal google request, %w", err)
 				}

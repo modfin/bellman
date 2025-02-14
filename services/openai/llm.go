@@ -26,12 +26,6 @@ func (g *generator) SetRequest(config gen.Request) {
 }
 
 func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error) {
-
-	// Open Ai specific
-	if g.request.SystemPrompt != "" {
-		conversation = append([]prompt.Prompt{{Role: "system", Text: g.request.SystemPrompt}}, conversation...)
-	}
-
 	reqModel := genRequest{
 		Model: g.request.Model.Name,
 		Stop:  g.request.StopSequences,
@@ -56,7 +50,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				Name:        t.Name,
 				Parameters:  fromBellmanSchema(t.ArgumentSchema),
 				Description: t.Description,
-				Strict:      false,
+				Strict:      g.request.StrictOutput,
 			},
 		})
 		toolBelt[t.Name] = &t
@@ -88,21 +82,61 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		}
 	}
 
-	// Dealing with Prompt Messages
 	messages := []genRequestMessage{}
-	for _, c := range conversation {
-		message := genRequestMessage{
-			Role: string(c.Role),
-			Content: []genMessageContent{
-				{Type: "text", Text: c.Text},
-			},
-		}
-		if c.Payload != nil {
-			message.Content[0].Type = "image_url"
-			message.Content[0].ImageUrl = &ImageUrl{data: c.Payload.Data}
-		}
 
-		messages = append(messages, message)
+	// Dealing with Prompt Messages
+	// Open Ai specific
+	if g.request.SystemPrompt != "" {
+		messages = append(messages, genRequestMessageText{Role: "system", Content: []genRequestMessageContent{{Type: "text", Text: g.request.SystemPrompt}}})
+	}
+	for _, c := range conversation {
+		switch c.Role {
+		case prompt.Tool:
+			if c.ToolResponse == nil {
+				return nil, fmt.Errorf("ToolResponse is required for role function")
+			}
+			messages = append(messages, genRequestMessageToolResponse{
+				Role:       "tool",
+				ToolCallID: c.ToolResponse.ToolCallID,
+				Content:    c.ToolResponse.Response,
+			})
+		default:
+			if c.ToolCall != nil {
+				messages = append(messages, genRequestMessageToolCalls{
+					Role: "assistant",
+					ToolCalls: []genRequestMessageToolCall{
+						{
+							ID:   c.ToolCall.ToolCallID,
+							Type: "function",
+							Function: genRequestMessageToolCallFunction{
+								Name:      c.ToolCall.Name,
+								Arguments: c.ToolCall.Arguments,
+							},
+						},
+					},
+				})
+				continue
+			}
+			message := genRequestMessageText{
+				Role: string(c.Role),
+				Content: []genRequestMessageContent{
+					{Type: "text", Text: c.Text},
+				},
+			}
+
+			if c.Payload != nil {
+				message.Content = append(message.Content,
+					genRequestMessageContent{
+						Type: "image_url",
+						ImageUrl: ImageUrl{
+							Url:  c.Payload.Uri,
+							data: c.Payload.Data,
+						},
+					},
+				)
+			}
+			messages = append(messages, message)
+		}
 	}
 	reqModel.Messages = messages
 
@@ -177,6 +211,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		if len(message.ToolCalls) > 0 { // Tool calls
 			for _, t := range message.ToolCalls {
 				res.Tools = append(res.Tools, tools.Call{
+					ID:       t.ID,
 					Name:     t.Function.Name,
 					Argument: t.Function.Arguments,
 					Ref:      toolBelt[t.Function.Name],

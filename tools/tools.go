@@ -70,6 +70,7 @@ type Tool struct {
 }
 
 type Call struct {
+	ID       string `json:"id,omitempty"`
 	Name     string `json:"name"`
 	Argument string `json:"argument"`
 

@@ -111,25 +111,27 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		}
 
 		if t.Payload != nil {
-			message.Content[0].Text = ""
-
 			if t.Payload.Mime == "application/pdf" {
+				message.Content = append(message.Content, reqContent{
+					Type: "document",
+					Source: &reqContentSource{
+						Type:      "base64",
+						MediaType: t.Payload.Mime,
+						Data:      t.Payload.Data,
+					},
+				})
 				pdfBeta = true
-				message.Content[0].Type = "document"
-				message.Content[0].Source = &reqContentSource{
-					Type:      "base64",
-					MediaType: t.Payload.Mime,
-					Data:      t.Payload.Data,
-				}
 			}
 
 			if strings.HasPrefix(t.Payload.Mime, "image/") {
-				message.Content[0].Type = "image"
-				message.Content[0].Source = &reqContentSource{
-					Type:      "base64",
-					MediaType: t.Payload.Mime,
-					Data:      t.Payload.Data,
-				}
+				message.Content = append(message.Content, reqContent{
+					Type: "image",
+					Source: &reqContentSource{
+						Type:      "base64",
+						MediaType: t.Payload.Mime,
+						Data:      t.Payload.Data,
+					},
+				})
 			}
 		}
 

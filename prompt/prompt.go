@@ -7,17 +7,31 @@ type Role string
 const System = Role("system")
 const User = Role("user")
 const Assistant = Role("assistant")
+const Tool = Role("tool")
 
 type Prompt struct {
-	Role    Role     `json:"role"`
-	Text    string   `json:"text"`
-	Payload *Payload `json:"payload,omitempty"`
+	Role         Role          `json:"role"`
+	Text         string        `json:"text,omitempty"`
+	Payload      *Payload      `json:"payload,omitempty"`
+	ToolCall     *ToolCall     `json:"tool_call,omitempty"`
+	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
 }
 
 type Payload struct {
 	Mime string `json:"mime_type"`
 	Data string `json:"data"`
 	Uri  string `json:"uri"`
+}
+
+type ToolCall struct {
+	ToolCallID string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	Arguments  any    `json:"arguments"`
+}
+type ToolResponse struct {
+	ToolCallID string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	Response   any    `json:"content"`
 }
 
 func AsAssistant(text string) Prompt {
@@ -31,6 +45,12 @@ func AsUserWithData(mime string, data []byte) Prompt {
 }
 func AsUserWithURI(mime string, uri string) Prompt {
 	return Prompt{Role: User, Payload: &Payload{Mime: mime, Uri: uri}}
+}
+func AsToolCall(toolCallID, functionName string, functionArg any) Prompt {
+	return Prompt{Role: Assistant, ToolCall: &ToolCall{ToolCallID: toolCallID, Name: functionName, Arguments: functionArg}}
+}
+func AsToolResponse(toolCallID, functionName string, response any) Prompt {
+	return Prompt{Role: Tool, ToolResponse: &ToolResponse{ToolCallID: toolCallID, Name: functionName, Response: response}}
 }
 
 const MimeApplicationPDF = "application/pdf"

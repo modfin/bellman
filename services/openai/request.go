@@ -4,18 +4,49 @@ import (
 	"encoding/json"
 )
 
-type genRequestMessage struct {
-	// https://platform.openai.com/docs/guides/text-generation?lang=curl&text-generation-quickstart-example=json#building-prompts
-	// system,assistant or user
-	Role    string              `json:"role"`
-	Content []genMessageContent `json:"content"`
+// https://platform.openai.com/docs/api-reference/chat/create
+
+type genRequestMessage interface {
+	GetRole() string
 }
 
-type genMessageContent struct {
-	Type     string    `json:"type"` // text or image_url
-	Text     string    `json:"text,omitempty"`
-	ImageUrl *ImageUrl `json:"image_url,omitempty"`
+type genRequestMessageContent struct {
+	Type     string   `json:"type"`
+	Text     string   `json:"text,omitempty"`
+	ImageUrl ImageUrl `json:"image_url,omitempty"`
 }
+
+type genRequestMessageText struct {
+	Role    string                     `json:"role"`
+	Content []genRequestMessageContent `json:"content"`
+}
+
+func (g genRequestMessageText) GetRole() string { return g.Role }
+
+type genRequestMessageToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments any    `json:"arguments"`
+}
+type genRequestMessageToolCall struct {
+	ID       string                            `json:"id"`
+	Type     string                            `json:"type"`
+	Function genRequestMessageToolCallFunction `json:"function"`
+}
+
+type genRequestMessageToolCalls struct {
+	Role      string                      `json:"role"`
+	ToolCalls []genRequestMessageToolCall `json:"tool_calls"`
+}
+
+func (g genRequestMessageToolCalls) GetRole() string { return g.Role }
+
+type genRequestMessageToolResponse struct {
+	Role       string `json:"role"`
+	Content    any    `json:"content"`
+	ToolCallID string `json:"tool_call_id"`
+}
+
+func (g genRequestMessageToolResponse) GetRole() string { return g.Role }
 
 type ImageUrl struct {
 	Url  string `json:"url"` /// data:image/jpeg;base64,......

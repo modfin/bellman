@@ -7,17 +7,32 @@ type genRequestContent struct {
 type genRequestContentPart struct {
 	Text string `json:"text,omitempty"`
 
-	InlineDate *inlineDate `json:"inlineData,omitempty"`
-	FileData   *fileDate   `json:"fileData,omitempty"`
+	InlineData       *inlineData       `json:"inlineData,omitempty"`
+	FileData         *fileData         `json:"fileData,omitempty"`
+	FunctionCall     *functionCall     `json:"functionCall,omitempty"`
+	FunctionResponse *functionResponse `json:"functionResponse,omitempty"`
 }
 
-type inlineDate struct {
+type inlineData struct {
 	MimeType string `json:"mimeType,omitempty"`
 	Data     string `json:"data,omitempty"` // base64 encoded. Max 20mb
 }
-type fileDate struct {
+type fileData struct {
 	MimeType string `json:"mimeType,omitempty"`
 	FileUri  string `json:"fileUri,omitempty"` // uri, eg gs://bucket/file
+}
+
+type functionCall struct {
+	Name string `json:"name,omitempty"`
+	Args any    `json:"args,omitempty"`
+}
+
+type functionResponse struct {
+	Name     string `json:"name,omitempty"`
+	Response struct {
+		Name    string `json:"name,omitempty"`
+		Content any    `json:"content,omitempty"`
+	} `json:"response,omitempty"`
 }
 
 type genConfig struct {

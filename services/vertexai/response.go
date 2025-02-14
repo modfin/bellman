@@ -9,11 +9,6 @@ type response struct {
 	tools []tools.Tool
 }
 
-type functionCall struct {
-	Name string `json:"name"`
-	Arg  any    `json:"args"`
-}
-
 type geminiResponse struct {
 	Candidates []struct {
 		Content struct {
