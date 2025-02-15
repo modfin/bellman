@@ -111,57 +111,55 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	}
 
 	for _, p := range prompts {
-		var role string
-		part := genRequestContentPart{}
-		switch p.Role {
-		case prompt.Assistant:
-			role = "model"
-		case prompt.Tool:
-			role = "tool"
-		default:
-			role = "user"
-		}
-
-		if p.ToolCall != nil {
-			part.FunctionCall = &functionCall{
-				Name: p.ToolCall.Name,
-				Args: p.ToolCall.Arguments,
-			}
-		} else if p.ToolResponse != nil {
-			part.FunctionResponse = &functionResponse{
-				Name: p.ToolResponse.Name,
-				Response: struct {
-					Name    string `json:"name,omitempty"`
-					Content any    `json:"content,omitempty"`
-				}{
-					Name:    p.ToolResponse.Name,
-					Content: p.ToolResponse.Response,
-				},
-			}
-		} else {
-			part.Text = p.Text
-		}
-
-		if p.Payload != nil {
-			if len(p.Payload.Data) > 0 {
-				part.InlineData = &inlineData{
-					MimeType: p.Payload.Mime,
-					Data:     p.Payload.Data,
-				}
-			}
-			if len(p.Payload.Uri) > 0 {
-				part.InlineData = nil
-				part.FileData = &fileData{
-					MimeType: p.Payload.Mime,
-					FileUri:  p.Payload.Uri,
-				}
-			}
-		}
 		content := genRequestContent{
-			Role:  role,
-			Parts: []genRequestContentPart{part},
+			Parts: []genRequestContentPart{},
 		}
-
+		switch p.Role {
+		case prompt.ToolResponseRole:
+			if p.ToolResponse == nil {
+				return nil, fmt.Errorf("ToolResponse is required for role tool response")
+			}
+			content.Role = "tool"
+			content.Parts = append(content.Parts, genRequestContentPart{
+				FunctionResponse: &functionResponse{
+					Name: p.ToolResponse.Name,
+					Response: struct {
+						Name    string `json:"name,omitempty"`
+						Content any    `json:"content,omitempty"`
+					}{Name: p.ToolResponse.Name, Content: p.ToolResponse.Response},
+				},
+			})
+		case prompt.ToolCallRole:
+			if p.ToolCall == nil {
+				return nil, fmt.Errorf("ToolCall is required for role tool call")
+			}
+			content.Role = "model"
+			content.Parts = append(content.Parts, genRequestContentPart{
+				FunctionCall: &functionCall{Name: p.ToolCall.Name, Args: p.ToolCall.Arguments},
+			})
+		default: // prompt.UserRole, prompt.AssistantRole
+			content.Role = "user"
+			if p.Role == prompt.AssistantRole {
+				content.Role = "model"
+			}
+			part := genRequestContentPart{Text: p.Text}
+			if p.Payload != nil {
+				if len(p.Payload.Data) > 0 {
+					part.InlineData = &inlineData{
+						MimeType: p.Payload.Mime,
+						Data:     p.Payload.Data,
+					}
+				}
+				if len(p.Payload.Uri) > 0 {
+					part.InlineData = nil
+					part.FileData = &fileData{
+						MimeType: p.Payload.Mime,
+						FileUri:  p.Payload.Uri,
+					}
+				}
+			}
+			content.Parts = append(content.Parts, part)
+		}
 		model.Contents = append(model.Contents, content)
 	}
 

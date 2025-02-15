@@ -101,37 +101,64 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	}
 
 	for _, t := range conversation {
-
-		message := reqMessages{
-			Role: string(t.Role),
-			Content: []reqContent{{
-				Type: "text",
-				Text: t.Text,
-			}},
-		}
-
-		if t.Payload != nil {
-			if t.Payload.Mime == "application/pdf" {
-				message.Content = append(message.Content, reqContent{
-					Type: "document",
-					Source: &reqContentSource{
-						Type:      "base64",
-						MediaType: t.Payload.Mime,
-						Data:      t.Payload.Data,
-					},
-				})
-				pdfBeta = true
+		var message reqMessages
+		switch t.Role {
+		case prompt.ToolResponseRole:
+			if t.ToolResponse == nil {
+				return nil, fmt.Errorf("ToolResponse is required for role tool response")
 			}
+			message = reqMessages{
+				Role: "user",
+				Content: []reqContent{{
+					Type:      "tool_result",
+					ToolUseID: t.ToolResponse.ToolCallID,
+					Content:   t.ToolResponse.Response,
+				}},
+			}
+		case prompt.ToolCallRole:
+			if t.ToolCall == nil {
+				return nil, fmt.Errorf("ToolCall is required for role tool call")
+			}
+			message = reqMessages{
+				Role: "assistant",
+				Content: []reqContent{{
+					Type:  "tool_use",
+					ID:    t.ToolCall.ToolCallID,
+					Name:  t.ToolCall.Name,
+					Input: t.ToolCall.Arguments,
+				}},
+			}
+		default: // prompt.UserRole, prompt.AssistantRole
+			message = reqMessages{
+				Role: string(t.Role),
+				Content: []reqContent{{
+					Type: "text",
+					Text: t.Text,
+				}},
+			}
+			if t.Payload != nil {
+				if t.Payload.Mime == "application/pdf" {
+					message.Content = append(message.Content, reqContent{
+						Type: "document",
+						Source: &reqContentSource{
+							Type:      "base64",
+							MediaType: t.Payload.Mime,
+							Data:      t.Payload.Data,
+						},
+					})
+					pdfBeta = true
+				}
 
-			if strings.HasPrefix(t.Payload.Mime, "image/") {
-				message.Content = append(message.Content, reqContent{
-					Type: "image",
-					Source: &reqContentSource{
-						Type:      "base64",
-						MediaType: t.Payload.Mime,
-						Data:      t.Payload.Data,
-					},
-				})
+				if strings.HasPrefix(t.Payload.Mime, "image/") {
+					message.Content = append(message.Content, reqContent{
+						Type: "image",
+						Source: &reqContentSource{
+							Type:      "base64",
+							MediaType: t.Payload.Mime,
+							Data:      t.Payload.Data,
+						},
+					})
+				}
 			}
 		}
 
@@ -214,6 +241,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				return nil, fmt.Errorf("could not marshal tool arguments, %w", err)
 			}
 			res.Tools = append(res.Tools, tools.Call{
+				ID:       c.ID,
 				Name:     c.Name,
 				Argument: string(arg),
 				Ref:      toolBelt[c.Name],
@@ -221,7 +249,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		}
 	}
 
-	// This is really an out put schema callback. So lets just transform it to Text
+	// This is really an output schema callback. So lets just transform it to Text
 	if len(res.Tools) == 1 && res.Tools[0].Name == respone_output_callback_name {
 		res.Texts = []string{res.Tools[0].Argument}
 		res.Tools = nil

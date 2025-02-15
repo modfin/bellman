@@ -87,36 +87,40 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	// Dealing with Prompt Messages
 	// Open Ai specific
 	if g.request.SystemPrompt != "" {
-		messages = append(messages, genRequestMessageText{Role: "system", Content: []genRequestMessageContent{{Type: "text", Text: g.request.SystemPrompt}}})
+		messages = append(messages, genRequestMessageText{
+			Role:    "system",
+			Content: []genRequestMessageContent{{Type: "text", Text: g.request.SystemPrompt}},
+		})
 	}
 	for _, c := range conversation {
 		switch c.Role {
-		case prompt.Tool:
+		case prompt.ToolResponseRole:
 			if c.ToolResponse == nil {
-				return nil, fmt.Errorf("ToolResponse is required for role function")
+				return nil, fmt.Errorf("ToolResponse is required for role tool response")
 			}
 			messages = append(messages, genRequestMessageToolResponse{
 				Role:       "tool",
 				ToolCallID: c.ToolResponse.ToolCallID,
 				Content:    c.ToolResponse.Response,
 			})
-		default:
-			if c.ToolCall != nil {
-				messages = append(messages, genRequestMessageToolCalls{
-					Role: "assistant",
-					ToolCalls: []genRequestMessageToolCall{
-						{
-							ID:   c.ToolCall.ToolCallID,
-							Type: "function",
-							Function: genRequestMessageToolCallFunction{
-								Name:      c.ToolCall.Name,
-								Arguments: c.ToolCall.Arguments,
-							},
+		case prompt.ToolCallRole:
+			if c.ToolCall == nil {
+				return nil, fmt.Errorf("ToolCall is required for role tool call")
+			}
+			messages = append(messages, genRequestMessageToolCalls{
+				Role: "assistant",
+				ToolCalls: []genRequestMessageToolCall{
+					{
+						ID:   c.ToolCall.ToolCallID,
+						Type: "function",
+						Function: genRequestMessageToolCallFunction{
+							Name:      c.ToolCall.Name,
+							Arguments: c.ToolCall.Arguments,
 						},
 					},
-				})
-				continue
-			}
+				},
+			})
+		default: // prompt.UserRole, prompt.AssistantRole
 			message := genRequestMessageText{
 				Role: string(c.Role),
 				Content: []genRequestMessageContent{
@@ -208,7 +212,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			res.Texts = append(res.Texts, c.Message.Content)
 		}
 
-		if len(message.ToolCalls) > 0 { // Tool calls
+		if len(message.ToolCalls) > 0 { // ToolResponseRole calls
 			for _, t := range message.ToolCalls {
 				res.Tools = append(res.Tools, tools.Call{
 					ID:       t.ID,

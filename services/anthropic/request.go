@@ -42,9 +42,14 @@ type reqTool struct {
 }
 
 type reqContent struct {
-	Type   string            `json:"type"` // eg text, image
-	Text   string            `json:"text,omitempty"`
-	Source *reqContentSource `json:"source,omitempty"`
+	Type      string            `json:"type"` // eg text, image
+	Text      string            `json:"text,omitempty"`
+	Source    *reqContentSource `json:"source,omitempty"`
+	ID        string            `json:"id,omitempty"`
+	ToolUseID string            `json:"tool_use_id,omitempty"`
+	Name      string            `json:"name,omitempty"`
+	Input     any               `json:"input,omitempty"`
+	Content   any               `json:"content,omitempty"`
 }
 
 // https://docs.anthropic.com/en/api/messages-examples#vision
