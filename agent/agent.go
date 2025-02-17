@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
@@ -15,11 +16,15 @@ func Run[T any](maxDepth int, g *gen.Generator, prompts ...prompt.Prompt) (*Resu
 		g = g.Output(schema.From(result))
 	}
 
+	promptMetadata := models.Metadata{Model: g.Request.Model.Name}
 	for i := 0; i < maxDepth; i++ {
 		resp, err := g.Prompt(prompts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to prompt: %w, at depth %d", err, i)
 		}
+		promptMetadata.InputTokens += resp.Metadata.InputTokens
+		promptMetadata.OutputTokens += resp.Metadata.OutputTokens
+		promptMetadata.TotalTokens += resp.Metadata.TotalTokens
 
 		if !resp.IsTools() {
 			var result T
@@ -28,9 +33,10 @@ func Run[T any](maxDepth int, g *gen.Generator, prompts ...prompt.Prompt) (*Resu
 				return nil, fmt.Errorf("could not unmarshal text response: %w, at depth %d", err, i)
 			}
 			return &Result[T]{
-				Prompts: prompts,
-				Result:  result,
-				Depth:   i,
+				Prompts:  prompts,
+				Result:   result,
+				Metadata: promptMetadata,
+				Depth:    i,
 			}, nil
 		}
 
@@ -60,7 +66,8 @@ func Run[T any](maxDepth int, g *gen.Generator, prompts ...prompt.Prompt) (*Resu
 }
 
 type Result[T any] struct {
-	Prompts []prompt.Prompt
-	Result  T
-	Depth   int
+	Prompts  []prompt.Prompt
+	Result   T
+	Metadata models.Metadata
+	Depth    int
 }

@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"sync/atomic"
-	"time"
 )
 
 const Provider = "Bellman"
@@ -241,8 +240,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+g.bellman.key.String())
 
-	cli := http.Client{Timeout: time.Hour}
-	res, err := cli.Do(req)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("could not post bellman request to %s; %w", u, err)
 	}
