@@ -23,8 +23,8 @@ type fileData struct {
 }
 
 type functionCall struct {
-	Name string `json:"name,omitempty"`
-	Args any    `json:"args,omitempty"`
+	Name string         `json:"name,omitempty"`
+	Args map[string]any `json:"args,omitempty"`
 }
 
 type functionResponse struct {

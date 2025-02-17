@@ -217,7 +217,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				res.Tools = append(res.Tools, tools.Call{
 					ID:       t.ID,
 					Name:     t.Function.Name,
-					Argument: t.Function.Arguments,
+					Argument: []byte(t.Function.Arguments),
 					Ref:      toolBelt[t.Function.Name],
 				})
 			}

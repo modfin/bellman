@@ -44,7 +44,7 @@ func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[
 
 			if callback.Name == respone_output_callback_name {
 				var ret T
-				err = json.Unmarshal([]byte(callback.Argument), &ret)
+				err = json.Unmarshal(callback.Argument, &ret)
 				if err != nil {
 					return nil, fmt.Errorf("failed to unmarshal result: %w, %s", err, callback.Argument)
 				}

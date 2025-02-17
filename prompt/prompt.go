@@ -26,12 +26,12 @@ type Payload struct {
 type ToolCall struct {
 	ToolCallID string `json:"id,omitempty"`
 	Name       string `json:"name"`
-	Arguments  any    `json:"arguments"`
+	Arguments  []byte `json:"arguments"`
 }
 type ToolResponse struct {
 	ToolCallID string `json:"id,omitempty"`
 	Name       string `json:"name"`
-	Response   any    `json:"content"`
+	Response   string `json:"content"`
 }
 
 func AsAssistant(text string) Prompt {
@@ -46,10 +46,10 @@ func AsUserWithData(mime string, data []byte) Prompt {
 func AsUserWithURI(mime string, uri string) Prompt {
 	return Prompt{Role: UserRole, Payload: &Payload{Mime: mime, Uri: uri}}
 }
-func AsToolCall(toolCallID, functionName string, functionArg any) Prompt {
+func AsToolCall(toolCallID, functionName string, functionArg []byte) Prompt {
 	return Prompt{Role: ToolCallRole, ToolCall: &ToolCall{ToolCallID: toolCallID, Name: functionName, Arguments: functionArg}}
 }
-func AsToolResponse(toolCallID, functionName string, response any) Prompt {
+func AsToolResponse(toolCallID, functionName string, response string) Prompt {
 	return Prompt{Role: ToolResponseRole, ToolResponse: &ToolResponse{ToolCallID: toolCallID, Name: functionName, Response: response}}
 }
 

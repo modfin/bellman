@@ -180,7 +180,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			}
 			res.Tools = append(res.Tools, tools.Call{
 				Name:     t.Function.Name,
-				Argument: string(args),
+				Argument: args,
 				Ref:      toolBelt[t.Function.Name],
 			})
 		}

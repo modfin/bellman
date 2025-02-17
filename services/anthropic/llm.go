@@ -119,13 +119,18 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			if t.ToolCall == nil {
 				return nil, fmt.Errorf("ToolCall is required for role tool call")
 			}
+			var jsonArguments map[string]any
+			err := json.Unmarshal(t.ToolCall.Arguments, &jsonArguments)
+			if err != nil {
+				return nil, fmt.Errorf("ToolCall.Arguments is not map[string]any: %v", err)
+			}
 			message = reqMessages{
 				Role: "assistant",
 				Content: []reqContent{{
 					Type:  "tool_use",
 					ID:    t.ToolCall.ToolCallID,
 					Name:  t.ToolCall.Name,
-					Input: t.ToolCall.Arguments,
+					Input: jsonArguments,
 				}},
 			}
 		default: // prompt.UserRole, prompt.AssistantRole
@@ -209,7 +214,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, (string(b)))
+		return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, string(b))
 	}
 
 	var respModel anthropicResponse
@@ -243,7 +248,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			res.Tools = append(res.Tools, tools.Call{
 				ID:       c.ID,
 				Name:     c.Name,
-				Argument: string(arg),
+				Argument: arg,
 				Ref:      toolBelt[c.Name],
 			})
 		}
@@ -251,7 +256,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	// This is really an output schema callback. So lets just transform it to Text
 	if len(res.Tools) == 1 && res.Tools[0].Name == respone_output_callback_name {
-		res.Texts = []string{res.Tools[0].Argument}
+		res.Texts = []string{string(res.Tools[0].Argument)}
 		res.Tools = nil
 	}
 

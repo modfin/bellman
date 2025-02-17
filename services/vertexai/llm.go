@@ -134,8 +134,13 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 				return nil, fmt.Errorf("ToolCall is required for role tool call")
 			}
 			content.Role = "model"
+			var jsonArguments map[string]any
+			err := json.Unmarshal(p.ToolCall.Arguments, &jsonArguments)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+			}
 			content.Parts = append(content.Parts, genRequestContentPart{
-				FunctionCall: &functionCall{Name: p.ToolCall.Name, Args: p.ToolCall.Arguments},
+				FunctionCall: &functionCall{Name: p.ToolCall.Name, Args: jsonArguments},
 			})
 		default: // prompt.UserRole, prompt.AssistantRole
 			content.Role = "user"
@@ -258,7 +263,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 				}
 				res.Tools = append(res.Tools, tools.Call{
 					Name:     f.Name,
-					Argument: string(arg),
+					Argument: arg,
 					Ref:      toolBelt[f.Name],
 				})
 
