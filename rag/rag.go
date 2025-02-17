@@ -14,6 +14,8 @@ func tool2promt(t tools.Call) prompt.Prompt {
 	return prompt.AsToolCall(t.ID, t.Name, t.Argument)
 }
 
+// Run
+// Deprecated: use agent.Run instead
 func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[T], error) {
 
 	var zero T
