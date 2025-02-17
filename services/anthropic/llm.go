@@ -101,34 +101,68 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	}
 
 	for _, t := range conversation {
-
-		message := reqMessages{
-			Role: string(t.Role),
-			Content: []reqContent{{
-				Type: "text",
-				Text: t.Text,
-			}},
-		}
-
-		if t.Payload != nil {
-			message.Content[0].Text = ""
-
-			if t.Payload.Mime == "application/pdf" {
-				pdfBeta = true
-				message.Content[0].Type = "document"
-				message.Content[0].Source = &reqContentSource{
-					Type:      "base64",
-					MediaType: t.Payload.Mime,
-					Data:      t.Payload.Data,
-				}
+		var message reqMessages
+		switch t.Role {
+		case prompt.ToolResponseRole:
+			if t.ToolResponse == nil {
+				return nil, fmt.Errorf("ToolResponse is required for role tool response")
 			}
+			message = reqMessages{
+				Role: "user",
+				Content: []reqContent{{
+					Type:      "tool_result",
+					ToolUseID: t.ToolResponse.ToolCallID,
+					Content:   t.ToolResponse.Response,
+				}},
+			}
+		case prompt.ToolCallRole:
+			if t.ToolCall == nil {
+				return nil, fmt.Errorf("ToolCall is required for role tool call")
+			}
+			var jsonArguments map[string]any
+			err := json.Unmarshal(t.ToolCall.Arguments, &jsonArguments)
+			if err != nil {
+				return nil, fmt.Errorf("ToolCall.Arguments is not map[string]any: %v", err)
+			}
+			message = reqMessages{
+				Role: "assistant",
+				Content: []reqContent{{
+					Type:  "tool_use",
+					ID:    t.ToolCall.ToolCallID,
+					Name:  t.ToolCall.Name,
+					Input: jsonArguments,
+				}},
+			}
+		default: // prompt.UserRole, prompt.AssistantRole
+			message = reqMessages{
+				Role: string(t.Role),
+				Content: []reqContent{{
+					Type: "text",
+					Text: t.Text,
+				}},
+			}
+			if t.Payload != nil {
+				if t.Payload.Mime == "application/pdf" {
+					message.Content = append(message.Content, reqContent{
+						Type: "document",
+						Source: &reqContentSource{
+							Type:      "base64",
+							MediaType: t.Payload.Mime,
+							Data:      t.Payload.Data,
+						},
+					})
+					pdfBeta = true
+				}
 
-			if strings.HasPrefix(t.Payload.Mime, "image/") {
-				message.Content[0].Type = "image"
-				message.Content[0].Source = &reqContentSource{
-					Type:      "base64",
-					MediaType: t.Payload.Mime,
-					Data:      t.Payload.Data,
+				if strings.HasPrefix(t.Payload.Mime, "image/") {
+					message.Content = append(message.Content, reqContent{
+						Type: "image",
+						Source: &reqContentSource{
+							Type:      "base64",
+							MediaType: t.Payload.Mime,
+							Data:      t.Payload.Data,
+						},
+					})
 				}
 			}
 		}
@@ -180,7 +214,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, (string(b)))
+		return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, string(b))
 	}
 
 	var respModel anthropicResponse
@@ -212,16 +246,17 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				return nil, fmt.Errorf("could not marshal tool arguments, %w", err)
 			}
 			res.Tools = append(res.Tools, tools.Call{
+				ID:       c.ID,
 				Name:     c.Name,
-				Argument: string(arg),
+				Argument: arg,
 				Ref:      toolBelt[c.Name],
 			})
 		}
 	}
 
-	// This is really an out put schema callback. So lets just transform it to Text
+	// This is really an output schema callback. So lets just transform it to Text
 	if len(res.Tools) == 1 && res.Tools[0].Name == respone_output_callback_name {
-		res.Texts = []string{res.Tools[0].Argument}
+		res.Texts = []string{string(res.Tools[0].Argument)}
 		res.Tools = nil
 	}
 

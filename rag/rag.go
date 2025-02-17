@@ -11,13 +11,11 @@ import (
 const respone_output_callback_name = "__bellman__rag_result_callback"
 
 func tool2promt(t tools.Call) prompt.Prompt {
-
-	return prompt.Prompt{
-		Role: prompt.Assistant,
-		Text: "call function '" + t.Name + "', argument: " + t.Argument,
-	}
+	return prompt.AsToolCall(t.ID, t.Name, t.Argument)
 }
 
+// Run
+// Deprecated: use agent.Run instead
 func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[T], error) {
 
 	var zero T
@@ -48,7 +46,7 @@ func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[
 
 			if callback.Name == respone_output_callback_name {
 				var ret T
-				err = json.Unmarshal([]byte(callback.Argument), &ret)
+				err = json.Unmarshal(callback.Argument, &ret)
 				if err != nil {
 					return nil, fmt.Errorf("failed to unmarshal result: %w, %s", err, callback.Argument)
 				}
@@ -70,7 +68,7 @@ func Run[T any](depth int, g *gen.Generator, prompts ...prompt.Prompt) (*Result[
 			if err != nil {
 				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", callback.Name, err, callback.Argument)
 			}
-			prompts = append(prompts, prompt.AsUser("result from function call '"+callback.Name+"': "+respstr))
+			prompts = append(prompts, prompt.AsToolResponse(callback.ID, callback.Name, respstr))
 		}
 
 	}

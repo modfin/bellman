@@ -111,39 +111,60 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	}
 
 	for _, p := range prompts {
-		var role string
-		switch p.Role {
-		case prompt.Assistant:
-			role = "model"
-		default:
-			role = "user"
-		}
 		content := genRequestContent{
-			Role: role,
-			Parts: []genRequestContentPart{
-				{
-					Text: p.Text,
+			Parts: []genRequestContentPart{},
+		}
+		switch p.Role {
+		case prompt.ToolResponseRole:
+			if p.ToolResponse == nil {
+				return nil, fmt.Errorf("ToolResponse is required for role tool response")
+			}
+			content.Role = "tool"
+			content.Parts = append(content.Parts, genRequestContentPart{
+				FunctionResponse: &functionResponse{
+					Name: p.ToolResponse.Name,
+					Response: struct {
+						Name    string `json:"name,omitempty"`
+						Content any    `json:"content,omitempty"`
+					}{Name: p.ToolResponse.Name, Content: p.ToolResponse.Response},
 				},
-			},
-		}
-
-		if p.Payload != nil {
-			if len(p.Payload.Data) > 0 {
-				content.Parts[0].InlineDate = &inlineDate{
-					MimeType: p.Payload.Mime,
-					Data:     p.Payload.Data,
+			})
+		case prompt.ToolCallRole:
+			if p.ToolCall == nil {
+				return nil, fmt.Errorf("ToolCall is required for role tool call")
+			}
+			content.Role = "model"
+			var jsonArguments map[string]any
+			err := json.Unmarshal(p.ToolCall.Arguments, &jsonArguments)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+			}
+			content.Parts = append(content.Parts, genRequestContentPart{
+				FunctionCall: &functionCall{Name: p.ToolCall.Name, Args: jsonArguments},
+			})
+		default: // prompt.UserRole, prompt.AssistantRole
+			content.Role = "user"
+			if p.Role == prompt.AssistantRole {
+				content.Role = "model"
+			}
+			part := genRequestContentPart{Text: p.Text}
+			if p.Payload != nil {
+				if len(p.Payload.Data) > 0 {
+					part.InlineData = &inlineData{
+						MimeType: p.Payload.Mime,
+						Data:     p.Payload.Data,
+					}
+				}
+				if len(p.Payload.Uri) > 0 {
+					part.InlineData = nil
+					part.FileData = &fileData{
+						MimeType: p.Payload.Mime,
+						FileUri:  p.Payload.Uri,
+					}
 				}
 			}
-			if len(p.Payload.Uri) > 0 {
-				content.Parts[0].InlineDate = nil
-				content.Parts[0].FileData = &fileDate{
-					MimeType: p.Payload.Mime,
-					FileUri:  p.Payload.Uri,
-				}
-			}
-
+			content.Parts = append(content.Parts, part)
 		}
-
 		model.Contents = append(model.Contents, content)
 	}
 
@@ -236,13 +257,13 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 			if len(p.Text) == 0 && len(p.FunctionCall.Name) > 0 { // Tool calls
 				f := p.FunctionCall
-				arg, err := json.Marshal(f.Arg)
+				arg, err := json.Marshal(f.Args)
 				if err != nil {
 					return nil, fmt.Errorf("could not marshal google request, %w", err)
 				}
 				res.Tools = append(res.Tools, tools.Call{
 					Name:     f.Name,
-					Argument: string(arg),
+					Argument: arg,
 					Ref:      toolBelt[f.Name],
 				})
 

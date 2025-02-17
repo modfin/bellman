@@ -1,14 +1,5 @@
 package openai
 
-import (
-	"github.com/modfin/bellman/tools"
-)
-
-type response struct {
-	tools []tools.Tool
-	llm   openaiResponse
-}
-
 type openaiResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
