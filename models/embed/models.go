@@ -2,7 +2,9 @@ package embed
 
 import (
 	"context"
+	"errors"
 	"github.com/modfin/bellman/models"
+	"strings"
 )
 
 type Embeder interface {
@@ -39,6 +41,16 @@ func (m Model) FQN() string {
 
 func (m Model) String() string {
 	return m.Provider + "/" + m.Name
+}
+func ToModel(fqn string) (Model, error) {
+	provider, name, found := strings.Cut(fqn, "/")
+	if !found {
+		return Model{}, errors.New("invalid fqn, did not find a '/' seperating provider and model")
+	}
+	return Model{
+		Provider: provider,
+		Name:     name,
+	}, nil
 }
 
 type Request struct {
