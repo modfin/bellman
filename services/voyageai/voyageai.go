@@ -61,14 +61,14 @@ func (v *VoyageAI) Embed(request embed.Request) (*embed.Response, error) {
 
 	text := request.Text
 
-	switch request.Model.Mode {
-	case embed.ModeQuery:
-		if !strings.HasPrefix(text, "Represent the query for retrieving supporting documents:") {
-			text = "Represent the query for retrieving supporting documents: " + text
+	switch request.Model.Type {
+	case embed.TypeQuery, TypeQuery:
+		if !strings.HasPrefix(text, string(TypeQuery)) {
+			text = fmt.Sprintf("%s: %s", TypeQuery, text)
 		}
-	case embed.ModeDocument:
-		if !strings.HasPrefix(text, "Represent the document for retrieval:") {
-			text = "Represent the document for retrieval: " + text
+	case embed.TypeDocument, TypeDocument:
+		if !strings.HasPrefix(text, string(TypeDocument)) {
+			text = fmt.Sprintf("%s: %s", TypeDocument, text)
 		}
 	}
 
