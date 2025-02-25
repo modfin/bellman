@@ -4,6 +4,9 @@ import (
 	"github.com/modfin/bellman/models/embed"
 )
 
+const TypeQuery embed.Type = "Represent the query for retrieving supporting documents"
+const TypeDocument embed.Type = "Represent the document for retrieval"
+
 const Provider = "VoyageAI"
 
 // https://docs.voyageai.com/docs/embeddings

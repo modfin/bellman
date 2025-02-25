@@ -470,6 +470,31 @@ for _, p := range res.Promps {
 
 ```
 
+## Embeddings
+
+Bellman integrates with most the embeddig models aswell as the llms that is provided by the supported 
+providers. There is also a VoyageAI, voyageai.com, that only really deals with embeddings
+
+```go
+client := bellman_client := bellman.New(...)
+res, err := client.Embed(embed.Request{
+    Model: vertexai.EmbedModel_text_005.WithMode(embed.ModeDocument),
+    Text:  "The document to embed",
+  })
+
+fmt.Println(res.AsFloat32())
+// [-0.06821047514677048 -0.00014664272021036595 0.011814368888735771 ....
+```
+
+### Mode / Type
+Some embeddings models support specific types of input. 
+Eg.
+VertexAI https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/task-types#retrieve_information_from_texts
+and VoyageAI https://docs.voyageai.com/docs/embeddings
+
+This allows you to define what type of text you are sending.
+For example `embed.ModeDocument` for initial embedding and `embed.ModeQuery`
+for getting a vector that is to be compared
 
 ## License
 

@@ -166,16 +166,14 @@ var EmbedModel_text_gecko_multilang_001 = embed.Model{
 
 const EmbedDimensions = 768
 
-type EmbedType string
-
-const EmbedTypeQuery EmbedType = "RETRIEVAL_QUERY"
-const EmbedTypeDocument EmbedType = "RETRIEVAL_DOCUMENT"
-const EmbedTypeSimilarity EmbedType = "SEMANTIC_SIMILARITY"
-const EmbedTypeClassification EmbedType = "CLASSIFICATION"
-const EmbedTypeClustring EmbedType = "CLUSTERING"
-const EmbedTypeQA EmbedType = "QUESTION_ANSWERING"
-const EmbedTypeVerification EmbedType = "FACT_VERIFICATION"
-const EmbedTypeCode EmbedType = "CODE_RETRIEVAL_QUERY"
+const TypeDocument embed.Type = "RETRIEVAL_DOCUMENT"
+const TypeQuery embed.Type = "RETRIEVAL_QUERY"
+const TypeQuestionAnswer embed.Type = "QUESTION_ANSWERING"
+const TypeFactVerification embed.Type = "FACT_VERIFICATION"
+const TypeCodeRetrieval embed.Type = "CODE_RETRIEVAL_QUERY"
+const TypeClustering embed.Type = "CLUSTERING"
+const TypeClassification embed.Type = "CLASSIFICATION"
+const TypeSemanticSimilarity embed.Type = "SEMANTIC_SIMILARITY"
 
 var EmbedModels = map[string]embed.Model{
 	EmbedModel_text_005.Name:     EmbedModel_text_005,

@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -58,9 +59,22 @@ func (v *VoyageAI) Embed(request embed.Request) (*embed.Response, error) {
 
 	u := `https://api.voyageai.com/v1/embeddings`
 
+	text := request.Text
+
+	switch request.Model.Type {
+	case embed.TypeQuery, TypeQuery:
+		if !strings.HasPrefix(text, string(TypeQuery)) {
+			text = fmt.Sprintf("%s: %s", TypeQuery, text)
+		}
+	case embed.TypeDocument, TypeDocument:
+		if !strings.HasPrefix(text, string(TypeDocument)) {
+			text = fmt.Sprintf("%s: %s", TypeDocument, text)
+		}
+	}
+
 	reqModel := localRequest{
 		Input: []string{
-			request.Text,
+			text,
 		},
 		Model: request.Model.Name,
 	}

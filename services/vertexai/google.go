@@ -19,7 +19,7 @@ import (
 
 type GoogleEmbedRequest struct {
 	Instances []struct {
-		//TaskType string `json:"task_type"`
+		TaskType string `json:"task_type,omitempty"`
 		//Title    string `json:"title"`
 		Content string `json:"content"`
 	} `json:"instances"`
@@ -88,14 +88,24 @@ func (g *Google) Provider() string {
 func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
+	tasktype := ""
+	switch request.Model.Type {
+	case embed.TypeDocument:
+		tasktype = string(TypeDocument)
+	case embed.TypeQuery:
+		tasktype = string(TypeQuery)
+	default:
+		tasktype = string(request.Model.Type)
+	}
+
 	req := GoogleEmbedRequest{
 		Instances: []struct {
-			//TaskType string `json:"task_type"`
-			Content string `json:"content"`
+			TaskType string `json:"task_type,omitempty"`
+			Content  string `json:"content"`
 		}{
 			{
-				//TaskType: model.Name,
-				Content: request.Text,
+				TaskType: tasktype,
+				Content:  request.Text,
 			},
 		},
 	}
