@@ -17,9 +17,18 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+const ModeDocument embed.Mode = "RETRIEVAL_DOCUMENT"
+const ModeQuery embed.Mode = "RETRIEVAL_QUERY"
+const ModeQuestionAnswer embed.Mode = "QUESTION_ANSWERING"
+const ModeFactVerification embed.Mode = "FACT_VERIFICATION"
+const ModeCodeRetrieval embed.Mode = "CODE_RETRIEVAL_QUERY"
+const ModeClustering embed.Mode = "CLUSTERING"
+const ModeClassification embed.Mode = "CLASSIFICATION"
+const ModeSemanticSimilarity embed.Mode = "SEMANTIC_SIMILARITY"
+
 type GoogleEmbedRequest struct {
 	Instances []struct {
-		//TaskType string `json:"task_type"`
+		TaskType string `json:"task_type,omitempty"`
 		//Title    string `json:"title"`
 		Content string `json:"content"`
 	} `json:"instances"`
@@ -88,14 +97,24 @@ func (g *Google) Provider() string {
 func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
+	mode := ""
+	switch request.Model.Mode {
+	case embed.ModeDocument:
+		mode = "RETRIEVAL_DOCUMENT"
+	case embed.ModeQuery:
+		mode = "RETRIEVAL_QUERY"
+	default:
+		mode = string(request.Model.Mode)
+	}
+
 	req := GoogleEmbedRequest{
 		Instances: []struct {
-			//TaskType string `json:"task_type"`
-			Content string `json:"content"`
+			TaskType string `json:"task_type,omitempty"`
+			Content  string `json:"content"`
 		}{
 			{
-				//TaskType: model.Name,
-				Content: request.Text,
+				TaskType: mode,
+				Content:  request.Text,
 			},
 		},
 	}

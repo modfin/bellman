@@ -10,13 +10,27 @@ type Embeder interface {
 	Embed(embed Request) (*Response, error)
 }
 
+type Mode string
+
+const ModeQuery = "query"
+const ModeDocument = "document"
+const ModeNone = ""
+
 type Model struct {
-	Provider    string `json:"provider"`
-	Name        string `json:"name"`
+	Provider string `json:"provider"`
+	Name     string `json:"name"`
+
+	Mode Mode `json:"mode,omitempty"`
+
 	Description string `json:"description,omitempty"`
 
 	InputMaxTokens   int `json:"input_max_tokens,omitempty"`
 	OutputDimensions int `json:"output_dimensions,omitempty"`
+}
+
+func (m Model) WithMode(mode Mode) Model {
+	m.Mode = mode
+	return m
 }
 
 func (m Model) FQN() string {
