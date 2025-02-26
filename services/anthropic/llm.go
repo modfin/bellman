@@ -55,8 +55,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			},
 		}
 		model.Tool = &reqToolChoice{
-			Type: "tool",
-			Name: respone_output_callback_name,
+			Type: "any",
 		}
 	}
 
