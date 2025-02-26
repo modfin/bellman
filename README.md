@@ -395,7 +395,7 @@ PDFs is only supported by Gemini and Anthropic
 
 ```
 
-## RAG Example
+## Agent Example
 
 Supporter lib for "automated" RAG (Retrieval-Augmented Generation) is supported by Gemini, OpenAI and Anthropic.
 
@@ -477,8 +477,9 @@ providers. There is also a VoyageAI, voyageai.com, that only really deals with e
 
 ```go
 client := bellman_client := bellman.New(...)
+
 res, err := client.Embed(embed.Request{
-    Model: vertexai.EmbedModel_text_005.WithMode(embed.ModeDocument),
+    Model: vertexai.EmbedModel_text_005.WithType(embed.TypeDocument),
     Text:  "The document to embed",
   })
 
@@ -486,14 +487,15 @@ fmt.Println(res.AsFloat32())
 // [-0.06821047514677048 -0.00014664272021036595 0.011814368888735771 ....
 ```
 
-### Mode / Type
+### Type
 Some embeddings models support specific types of input. 
-Eg.
-VertexAI https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/task-types#retrieve_information_from_texts
-and VoyageAI https://docs.voyageai.com/docs/embeddings
 
-This allows you to define what type of text you are sending.
-For example `embed.ModeDocument` for initial embedding and `embed.ModeQuery`
+Eg.
+[VertexAI](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/task-types#retrieve_information_from_texts) 
+and [VoyageAI](https://docs.voyageai.com/docs/embeddings) 
+
+The API allows you to define what type of text you are sending.
+For example `embed.TypeDocument` for initial embedding and `embed.TypeQuery`
 for getting a vector that is to be compared
 
 ## License
