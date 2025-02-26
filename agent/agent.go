@@ -28,7 +28,6 @@ func Run[T any](maxDepth int, g *gen.Generator, prompts ...prompt.Prompt) (*Resu
 
 		if !resp.IsTools() {
 			var result T
-			fmt.Println(resp.Texts)
 			err = resp.Unmarshal(&result)
 			if err != nil {
 				return nil, fmt.Errorf("could not unmarshal text response: %w, at depth %d", err, i)
