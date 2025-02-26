@@ -62,9 +62,6 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	toolBelt := map[string]*tools.Tool{}
 	if len(g.request.Tools) > 0 {
-		model.Tools = nil // If output is specified, tools override it.
-		model.Tool = nil
-
 		for _, t := range g.request.Tools {
 			model.Tools = append(model.Tools, reqTool{
 				Name:        t.Name,
@@ -89,9 +86,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			_type = "tool"
 			_name = g.request.ToolConfig.Name
 		}
-		model.Tool = &reqToolChoice{
-			Type: _type, // // "auto, any, tool"
-			Name: _name,
+		if model.Tool != nil {
+			model.Tool = &reqToolChoice{
+				Type: _type, // // "auto, any, tool"
+				Name: _name,
+			}
 		}
 
 		if g.request.ToolConfig.Name == tools.NoTool.Name { // None is not supporded by Anthropic, so lets just remove the toolks.
