@@ -69,6 +69,5 @@ func (r *Response) IsText() bool {
 }
 
 func (r *Response) IsTools() bool {
-	return len(r.Tools) > 0 && len(r.Texts) == 0
-
+	return len(r.Tools) > 0 && r.Tools[0].Name != "__bellman__result_callback"
 }
