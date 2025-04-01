@@ -182,6 +182,10 @@ func parseEnum(enumStr string, field reflect.StructField) []interface{} {
 
 	t := field.Type
 	kind := t.Kind()
+	if kind == reflect.Ptr {
+		t = t.Elem()
+		kind = t.Kind()
+	}
 
 	if kind == reflect.Slice {
 		kind = t.Elem().Kind()
