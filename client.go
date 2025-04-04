@@ -81,6 +81,7 @@ func (v *Bellman) EmbedModels() ([]embed.Model, error) {
 	var models []embed.Model
 	err = json.Unmarshal(body, &models)
 	if err != nil {
+		v.log("[gen] unmarshal response error", "error", err, "body", string(body))
 		return nil, fmt.Errorf("could not unmarshal bellman response; %w", err)
 	}
 	return models, nil
@@ -113,6 +114,7 @@ func (v *Bellman) GenModels() ([]gen.Model, error) {
 	var models []gen.Model
 	err = json.Unmarshal(body, &models)
 	if err != nil {
+		v.log("[gen] unmarshal response error", "error", err, "body", string(body))
 		return nil, fmt.Errorf("could not unmarshal bellman response; %w", err)
 	}
 	return models, nil
@@ -158,6 +160,7 @@ func (v *Bellman) Embed(request embed.Request) (*embed.Response, error) {
 	var response embed.Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
+		v.log("[gen] unmarshal response error", "error", err, "body", string(body))
 		return nil, fmt.Errorf("could not unmarshal bellman response; %w", err)
 	}
 
@@ -256,6 +259,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	response := gen.Response{}
 	err = json.Unmarshal(body, &response)
 	if err != nil {
+		g.bellman.log("[gen] unmarshal response error", "error", err, "body", string(body))
 		return nil, fmt.Errorf("could not unmarshal bellman response; %w", err)
 	}
 
