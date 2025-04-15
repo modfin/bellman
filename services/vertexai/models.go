@@ -9,26 +9,37 @@ import (
 
 const Provider = "VertexAI"
 
-var GenModel_gemini_2_0_flash_001 = gen.Model{
-	Provider:                Provider,
-	Name:                    "gemini-2.0-flash-001",
-	Description:             "Fast and versatile performance across a diverse variety of tasks",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
+var GenModel_gemini_2_5_pro_preview = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-2.5-pro-preview-03-25", // Region: "us-central1",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
 }
 
-var GenModel_gemini_2_0_flash = gen.Model{
-	Provider:                Provider,
-	Name:                    "gemini-2.0-flash-exp", // Region: "us-central1",
-	Description:             "Fast and versatile performance across a diverse variety of tasks",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
+var GenModel_gemini_2_0_flash_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-2.0-flash",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 8_192,
+}
+var GenModel_gemini_2_0_flash_001 = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-2.0-flash-001",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 8_192,
+}
+
+var GenModel_gemini_2_0_flash_lite_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-2.0-flash-lite",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 8_192,
+}
+var GenModel_gemini_2_0_flash_lite_001 = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-2.0-flash-lite-001",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 8_192,
 }
 
 var GenModel_gemini_1_5_flash = gen.Model{

@@ -24,6 +24,18 @@ const Version = "2023-06-01"
 //type GenModel string
 
 // https://docs.anthropic.com/en/docs/about-claude/models
+var GenModel_3_7_sonnet_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "claude-3-7-sonnet-latest",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 64_000,
+}
+var GenModel_3_7_sonnet_20250219 = gen.Model{
+	Provider:       Provider,
+	Name:           "claude-3-7-sonnet-20250219",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 64_000,
+}
 var GenModel_3_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-3-5-sonnet-latest",

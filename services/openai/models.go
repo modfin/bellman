@@ -19,6 +19,42 @@ const Provider = "OpenAI"
 //		"owned_by": "system"
 //		}, ....
 
+var GenModel_gpt4_1_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-4.1",
+	InputMaxToken:  1_047_576,
+	OutputMaxToken: 32_768,
+}
+var GenModel_gpt4_1_250414 = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-4.1-2025-04-14",
+	InputMaxToken:  1_047_576,
+	OutputMaxToken: 32_768,
+}
+var GenModel_gpt4_1_mini_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-4.1-mini",
+	InputMaxToken:  1_047_576,
+	OutputMaxToken: 32_768,
+}
+var GenModel_gpt4_1_mini_250414 = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-4.1-mini-2025-04-14",
+	InputMaxToken:  1_047_576,
+	OutputMaxToken: 32_768,
+}
+var GenModel_gpt4_1_nano_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-4.1-nano",
+	InputMaxToken:  1_047_576,
+	OutputMaxToken: 32_768,
+}
+var GenModel_gpt4_1_nano_250414 = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-4.1-nano-2025-04-14",
+	InputMaxToken:  1_047_576,
+	OutputMaxToken: 32_768,
+}
 var GenModel_gpt4o_latest = gen.Model{
 	Provider: Provider,
 	Name:     "chatgpt-4o-latest",
