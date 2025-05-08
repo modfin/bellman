@@ -89,7 +89,10 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				continue
 			}
 			if !bytes.HasPrefix(line, []byte("data: ")) {
-				log.Printf("sse event did not start with data: %s", string(line))
+				stream <- &gen.StreamResponse{
+					Type:    gen.TYPE_ERROR,
+					Content: "expected 'data' header from sse",
+				}
 				break
 			}
 			line = line[6:] // removing header
