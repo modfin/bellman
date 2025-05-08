@@ -110,8 +110,27 @@ func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 		},
 	}
 
+	region := g.config.Region
+	project := g.config.Project
+	if len(request.Model.Config) > 0 {
+		cfg := request.Model.Config
+		r, ok := cfg["region"].(string)
+		if ok {
+			region = r
+		}
+		p, ok := cfg["project"].(string)
+		if ok {
+			project = p
+		}
+	}
+
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict",
-		g.config.Region, g.config.Project, g.config.Region, request.Model.Name)
+		region, project, region, request.Model.Name)
+
+	if region == "global" {
+		u = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/google/models/%s:predict",
+			project, request.Model.Name)
+	}
 
 	body, err := json.Marshal(req)
 	if err != nil {
