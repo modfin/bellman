@@ -397,7 +397,7 @@ PDFs is only supported by Gemini and Anthropic
 
 ## Agent Example
 
-Supporter lib for "automated" RAG (Retrieval-Augmented Generation) is supported by Gemini, OpenAI and Anthropic.
+Supporter lib for simple agentic tasks
 
 ```go 
 
@@ -443,7 +443,7 @@ type Result struct {
 llm := anthopic.New(apiKey).Generator()
 llm = llm.SetTools(getQuote, getStock)
 
-res, err := rag.Run[Result](5, llm, prompt.AsUser("Get me the price of Volvo B"))
+res, err := agent.Run[Result](5, llm, prompt.AsUser("Get me the price of Volvo B"))
 if err != nil {
    t.Fatalf("Prompt() error = %v", err)
 }
@@ -464,7 +464,7 @@ for _, p := range res.Promps {
 // user:       result: get_stock => {"stock_id": 98765}
 // assistant:  tool function call: get_quote with argument: {"stock_id":98765}
 // user:       result: get_quote => {"stock_id": 98765,"price": 123.45}
-// assistant:  tool function call: __bellman__rag_result_callback with argument: {"price":123.45,"stock_id":98765}
+// assistant:  tool function call: __return_result_tool__ with argument: {"price":123.45,"stock_id":98765}
 
 
 
