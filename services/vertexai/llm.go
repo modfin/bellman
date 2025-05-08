@@ -186,6 +186,13 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
 		region, project, region, g.request.Model.Name)
 
+	// Support for global region, which should decrease risk for 429 rate limit
+	// https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/error-code-429#troubleshoot-dynamic-shared-quota
+	if region == "global" {
+		u = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/google/models/%s:generateContent",
+			project, g.request.Model.Name)
+	}
+
 	body, err := json.Marshal(model)
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal google request, %w", err)
