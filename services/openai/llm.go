@@ -238,16 +238,19 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genRequest, error) {
 	reqModel := genRequest{
-		Stream:        g.request.Stream,
-		StreamOptions: StreamOptions{IncludeUsage: g.request.Stream},
-		Model:         g.request.Model.Name,
-		Stop:          g.request.StopSequences,
+		Stream: g.request.Stream,
+		Model:  g.request.Model.Name,
+		Stop:   g.request.StopSequences,
 
 		MaxTokens:        g.request.MaxTokens,
 		FrequencyPenalty: g.request.FrequencyPenalty,
 		PresencePenalty:  g.request.PresencePenalty,
 		Temperature:      g.request.Temperature,
 		TopP:             g.request.TopP,
+	}
+
+	if reqModel.Stream {
+		reqModel.StreamOptions = &StreamOptions{IncludeUsage: true}
 	}
 
 	if g.request.Model.Name == "" {

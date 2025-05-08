@@ -66,8 +66,8 @@ type StreamOptions struct {
 }
 
 type genRequest struct {
-	Stream        bool          `json:"stream,omitempty"`
-	StreamOptions StreamOptions `json:"stream_options"`
+	Stream        bool           `json:"stream,omitempty"`
+	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
 
 	Model          string              `json:"model"`
 	Messages       []genRequestMessage `json:"messages"`
