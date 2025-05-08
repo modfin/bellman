@@ -26,8 +26,14 @@ type generator struct {
 func (g *generator) SetRequest(config gen.Request) {
 	g.request = config
 }
+func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamResponse, error) {
+	return nil, errors.New("not implmented")
+}
 
 func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
+	
+}
+func (g *generator) prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 	//https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference
 

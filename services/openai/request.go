@@ -2,6 +2,7 @@ package openai
 
 import (
 	"encoding/json"
+	"github.com/modfin/bellman/tools"
 )
 
 // https://platform.openai.com/docs/api-reference/chat/create
@@ -60,7 +61,14 @@ func (i ImageUrl) MarshalJSON() ([]byte, error) {
 	return []byte(`{"url": "data:image/jpeg;base64,` + i.data + `"}`), nil
 }
 
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
+}
+
 type genRequest struct {
+	Stream        bool          `json:"stream,omitempty"`
+	StreamOptions StreamOptions `json:"stream_options"`
+
 	Model          string              `json:"model"`
 	Messages       []genRequestMessage `json:"messages"`
 	ResponseFormat *responseFormat     `json:"response_format,omitempty"`
@@ -75,6 +83,8 @@ type genRequest struct {
 	TopP             *float64 `json:"top_p,omitempty"`
 	FrequencyPenalty *float64 `json:"frequency_penalty,omitempty"`
 	PresencePenalty  *float64 `json:"presence_penalty,omitempty"`
+
+	toolBelt map[string]*tools.Tool
 }
 
 type responseFormatSchema struct {
