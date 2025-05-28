@@ -29,7 +29,7 @@ type JSONSchema struct {
 	// one element, where each element is unique. You will probably only use this with strings.
 	Enum []any `json:"enum,omitempty"`
 	// Properties describes the properties of an object, if the schema type is Object.
-	Properties map[string]JSONSchema `json:"properties,omitempty"`
+	Properties *map[string]JSONSchema `json:"properties,omitempty"`
 	// Required specifies which properties are required, if the schema type is Object.
 	Required []string `json:"required,omitempty"`
 	// Items specifies which data type an array contains, if the schema type is Array.
@@ -43,10 +43,14 @@ type JSONSchema struct {
 }
 
 func (s JSONSchema) IsObjectRequired() bool {
-	if s.Type == Object && len(s.Properties) == 0 {
+	if s.Type == Object && s.Properties != nil && len(*s.Properties) == 0 {
 		return false
 	}
 	return true
+}
+func newNilMap() *map[string]JSONSchema {
+	m := make(map[string]JSONSchema)
+	return &m
 }
 
 func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
@@ -62,6 +66,7 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	}
 	switch bellmanSchema.Type {
 	case schema.Object:
+		def.Properties = newNilMap()
 		def.Type = Object
 	case schema.Array:
 		def.Type = Array
@@ -78,10 +83,10 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	}
 
 	if len(bellmanSchema.Properties) > 0 {
-		def.Properties = make(map[string]JSONSchema)
+		def.Properties = newNilMap()
 		for key, prop := range bellmanSchema.Properties {
-			def.Properties[key] = *fromBellmanSchema(prop)
-			if def.Properties[key].IsObjectRequired() {
+			(*def.Properties)[key] = *fromBellmanSchema(prop)
+			if (*def.Properties)[key].IsObjectRequired() {
 				def.Required = append(def.Required, key)
 			}
 		}
