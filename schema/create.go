@@ -136,6 +136,12 @@ func fieldToSchema(field reflect.StructField) *JSON {
 		if minLen := getIntFromField(field, "json-min-length"); minLen != nil {
 			schema.MinLength = minLen
 		}
+		if format := field.Tag.Get("json-format"); format != "" {
+			schema.Format = &format
+		}
+		if pattern := field.Tag.Get("json-pattern"); pattern != "" {
+			schema.Pattern = &pattern
+		}
 	}
 
 	// Handle enum for fields

@@ -27,7 +27,9 @@ type JSONSchema struct {
 	Description string `json:"description,omitempty"`
 	// Enum is used to restrict a value to a fixed set of values. It must be an array with at least
 	// one element, where each element is unique. You will probably only use this with strings.
-	Enum []any `json:"enum,omitempty"`
+	Enum    []any  `json:"enum,omitempty"`
+	Pattern string `json:"pattern,omitempty"` // Regular expression that the string must match.
+	Format  string `json:"format,omitempty"`  // Format of the data, e.g. "email", "date-time", etc.
 	// Properties describes the properties of an object, if the schema type is Object.
 	Properties *map[string]JSONSchema `json:"properties,omitempty"`
 	// Required specifies which properties are required, if the schema type is Object.
@@ -111,6 +113,12 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 		for key, prop := range bellmanSchema.Defs {
 			def.Defs[key] = fromBellmanSchema(prop)
 		}
+	}
+	if bellmanSchema.Format != nil {
+		def.Format = *bellmanSchema.Format
+	}
+	if bellmanSchema.Pattern != nil {
+		def.Pattern = *bellmanSchema.Pattern
 	}
 
 	return def

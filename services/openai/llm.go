@@ -89,7 +89,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	if g.request.SystemPrompt != "" {
 		messages = append(messages, genRequestMessageText{
 			Role:    "system",
-			Content: []genRequestMessageContent{{Type: "text", Text: g.request.SystemPrompt}},
+			Content: []genRequestMessageContent{{Type: "text", Text: &g.request.SystemPrompt}},
 		})
 	}
 	for _, c := range conversation {
@@ -124,7 +124,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			message := genRequestMessageText{
 				Role: string(c.Role),
 				Content: []genRequestMessageContent{
-					{Type: "text", Text: c.Text},
+					{Type: "text", Text: &c.Text},
 				},
 			}
 
@@ -132,7 +132,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				message.Content = append(message.Content,
 					genRequestMessageContent{
 						Type: "image_url",
-						ImageUrl: ImageUrl{
+						ImageUrl: &ImageUrl{
 							Url:  c.Payload.Uri,
 							data: c.Payload.Data,
 						},

@@ -28,9 +28,7 @@ type JSONSchema struct {
 	// Optional. The format of the data.
 	// Supported formats:
 	//
-	//	for NUMBER type: "float", "double"
-	//	for INTEGER type: "int32", "int64"
-	//	for STRING type: "email", "byte", etc
+	//	for STRING type: "date", "date-time", "duration", "time", etc
 	Format string `json:"format,omitempty"`
 	// Optional. The title of the Schema.
 	Title string `json:"title,omitempty"`
@@ -68,9 +66,6 @@ type JSONSchema struct {
 	MinLength int `json:"min_length,omitempty"`
 	// Optional. Maximum length of the Type.STRING
 	MaxLength int `json:"max_length,omitempty"`
-	// Optional. Pattern of the Type.STRING to restrict a string to a regular
-	// expression.
-	Pattern string `json:"pattern,omitempty"`
 }
 
 func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema.JSON) *JSONSchema {
@@ -143,6 +138,9 @@ func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema
 	}
 	if bellmanSchema.MinItems != nil {
 		def.MinItems = *bellmanSchema.MinItems
+	}
+	if bellmanSchema.Format != nil {
+		def.Format = *bellmanSchema.Format
 	}
 
 	return def

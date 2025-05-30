@@ -241,7 +241,6 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	}
 
 	if len(respModel.Candidates) == 0 {
-		fmt.Println(respModel)
 		return nil, fmt.Errorf("no candidates in response")
 	}
 	if len(respModel.Candidates[0].Content.Parts) == 0 {

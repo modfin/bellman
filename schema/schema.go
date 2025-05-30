@@ -70,8 +70,11 @@ type JSON struct {
 	ExclusiveMinimum *float64 `json:"exclusiveMinimum,omitempty"`
 
 	/// String Validation
-	MaxLength *int `json:"maxLength,omitempty"`
-	MinLength *int `json:"minLength,omitempty"`
+	MaxLength *int    `json:"maxLength,omitempty"`
+	MinLength *int    `json:"minLength,omitempty"`
+	Pattern   *string `json:"pattern,omitempty"` // regular expression
+	// Format is used to specify a format for the string, e.g. "date-time", "email", etc.
+	Format *string `json:"format,omitempty"` // e.g. "date-time", "email", etc.
 
 	// Array Validation
 	MaxItems *int `json:"maxItems,omitempty"`

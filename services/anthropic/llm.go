@@ -133,11 +133,14 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			}
 		default: // prompt.UserRole, prompt.AssistantRole
 			message = reqMessages{
-				Role: string(t.Role),
-				Content: []reqContent{{
+				Role:    string(t.Role),
+				Content: []reqContent{},
+			}
+			if t.Text != "" {
+				message.Content = append(message.Content, reqContent{
 					Type: "text",
 					Text: t.Text,
-				}},
+				})
 			}
 			if t.Payload != nil {
 				if t.Payload.Mime == "application/pdf" {
