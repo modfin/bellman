@@ -85,35 +85,34 @@ The benefit of using the bellman client,
 when you are running `bellmand`,
 is that we can interchangeably use any model that we wish to interact with.
 
-```go 
-
+```go
 client, err := bellman.New(...)
 llm := client.Generator()
 res, err := llm.Model(openai.GenModel_gpt4o_mini).
-Prompt(
-prompt.AsUser("What company made you?"),
-)
+    Prompt(
+        prompt.AsUser("What company made you?"),
+    )
 fmt.Println(res, err)
 // OpenAI
 
 res, err := llm.Model(vertexai.GenModel_gemini_1_5_flash).
-Prompt(
-prompt.AsUser("What company made you?"),
-)
+    Prompt(
+        prompt.AsUser("What company made you?"),
+    )
 fmt.Println(res, err)
 // Google
 
 // or even a custom model that you created yourself (trained) 
 // or a new model that is not in the library yet
 model := gen.Model{
-Provider: vertexai.Provider,
-Name:     "gemini-2.0-flash-exp",
-Config:   map[string]interface{}{"region": "us-central1"},
+    Provider: vertexai.Provider,
+    Name:     "gemini-2.0-flash-exp",
+    Config:   map[string]interface{}{"region": "us-central1"},
 }
 res, err := llm.Model(model).
-Prompt(
-prompt.AsUser("What company made you?"),
-)
+    Prompt(
+        prompt.AsUser("What company made you?"),
+    )
 fmt.Println(res, err)
 // Google
 
@@ -124,15 +123,14 @@ fmt.Println(res, err)
 
 Just normal conversation mode
 
-```go 
-
-res, err := openai.New(apiKey).Generator().
-Model(openai.GenModel_gpt4o_mini).
-Prompt(
-prompt.AsUser("What is the distance to the moon?"),
-)
+```go
+res, err := openai.New(apiKy).Generator().
+    Model(openai.GenModel_gpt4o_mini).
+    Prompt(
+        prompt.AsUser("What is the distance to the moon?"),
+    )
 if err != nil {
-log.Fatalf("Prompt() error = %v", err)
+    log.Fatalf("Prompt() error = %v", err)
 }
 
 awnser, err := res.AsText()
@@ -148,16 +146,15 @@ fmt.Println(awnser, err)
 
 Just normal conversation mode
 
-```go 
-
+```go
 res, err := openai.New(apiKey).Generator().
-Model(openai.GenModel_gpt4o_mini).
-System("You are a expert movie quoter and lite fo finish peoples sentences with a movie reference").
-Prompt(
-prompt.AsUser("Who are you going to call?"),
-)
+    Model(openai.GenModel_gpt4o_mini).
+    System("You are a expert movie quoter and lite fo finish peoples sentences with a movie reference").
+    Prompt(
+        prompt.AsUser("Who are you going to call?"),
+    )
 if err != nil {
-log.Fatalf("Prompt() error = %v", err)
+    log.Fatalf("Prompt() error = %v", err)
 }
 
 awnser, err := res.AsText()
@@ -170,19 +167,18 @@ fmt.Println(awnser, err)
 
 Setting things like temperature, max tokens, top p, and stop secuences
 
-```go 
-
+```go
 res, err := openai.New(apiKey).Generator().
-Model(openai.GenModel_gpt4o_mini).
-Temperature(0.5).
-MaxTokens(100).
-TopP(0.9). // should really not be used with temperature
-StopAt(".", "!", "?").
-Prompt(
-prompt.AsUser("Write me a 2 paragraph text about gophers"),
-)
+    Model(openai.GenModel_gpt4o_mini).
+    Temperature(0.5).
+    MaxTokens(100).
+    TopP(0.9). // should really not be used with temperature
+    StopAt(".", "!", "?").
+    Prompt(
+        prompt.AsUser("Write me a 2 paragraph text about gophers"),
+    )
 if err != nil {
-log.Fatalf("Prompt() error = %v", err)
+    log.Fatalf("Prompt() error = %v", err)
 }
 
 awnser, err := res.AsText()
@@ -218,25 +214,24 @@ There are a few different annotations that you can use on your golang structs to
 | json-pattern           | Regex pattern of a string. Can be used with: string                                                                      | OpenAI           |
 
 ```go
-
 type Quote struct {
-Character string `json:"character"`
-Quote     string `json:"quote"`
+   Character string `json:"character"`
+   Quote     string `json:"quote"`
 }
 type Responese struct {
-Quotes []Quote `json:"quotes"`
+   Quotes []Quote `json:"quotes"`
 }
 
 
 llm := vertexai.New(googleConfig).Generator()
 res, err := llm.
-Model(vertexai.GenModel_gemini_1_5_pro).
-Output(schema.From(Responese{})).
-Prompt(
-prompt.AsUser("give me 3 quotes from different characters in Hamlet"),
-)
+    Model(vertexai.GenModel_gemini_1_5_pro).
+    Output(schema.From(Responese{})).
+    Prompt(
+        prompt.AsUser("give me 3 quotes from different characters in Hamlet"),
+    )
 if err != nil {
-log.Fatalf("Prompt() error = %v", err)
+    log.Fatalf("Prompt() error = %v", err)
 }
 
 awnser, err := res.AsText() // will return the json of the struct
@@ -266,7 +261,6 @@ fmt.Println(result, err)
 //      {Polonius This above all: to thine own self be true.} 
 //      {Queen Gertrude The lady doth protest too much, methinks.}
 // ]} <nil>
-
 ```
 
 ## Tools
@@ -276,11 +270,10 @@ Here is an example of how to define and use a tool:
 
 1. Define a tool:
    ```go
-
     type Args struct {
          Name string `json:"name"`
     }
-
+   
     getQuote := tools.NewTool("get_quote",
        tools.WithDescription(
             "a function to get a quote from a person or character in Hamlet",
@@ -292,48 +285,48 @@ Here is an example of how to define and use a tool:
            if err != nil {
                return "",err
            }
-		   return dao.GetQuoateFrom(arg.Name)
+           return dao.GetQuoateFrom(arg.Name)
        }),
    )
    ```
 
 2. Use the tool in a prompt:
    ```go
-      res, err := anthopic.New(apiKey).Generator().
-          Model(anthropic.GenModel_3_5_haiku_latest)).
-          System("You are a Shakespeare quote generator").
-          Tools(getQuote).
-          // Configure a specific too to be used, or the setting for it
-          Tool(tools.RequiredTool). 
-          Prompt(
-              prompt.AsUser("Give me 3 quotes from different characters"),
-          )
+   res, err := anthopic.New(apiKey).Generator().
+       Model(anthropic.GenModel_3_5_haiku_latest)).
+       System("You are a Shakespeare quote generator").
+       Tools(getQuote).
+       // Configure a specific too to be used, or the setting for it
+       Tool(tools.RequiredTool). 
+       Prompt(
+           prompt.AsUser("Give me 3 quotes from different characters"),
+       )
+
+   if err != nil {
+       log.Fatalf("Prompt() error = %v", err)
+   }
+
+   // Evaluate with callback function
+   err = res.Eval()
+   if err != nil {
+       log.Fatalf("Eval() error = %v", err)
+   }
    
-      if err != nil {
-          log.Fatalf("Prompt() error = %v", err)
-      }
    
-      // Evaluate with callback function
-      err = res.Eval()
-      if err != nil {
-          log.Fatalf("Eval() error = %v", err)
-      }
-      
-      
-      // or Evaluate your self
-      
-      tools, err := res.Tools()
-      if err != nil {
-            log.Fatalf("Tools() error = %v", err)
-      }
-      
-      for _, tool := range tools {
-          log.Printf("Tool: %s", tool.Name)
-          switch tool.Name {
-             // ....
-          }
-      }
-      
+   // or Evaluate your self
+   
+   tools, err := res.Tools()
+   if err != nil {
+         log.Fatalf("Tools() error = %v", err)
+   }
+   
+   for _, tool := range tools {
+       log.Printf("Tool: %s", tool.Name)
+       switch tool.Name {
+          // ....
+       }
+   }
+   
    ```
 
 ## Binary Data
@@ -348,16 +341,16 @@ PDFs is only supported by Gemini and Anthropic
 image := "/9j/4AAQSkZJRgABAQEBLAEsAAD//g......gM4OToWbsBg5mGu0veCcRZO6f0EjK5Jv5X/AP/Z"
 data, err := base64.StdEncoding.DecodeString(image)
 if err != nil {
-t.Fatalf("could not decode image %v", err)
+    t.Fatalf("could not decode image %v", err)
 }
 res, err := llm.
-Prompt(
-prompt.AsUserWithData(prompt.MimeImageJPEG, data),
-prompt.AsUser("Describe the image to me"),
-)
+    Prompt(
+        prompt.AsUserWithData(prompt.MimeImageJPEG, data),
+        prompt.AsUser("Describe the image to me"),
+    )
 
 if err != nil {
-t.Fatalf("Prompt() error = %v", err)
+    t.Fatalf("Prompt() error = %v", err)
 }
 fmt.Println(res.AsText())
 // The image contains the word "Hot!" in red text. The text is centered on a white background. 
@@ -368,21 +361,20 @@ fmt.Println(res.AsText())
 
 #### PDF
 
-```go 
-
+```go
 pdf, err := os.ReadFile("path/to/pdf")
 if err != nil {
-t.Fatalf("could open file, %v", err)
+    t.Fatalf("could open file, %v", err)
 }
 
 res, err := anthopic.New(apiKey).Generator().
-Prompt(
-prompt.AsUserWithData(prompt.MimeApplicationPDF, pdf),
-prompt.AsUser("Describe to me what is in the PDF"),
-)
+    Prompt(
+        prompt.AsUserWithData(prompt.MimeApplicationPDF, pdf),
+        prompt.AsUser("Describe to me what is in the PDF"),
+    )
 
 if err != nil {
-t.Fatalf("Prompt() error = %v", err)
+    t.Fatalf("Prompt() error = %v", err)
 }
 fmt.Println(res.AsText())
 // The image contains the word "Hot!" in red text. The text is centered on a white background. 
@@ -395,45 +387,44 @@ fmt.Println(res.AsText())
 
 Supporter lib for simple agentic tasks
 
-```go 
-
+```go
 type GetQuoteArg struct {
-StockId int `json:"stock_id" json-description:"the id of a stock for which  quote to get"`
+    StockId int `json:"stock_id" json-description:"the id of a stock for which  quote to get"`
 }
 type Search struct {
-Name string `json:"name" json-description:"the name of a stock being looked for"`
+    Name string `json:"name" json-description:"the name of a stock being looked for"`
 }
 
 getQuote := tools.NewTool("get_quote",
-tools.WithDescription("a function get a stock quote based on stock id"),
-tools.WithArgSchema(GetQuoteArg{}),
-tools.WithCallback(func (jsondata string) (string, error) {
-var arg GetQuoteArg
-err := json.Unmarshal([]byte(jsondata), &arg)
-if err != nil {
-return "", err
-}
-return `{"stock_id": ` + strconv.Itoa(arg.StockId) + `,"price": 123.45}`, nil
-}),
+    tools.WithDescription("a function get a stock quote based on stock id"),
+    tools.WithArgSchema(GetQuoteArg{}),
+    tools.WithCallback(func (jsondata string) (string, error) {
+        var arg GetQuoteArg
+        err := json.Unmarshal([]byte(jsondata), &arg)
+        if err != nil {
+            return "", err
+        }
+         return `{"stock_id": ` + strconv.Itoa(arg.StockId) + `,"price": 123.45}`, nil
+    }),
 )
 
 getStock := tools.NewTool("get_stock",
-tools.WithDescription("a function a stock based on name"),
-tools.WithArgSchema(Search{}),
-tools.WithCallback(func (jsondata string) (string, error) {
-var arg GetQuoteArg
-err := json.Unmarshal([]byte(jsondata), &arg)
-if err != nil {
-return "", err
-}
-return `{"stock_id": 98765}`, nil
-}),
+    tools.WithDescription("a function a stock based on name"),
+    tools.WithArgSchema(Search{}),
+    tools.WithCallback(func (jsondata string) (string, error) {
+        var arg GetQuoteArg
+        err := json.Unmarshal([]byte(jsondata), &arg)
+        if err != nil {
+            return "", err
+        }
+        return `{"stock_id": 98765}`, nil
+    }),
 )
 
 
 type Result struct {
-StockId int     `json:"stock_id"`
-Price   float64 `json:"price"`
+    StockId int     `json:"stock_id"`
+    Price   float64 `json:"price"`
 }
 
 llm := anthopic.New(apiKey).Generator()
@@ -441,7 +432,7 @@ llm = llm.SetTools(getQuote, getStock)
 
 res, err := agent.Run[Result](5, llm, prompt.AsUser("Get me the price of Volvo B"))
 if err != nil {
-t.Fatalf("Prompt() error = %v", err)
+    t.Fatalf("Prompt() error = %v", err)
 }
 
 fmt.Printf("==== Result after %d calls ====\n", res.Depth)
@@ -449,7 +440,7 @@ fmt.Printf("%+v\n", res.Result)
 fmt.Printf("==== Conversation ====\n")
 
 for _, p := range res.Promps {
-fmt.Printf("%s: %s\n", p.Role, p.Text)
+    fmt.Printf("%s: %s\n", p.Role, p.Text)
 }
 
 // ==== Result after 2 calls ====
@@ -461,9 +452,6 @@ fmt.Printf("%s: %s\n", p.Role, p.Text)
 // assistant:  tool function call: get_quote with argument: {"stock_id":98765}
 // user:       result: get_quote => {"stock_id": 98765,"price": 123.45}
 // assistant:  tool function call: __return_result_tool__ with argument: {"price":123.45,"stock_id":98765}
-
-
-
 ```
 
 ## Embeddings
@@ -475,8 +463,8 @@ providers. There is also a VoyageAI, voyageai.com, that only really deals with e
 client := bellman_client := bellman.New(...)
 
 res, err := client.Embed(embed.Request{
-Model: vertexai.EmbedModel_text_005.WithType(embed.TypeDocument),
-Text:  "The document to embed",
+    Model: vertexai.EmbedModel_text_005.WithType(embed.TypeDocument),
+    Text:  "The document to embed",
 })
 
 fmt.Println(res.AsFloat32())
