@@ -9,6 +9,7 @@ import (
 type Prompter interface {
 	SetRequest(request Request)
 	Prompt(prompts ...prompt.Prompt) (*Response, error)
+	Stream(prompts ...prompt.Prompt) (<-chan *StreamResponse, error)
 }
 type Gen interface {
 	Provider() string

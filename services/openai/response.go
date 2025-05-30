@@ -1,20 +1,47 @@
 package openai
 
+type openaiStreamResponse struct {
+	ID                string `json:"id"`
+	Object            string `json:"object"`
+	Created           int    `json:"created"`
+	Model             string `json:"model"`
+	ServiceTier       string `json:"service_tier"`
+	SystemFingerprint string `json:"system_fingerprint"`
+	Choices           []struct {
+		Index int `json:"index"`
+		Delta struct {
+			Role    string      `json:"role"`
+			Content string      `json:"content"`
+			Refusal interface{} `json:"refusal"`
+		} `json:"delta"`
+		Logprobs     interface{} `json:"logprobs"`
+		FinishReason interface{} `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *usage `json:"usage"`
+}
+
+type usage struct {
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
+	PromptTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+		AudioTokens  int `json:"audio_tokens"`
+	} `json:"prompt_tokens_details"`
+	CompletionTokensDetails struct {
+		ReasoningTokens          int `json:"reasoning_tokens"`
+		AudioTokens              int `json:"audio_tokens"`
+		AcceptedPredictionTokens int `json:"accepted_prediction_tokens"`
+		RejectedPredictionTokens int `json:"rejected_prediction_tokens"`
+	} `json:"completion_tokens_details"`
+}
+
 type openaiResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	Created int    `json:"created"`
 	Model   string `json:"model"`
-	Usage   struct {
-		PromptTokens            int `json:"prompt_tokens"`
-		CompletionTokens        int `json:"completion_tokens"`
-		TotalTokens             int `json:"total_tokens"`
-		CompletionTokensDetails struct {
-			ReasoningTokens          int `json:"reasoning_tokens"`
-			AcceptedPredictionTokens int `json:"accepted_prediction_tokens"`
-			RejectedPredictionTokens int `json:"rejected_prediction_tokens"`
-		} `json:"completion_tokens_details"`
-	} `json:"usage"`
+	Usage   usage  `json:"usage"`
 	Choices []struct {
 		Message struct {
 			Role      string             `json:"role"`

@@ -28,6 +28,8 @@ type Model struct {
 
 	InputMaxTokens   int `json:"input_max_tokens,omitempty"`
 	OutputDimensions int `json:"output_dimensions,omitempty"`
+
+	Config map[string]any `json:"config,omitempty"`
 }
 
 func (m Model) WithType(mode Type) Model {

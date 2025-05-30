@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
@@ -24,6 +25,9 @@ type generator struct {
 
 func (g *generator) SetRequest(config gen.Request) {
 	g.request = config
+}
+func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamResponse, error) {
+	return nil, errors.New("not implmented")
 }
 
 func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error) {

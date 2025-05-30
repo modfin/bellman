@@ -25,6 +25,17 @@ func (b *Generator) SetConfig(config Request) *Generator {
 	return bb
 }
 
+func (b *Generator) Stream(prompts ...prompt.Prompt) (<-chan *StreamResponse, error) {
+	prompter := b.Prompter
+	if prompter == nil {
+		return nil, errors.New("prompter is required")
+	}
+	r := b.clone().Request
+	r.Stream = true
+	prompter.SetRequest(r)
+	return prompter.Stream(prompts...)
+}
+
 func (b *Generator) Prompt(prompts ...prompt.Prompt) (*Response, error) {
 	prompter := b.Prompter
 	if prompter == nil {
