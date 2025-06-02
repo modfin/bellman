@@ -10,6 +10,8 @@ import (
 type Request struct {
 	Context context.Context `json:"-"`
 
+	Stream bool `json:"stream"`
+
 	Model        Model  `json:"model"`
 	SystemPrompt string `json:"system_prompt,omitempty"`
 

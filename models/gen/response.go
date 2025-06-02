@@ -4,8 +4,39 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/tools"
 )
+
+type StreamingResponseType string
+
+const TYPE_DELTA StreamingResponseType = "delta"
+const TYPE_METADATA StreamingResponseType = "metadata"
+const TYPE_EOF StreamingResponseType = "EOF"
+const TYPE_ERROR StreamingResponseType = "ERROR"
+
+type StreamResponseError string
+
+func (s StreamResponseError) Error() string {
+	return string(s)
+}
+
+type StreamResponse struct {
+	Type     StreamingResponseType `json:"type"`
+	Role     prompt.Role           `json:"role"`
+	Index    int                   `json:"index"`
+	Content  string                `json:"content"`
+	ToolCall *tools.Call           `json:"tool_call,omitempty"` // Only for TYPE_DELTA
+
+	Metadata *models.Metadata `json:"metadata,omitempty"`
+}
+
+func (r StreamResponse) Error() error {
+	if r.Type == TYPE_ERROR {
+		return StreamResponseError("streaming response error: " + r.Content)
+	}
+	return nil
+}
 
 type Response struct {
 	Texts []string     `json:"texts,omitempty"`

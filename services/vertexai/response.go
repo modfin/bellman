@@ -2,11 +2,42 @@ package vertexai
 
 import (
 	"github.com/modfin/bellman/tools"
+	"time"
 )
 
 type response struct {
 	llm   geminiResponse
 	tools []tools.Tool
+}
+
+type geminiStreamingResponse struct {
+	Candidates []struct {
+		Content struct {
+			Role  string `json:"role"`
+			Parts []struct {
+				Text         *string       `json:"text"`
+				FunctionCall *functionCall `json:"functionCall,omitempty"`
+			} `json:"parts"`
+		} `json:"content"`
+		FinishReason string `json:"finishReason"`
+	} `json:"candidates"`
+	UsageMetadata struct {
+		PromptTokenCount     int    `json:"promptTokenCount"`
+		CandidatesTokenCount int    `json:"candidatesTokenCount"`
+		TotalTokenCount      int    `json:"totalTokenCount"`
+		TrafficType          string `json:"trafficType"`
+		PromptTokensDetails  []struct {
+			Modality   string `json:"modality"`
+			TokenCount int    `json:"tokenCount"`
+		} `json:"promptTokensDetails"`
+		CandidatesTokensDetails []struct {
+			Modality   string `json:"modality"`
+			TokenCount int    `json:"tokenCount"`
+		} `json:"candidatesTokensDetails"`
+	} `json:"usageMetadata"`
+	ModelVersion string    `json:"modelVersion"`
+	CreateTime   time.Time `json:"createTime"`
+	ResponseID   string    `json:"responseId"`
 }
 
 type geminiResponse struct {

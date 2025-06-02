@@ -1,5 +1,7 @@
 package vertexai
 
+import "github.com/modfin/bellman/tools"
+
 type genRequestContent struct {
 	Role  string                  `json:"role,omitempty"`
 	Parts []genRequestContentPart `json:"parts,omitempty"`
@@ -78,4 +80,7 @@ type genRequest struct {
 
 	Tools      []genTool      `json:"tools,omitempty"`
 	ToolConfig *genToolConfig `json:"toolConfig,omitempty"`
+
+	toolBelt map[string]*tools.Tool `json:"-"`
+	url      string                 `json:"-"`
 }
