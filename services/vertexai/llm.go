@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"sync/atomic"
+	"time"
 )
 
 var requestNo int64
@@ -114,14 +115,39 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			if candidate.Content.Role == "user" {
 				role = prompt.UserRole
 			}
-
-			for _, part := range candidate.Content.Parts {
-				stream <- &gen.StreamResponse{
-					Type:    gen.TYPE_DELTA,
-					Role:    role,
-					Index:   0,
-					Content: part.Text,
+			t := time.Now().UnixNano()
+			for idx, part := range candidate.Content.Parts {
+				if part.Text != nil {
+					stream <- &gen.StreamResponse{
+						Type:    gen.TYPE_DELTA,
+						Role:    role,
+						Index:   0,
+						Content: *part.Text,
+					}
 				}
+				if part.FunctionCall != nil {
+					f := part.FunctionCall
+					arg, err := json.Marshal(f.Args)
+					if err != nil {
+						stream <- &gen.StreamResponse{
+							Type:    gen.TYPE_ERROR,
+							Content: fmt.Sprintf("could not marshal tool call arguments, %v", err),
+						}
+						continue
+					}
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_DELTA,
+						Role:  prompt.ToolCallRole,
+						Index: 0,
+						ToolCall: &tools.Call{
+							Name:     f.Name,
+							Argument: arg,
+							ID:       fmt.Sprintf("%d-%d", t, idx),
+							Ref:      model.toolBelt[f.Name],
+						},
+					}
+				}
+
 			}
 			if ss.UsageMetadata.TotalTokenCount > 0 {
 				stream <- &gen.StreamResponse{

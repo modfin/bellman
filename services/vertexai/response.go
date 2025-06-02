@@ -15,7 +15,8 @@ type geminiStreamingResponse struct {
 		Content struct {
 			Role  string `json:"role"`
 			Parts []struct {
-				Text string `json:"text"`
+				Text         *string       `json:"text"`
+				FunctionCall *functionCall `json:"functionCall,omitempty"`
 			} `json:"parts"`
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`

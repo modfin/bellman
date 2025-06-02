@@ -30,7 +30,7 @@ func (g *generator) SetRequest(config gen.Request) {
 
 func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamResponse, error) {
 	g.request.Stream = true
-	req, _, err := g.prompt(conversation...)
+	req, reqModel, err := g.prompt(conversation...)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +73,8 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		}()
 
 		var role string
+		var toolName string
+		var toolCallID string
 		for {
 			line, _, err := reader.ReadLine()
 			if err != nil {
@@ -98,7 +100,6 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			line = line[6:] // removing header
 
 			if bytes.Equal(line, []byte("[DONE]")) {
-				log.Printf("got [DONE] from sse stream, terminating")
 				break // Exit the loop on any other error
 			}
 
@@ -126,28 +127,57 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 
 			if len(ss.Choices) == 0 { // Something wrong
 				// Should never really get here...
-				g.openai.log("[gen] stream request, no shoices", "msg", string(line))
+				g.openai.log("[gen] stream request, no choices", "msg", string(line))
 				stream <- &gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
 					Content: "there where no choises in response",
 				}
 				break
 			}
-			choice := ss.Choices[0]
 
-			// eg, "finish_reason":"stop", discard and wait for usage
-			if choice.FinishReason != nil { // ignore it...
-				continue
-			}
-			if len(choice.Delta.Role) > 0 {
-				role = choice.Delta.Role // Probably usually check, assistant
-			}
+			for _, choice := range ss.Choices {
+				// eg, "finish_reason":"stop", discard and wait for usage
+				if choice.FinishReason != nil { // ignore it...
+					continue
+				}
+				if len(choice.Delta.Role) > 0 {
+					role = choice.Delta.Role // Probably usually check, assistant
+				}
+				if choice.Delta.Content != nil {
+					stream <- &gen.StreamResponse{
+						Type:    gen.TYPE_DELTA,
+						Role:    prompt.Role(role),
+						Index:   choice.Index,
+						Content: *choice.Delta.Content,
+					}
+				}
+				if len(choice.Delta.ToolCalls) > 0 {
+					for _, toolCall := range choice.Delta.ToolCalls {
+						if len(toolCall.Function.Name) > 0 && len(toolCall.ID) > 0 {
+							toolName = toolCall.Function.Name
+							toolCallID = toolCall.ID
+						}
+						if len(toolName) == 0 || len(toolCallID) == 0 {
+							stream <- &gen.StreamResponse{
+								Type:    gen.TYPE_ERROR,
+								Content: "tool call without name or id",
+							}
+							continue
+						}
 
-			stream <- &gen.StreamResponse{
-				Type:    gen.TYPE_DELTA,
-				Role:    prompt.Role(role),
-				Index:   choice.Index,
-				Content: choice.Delta.Content,
+						stream <- &gen.StreamResponse{
+							Type:  gen.TYPE_DELTA,
+							Role:  prompt.ToolCallRole,
+							Index: choice.Index,
+							ToolCall: &tools.Call{
+								ID:       toolCallID,
+								Name:     toolName,
+								Argument: []byte(toolCall.Function.Arguments),
+								Ref:      reqModel.toolBelt[toolName],
+							},
+						}
+					}
+				}
 			}
 		}
 

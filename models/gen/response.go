@@ -22,10 +22,11 @@ func (s StreamResponseError) Error() string {
 }
 
 type StreamResponse struct {
-	Type    StreamingResponseType `json:"type"`
-	Role    prompt.Role           `json:"role"`
-	Index   int                   `json:"index"`
-	Content string                `json:"content"`
+	Type     StreamingResponseType `json:"type"`
+	Role     prompt.Role           `json:"role"`
+	Index    int                   `json:"index"`
+	Content  string                `json:"content"`
+	ToolCall *tools.Call           `json:"tool_call,omitempty"` // Only for TYPE_DELTA
 
 	Metadata *models.Metadata `json:"metadata,omitempty"`
 }

@@ -1,7 +1,11 @@
 package anthropic
 
+import "github.com/modfin/bellman/tools"
+
 // https://docs.anthropic.com/en/api/messages
 type request struct {
+	Stream bool `json:"stream,omitempty"`
+
 	Model     string `json:"model"`
 	MaxTokens int    `json:"max_tokens,omitempty"`
 
@@ -20,6 +24,8 @@ type request struct {
 	Tools []reqTool      `json:"tools,omitempty"`
 
 	Messages []reqMessages `json:"messages"`
+
+	toolBelt map[string]*tools.Tool
 }
 
 type reqMessages struct {

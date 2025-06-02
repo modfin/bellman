@@ -10,9 +10,18 @@ type openaiStreamResponse struct {
 	Choices           []struct {
 		Index int `json:"index"`
 		Delta struct {
-			Role    string      `json:"role"`
-			Content string      `json:"content"`
-			Refusal interface{} `json:"refusal"`
+			Content   *string     `json:"content"`
+			Refusal   interface{} `json:"refusal"`
+			Role      string      `json:"role"`
+			ToolCalls []struct {
+				Index    int    `json:"index"`
+				ID       string `json:"id"`
+				Function struct {
+					Arguments string `json:"arguments"`
+					Name      string `json:"name"`
+				} `json:"function,omitempty"`
+				Type string `json:"type"`
+			} `json:"tool_calls,omitempty"`
 		} `json:"delta"`
 		Logprobs     interface{} `json:"logprobs"`
 		FinishReason interface{} `json:"finish_reason"`
