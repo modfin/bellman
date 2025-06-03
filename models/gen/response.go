@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/modfin/bellman/models"
@@ -45,7 +46,7 @@ type Response struct {
 	Metadata models.Metadata `json:"metadata,omitempty"`
 }
 
-func (r *Response) Eval() (err error) {
+func (r *Response) Eval(ctx context.Context) (err error) {
 	callbacks, err := r.AsTools()
 	if err != nil {
 		return err
@@ -62,7 +63,7 @@ func (r *Response) Eval() (err error) {
 			return fmt.Errorf("tool %s has no callback", tool.Name)
 		}
 		count++
-		_, err = tool.Ref.Function(tool.Argument)
+		_, err = tool.Ref.Function(ctx, tool.Argument)
 		if err != nil {
 			return fmt.Errorf("tool %s failed: %w", tool.Name, err)
 		}
