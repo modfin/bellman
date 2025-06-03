@@ -55,7 +55,7 @@ func Run[T any](maxDepth int, g *gen.Generator, prompts ...prompt.Prompt) (*Resu
 			if callback.Ref.Function == nil {
 				return nil, fmt.Errorf("tool %s has no callback function attached", callback.Name)
 			}
-			toolFuncResponse, err := callback.Ref.Function(callback.Argument)
+			toolFuncResponse, err := callback.Ref.Function(g.Request.Context, callback.Argument)
 			if err != nil {
 				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", callback.Name, err, callback.Argument)
 			}
@@ -128,7 +128,7 @@ func RunWithToolsOnly[T any](maxDepth int, g *gen.Generator, prompts ...prompt.P
 			if callback.Ref.Function == nil {
 				return nil, fmt.Errorf("tool %s has no callback function attached", callback.Name)
 			}
-			toolFuncResponse, err := callback.Ref.Function(callback.Argument)
+			toolFuncResponse, err := callback.Ref.Function(g.Request.Context, callback.Argument)
 			if err != nil {
 				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", callback.Name, err, callback.Argument)
 			}
