@@ -414,6 +414,17 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		}
 	}
 
+	if !modelNamePattern.MatchString(g.request.Model.Name) {
+		return nil, model, fmt.Errorf("model name %s contains invalid characters, only [\\w.-]+ is allowed", g.request.Model.Name)
+	}
+	if !regionPattern.MatchString(region) {
+		return nil, model, fmt.Errorf("region %q contains invalid characters, only (global)|([a-z]+-[a-z]+[1-9][0-9]*) or global is allowed", region)
+	}
+
+	if !projectIdPattern.MatchString(project) {
+		return nil, model, fmt.Errorf("project %q contains invalid characters, only [a-z]([a-z0-9-]{4,28}[a-z0-9])? is allowed", project)
+	}
+
 	model.url = fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
 		region, project, region, g.request.Model.Name, mode)
 

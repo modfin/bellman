@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sync/atomic"
 
 	"golang.org/x/oauth2/google"
@@ -85,6 +86,11 @@ func New(config GoogleConfig) (*Google, error) {
 func (g *Google) Provider() string {
 	return Provider
 }
+
+var projectIdPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{4,28}[a-z0-9])?$`)
+var regionPattern = regexp.MustCompile(`^(global)|([a-z]+-[a-z]+[1-9][0-9]*)$`)
+var modelNamePattern = regexp.MustCompile(`^[\w.-]+$`) // should probably be gemini-[\w.-]
+
 func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
@@ -122,6 +128,18 @@ func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 		if ok {
 			project = p
 		}
+	}
+
+	if !modelNamePattern.MatchString(request.Model.Name) {
+		return nil, fmt.Errorf("model name %q contains invalid characters, only [\\w.-]+ is allowed", request.Model.Name)
+	}
+
+	if !regionPattern.MatchString(region) {
+		return nil, fmt.Errorf("region %q contains invalid characters, only [a-z]+-[a-z]+[1-9][0-9]* or global is allowed", region)
+	}
+
+	if !projectIdPattern.MatchString(project) {
+		return nil, fmt.Errorf("project %q contains invalid characters, only [a-z]([a-z0-9-]{4,28}[a-z0-9])? is allowed", project)
 	}
 
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict",
