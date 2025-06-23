@@ -37,8 +37,15 @@ type functionResponse struct {
 	} `json:"response,omitempty"`
 }
 
+type thinkingConfig struct {
+	ThinkingBudget  *int  `json:"thinkingBudget,omitempty"` // -1 for dynamic
+	IncludeThoughts *bool `json:"includeThoughts,omitempty"`
+}
+
 type genConfig struct {
 	MaxOutputTokens *int `json:"maxOutputTokens,omitempty"`
+
+	ThinkingConfig *thinkingConfig `json:"thinkingConfig,omitempty"`
 
 	TopP             *float64 `json:"topP,omitempty"`
 	TopK             *int     `json:"topK,omitempty"`

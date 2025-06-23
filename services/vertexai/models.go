@@ -9,9 +9,15 @@ import (
 
 const Provider = "VertexAI"
 
-var GenModel_gemini_2_5_pro_preview = gen.Model{
+var GenModel_gemini_2_5_pro_latest = gen.Model{
 	Provider:       Provider,
-	Name:           "gemini-2.5-pro-preview-03-25", // Region: "us-central1",
+	Name:           "gemini-2.5-pro",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_2_5_flash_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-2.5-flash",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
 }

@@ -47,6 +47,8 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
+		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_parts", g.request.ThinkingParts != nil,
 	)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -205,6 +207,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
+		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_parts", g.request.ThinkingParts != nil,
 	)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -231,10 +235,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:        g.request.Model.FQN(),
-			InputTokens:  respModel.Usage.PromptTokens,
-			OutputTokens: respModel.Usage.CompletionTokens,
-			TotalTokens:  respModel.Usage.TotalTokens,
+			Model:          g.request.Model.FQN(),
+			InputTokens:    respModel.Usage.PromptTokens,
+			OutputTokens:   respModel.Usage.CompletionTokens,
+			ThinkingTokens: respModel.Usage.CompletionTokensDetails.ReasoningTokens,
+			TotalTokens:    respModel.Usage.TotalTokens,
 		},
 	}
 	for _, c := range respModel.Choices {
@@ -260,6 +265,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"model", g.request.Model.FQN(),
 		"token-input", res.Metadata.InputTokens,
 		"token-output", res.Metadata.OutputTokens,
+		"token-thinking", res.Metadata.ThinkingTokens,
 		"token-total", res.Metadata.TotalTokens,
 	)
 
@@ -326,6 +332,18 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 				Schema: fromBellmanSchema(g.request.OutputSchema),
 			},
 		}
+	}
+
+	if g.request.ThinkingBudget != nil {
+		var reffort ReasoningEffort
+		if *g.request.ThinkingBudget < 2_000 {
+			reffort = ReasoningEffortLow
+		} else if *g.request.ThinkingBudget < 10_000 {
+			reffort = ReasoningEffortMedium
+		} else {
+			reffort = ReasoningEffortHigh
+		}
+		reqModel.ReasoningEffort = &reffort
 	}
 
 	messages := []genRequestMessage{}

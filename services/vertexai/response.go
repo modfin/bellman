@@ -16,6 +16,7 @@ type geminiStreamingResponse struct {
 			Role  string `json:"role"`
 			Parts []struct {
 				Text         *string       `json:"text"`
+				Thought      *bool         `json:"thought,omitempty"`
 				FunctionCall *functionCall `json:"functionCall,omitempty"`
 			} `json:"parts"`
 		} `json:"content"`
@@ -24,6 +25,7 @@ type geminiStreamingResponse struct {
 	UsageMetadata struct {
 		PromptTokenCount     int    `json:"promptTokenCount"`
 		CandidatesTokenCount int    `json:"candidatesTokenCount"`
+		ThoughtsTokenCount   int    `json:"thoughtsTokenCount"`
 		TotalTokenCount      int    `json:"totalTokenCount"`
 		TrafficType          string `json:"trafficType"`
 		PromptTokensDetails  []struct {
@@ -46,6 +48,7 @@ type geminiResponse struct {
 			Role  string `json:"role"`
 			Parts []struct {
 				Text         string       `json:"text"`
+				Thought      *bool        `json:"thought,omitempty"`
 				FunctionCall functionCall `json:"functionCall"`
 			} `json:"parts"`
 		} `json:"content"`
@@ -61,6 +64,7 @@ type geminiResponse struct {
 	UsageMetadata struct {
 		PromptTokenCount     int `json:"promptTokenCount"`
 		CandidatesTokenCount int `json:"candidatesTokenCount"`
+		ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
 		TotalTokenCount      int `json:"totalTokenCount"`
 	} `json:"usageMetadata"`
 }

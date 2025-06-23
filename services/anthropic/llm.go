@@ -47,6 +47,8 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
+		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_parts", g.request.ThinkingParts != nil,
 		"anthropic-version", Version,
 	)
 
@@ -199,6 +201,14 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 						Content: *ss.Delta.Text,
 					}
 				}
+				if ss.Delta.Thinking != nil && len(*ss.Delta.Thinking) > 0 {
+					stream <- &gen.StreamResponse{
+						Type:    gen.TYPE_THINKING_DELTA,
+						Role:    prompt.Role(role),
+						Index:   ss.Index,
+						Content: *ss.Delta.Thinking,
+					}
+				}
 			}
 			if ss.Type == "content_block_stop" {
 				toolID = ""   // Reset tool ID on content block stop
@@ -229,6 +239,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
+		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_parts", g.request.ThinkingParts != nil,
 		"anthropic-version", Version,
 	)
 
@@ -264,6 +276,9 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	for _, c := range respModel.Content {
 		if c.Type == "text" { // Not Tools
 			res.Texts = append(res.Texts, c.Text)
+		}
+		if c.Type == "thinking" {
+			res.Thinking = append(res.Thinking, c.Thinking)
 		}
 
 		if c.Type == "tool_use" {
@@ -365,6 +380,18 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 		if g.request.ToolConfig.Name == tools.NoTool.Name { // None is not supporded by Anthropic, so lets just remove the toolks.
 			model.Tool = nil
 			model.Tools = nil
+		}
+	}
+
+	if g.request.ThinkingBudget != nil {
+		model.Thinking = &reqExtendedThinking{
+			BudgetTokens: *g.request.ThinkingBudget,
+			Type:         ExtendedThinkingTypeEnabled,
+		}
+	}
+	if g.request.ThinkingBudget != nil && *g.request.ThinkingBudget == 0 {
+		model.Thinking = &reqExtendedThinking{
+			Type: ExtendedThinkingTypeDisabled,
 		}
 	}
 

@@ -65,6 +65,15 @@ type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage"`
 }
 
+// ReasoningEffort is a string that can be "low", "medium", or "high".
+type ReasoningEffort string
+
+const (
+	ReasoningEffortLow    ReasoningEffort = "low"
+	ReasoningEffortMedium ReasoningEffort = "medium"
+	ReasoningEffortHigh   ReasoningEffort = "high"
+)
+
 type genRequest struct {
 	Stream        bool           `json:"stream,omitempty"`
 	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
@@ -78,11 +87,12 @@ type genRequest struct {
 
 	Stop []string `json:"stop,omitempty"`
 
-	MaxTokens        *int     `json:"max_completion_tokens,omitempty"`
-	Temperature      *float64 `json:"temperature,omitempty"`
-	TopP             *float64 `json:"top_p,omitempty"`
-	FrequencyPenalty *float64 `json:"frequency_penalty,omitempty"`
-	PresencePenalty  *float64 `json:"presence_penalty,omitempty"`
+	MaxTokens        *int             `json:"max_completion_tokens,omitempty"`
+	ReasoningEffort  *ReasoningEffort `json:"reasoning_effort,omitempty"` // "low", "medium", "high"
+	Temperature      *float64         `json:"temperature,omitempty"`
+	TopP             *float64         `json:"top_p,omitempty"`
+	FrequencyPenalty *float64         `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64         `json:"presence_penalty,omitempty"`
 
 	toolBelt map[string]*tools.Tool
 }

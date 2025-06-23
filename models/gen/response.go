@@ -12,6 +12,7 @@ import (
 type StreamingResponseType string
 
 const TYPE_DELTA StreamingResponseType = "delta"
+const TYPE_THINKING_DELTA StreamingResponseType = "thining_delta"
 const TYPE_METADATA StreamingResponseType = "metadata"
 const TYPE_EOF StreamingResponseType = "EOF"
 const TYPE_ERROR StreamingResponseType = "ERROR"
@@ -40,8 +41,9 @@ func (r StreamResponse) Error() error {
 }
 
 type Response struct {
-	Texts []string     `json:"texts,omitempty"`
-	Tools []tools.Call `json:"tools,omitempty"`
+	Texts    []string     `json:"texts,omitempty"`
+	Thinking []string     `json:"thinking,omitempty"` // Thinking parts, if any
+	Tools    []tools.Call `json:"tools,omitempty"`
 
 	Metadata models.Metadata `json:"metadata,omitempty"`
 }

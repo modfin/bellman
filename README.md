@@ -383,6 +383,29 @@ fmt.Println(res.AsText())
 
 ```
 
+## Reasoning
+
+Control reasoning by setting the budget for the reasoning tokens. Determine whether to return the reasoning data or not.
+The default thinking/reasoning behaviour is different depending on the model you are using.
+
+```go
+res, err := anthropic.New(apiKey).Generator().
+    Model(anthropic.GenModel_4_0_sonnet_20250514).
+    MaxTokens(3000).
+    ThinkingBudget(2000). // the budget for reasoning tokens, set to 0 to disable reasoning if supported by the selected model
+    IncludeThinkingParts(true). // if available, includes the reasoning parts in the response (will be summaries for some models)
+    Prompt(
+        prompt.AsUser("What is 27 * 453?"),
+    )
+if err != nil {
+    log.Fatalf("Prompt() error = %v", err)
+}
+
+answer, err := res.AsText()
+
+fmt.Println(awnser, err)
+```
+
 ## Agent Example
 
 Supporter lib for simple agentic tasks
