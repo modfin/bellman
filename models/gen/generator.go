@@ -86,6 +86,17 @@ func (b *Generator) clone() *Generator {
 	if b.Request.Context != nil {
 		bb.Request.Context = b.Request.Context
 	}
+	if b.Request.ThinkingBudget != nil {
+		cp := *b.Request.ThinkingBudget
+		bb.Request.ThinkingBudget = &cp
+	}
+	if b.Request.ThinkingParts != nil {
+		cp := *b.Request.ThinkingParts
+		bb.Request.ThinkingParts = &cp
+	}
+	if b.Request.StopSequences != nil {
+		bb.Request.StopSequences = append([]string{}, b.Request.StopSequences...)
+	}
 
 	return &bb
 }
@@ -112,8 +123,8 @@ func (b *Generator) StrictOutput(strict bool) *Generator {
 	bb.Request.StrictOutput = strict
 	return bb
 }
-func (g *Generator) Tools() []tools.Tool {
-	return g.Request.Tools
+func (b *Generator) Tools() []tools.Tool {
+	return b.Request.Tools
 }
 
 func (b *Generator) SetTools(tool ...tools.Tool) *Generator {
@@ -122,8 +133,8 @@ func (b *Generator) SetTools(tool ...tools.Tool) *Generator {
 	bb.Request.Tools = append([]tools.Tool{}, tool...)
 	return bb
 }
-func (g *Generator) AddTools(tool ...tools.Tool) *Generator {
-	return g.SetTools(append(g.Request.Tools, tool...)...)
+func (b *Generator) AddTools(tool ...tools.Tool) *Generator {
+	return b.SetTools(append(b.Request.Tools, tool...)...)
 }
 
 func (b *Generator) SetToolConfig(tool tools.Tool) *Generator {
@@ -191,11 +202,26 @@ func (b *Generator) MaxTokens(maxTokens int) *Generator {
 	return bb
 }
 
+// ThinkingBudget sets the thinking budget for the generator. For models which do not support tokens as thinking budget,
+// the number of tokens is translated into enums "low", "medium", "high". Where "low" is <2.000, "medium" is 2.000-10.000, and "high" is 10.001+.
+func (b *Generator) ThinkingBudget(thinkingBudget int) *Generator {
+	bb := b.clone()
+	bb.Request.ThinkingBudget = &thinkingBudget
+
+	return bb
+}
+func (b *Generator) IncludeThinkingParts(thinkingParts bool) *Generator {
+	bb := b.clone()
+	bb.Request.ThinkingParts = &thinkingParts
+
+	return bb
+}
+
 type Option func(generator *Generator) *Generator
 
-func WithRequest(requset Request) Option {
+func WithRequest(req Request) Option {
 	return func(g *Generator) *Generator {
-		return g.SetConfig(requset)
+		return g.SetConfig(req)
 	}
 }
 
@@ -276,5 +302,15 @@ func WithMaxTokens(maxTokens int) Option {
 func WithContext(ctx context.Context) Option {
 	return func(g *Generator) *Generator {
 		return g.WithContext(ctx)
+	}
+}
+func WithThinkingBudget(thinkingBudget int) Option {
+	return func(g *Generator) *Generator {
+		return g.ThinkingBudget(thinkingBudget)
+	}
+}
+func WithThinkingParts(thinkingParts bool) Option {
+	return func(g *Generator) *Generator {
+		return g.IncludeThinkingParts(thinkingParts)
 	}
 }

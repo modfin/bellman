@@ -173,6 +173,22 @@ var GenModel_o1_mini_240912 = gen.Model{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
+var GenModel_o4_mini_250416 = gen.Model{
+	Provider: Provider,
+	Name:     "o4-mini-2025-04-16",
+}
+var GenModel_o3_pro_250610 = gen.Model{
+	Provider: Provider,
+	Name:     "o3-pro-2025-06-10",
+}
+var GenModel_o3_250416 = gen.Model{
+	Provider: Provider,
+	Name:     "o3-2025-04-16",
+}
+var GenModel_o3_mini_250131 = gen.Model{
+	Provider: Provider,
+	Name:     "o3-mini-2025-01-31",
+}
 
 // GenModel_gpt4_turbo
 var GenModel_gpt4_turbo = gen.Model{

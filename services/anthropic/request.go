@@ -25,6 +25,8 @@ type request struct {
 
 	Messages []reqMessages `json:"messages"`
 
+	Thinking *reqExtendedThinking `json:"thinking,omitempty"`
+
 	toolBelt map[string]*tools.Tool
 }
 
@@ -63,4 +65,16 @@ type reqContentSource struct {
 	Type      string `json:"type"`           // eg base64
 	MediaType string `json:"media_type"`     //image/jpeg, image/png, image/gif, and image/webp
 	Data      string `json:"data,omitempty"` // base64 encoded.
+}
+
+type ExtendedThinkingType string
+
+const (
+	ExtendedThinkingTypeEnabled  ExtendedThinkingType = "enabled"
+	ExtendedThinkingTypeDisabled ExtendedThinkingType = "disabled"
+)
+
+type reqExtendedThinking struct {
+	BudgetTokens int                  `json:"budget_tokens,omitempty"`
+	Type         ExtendedThinkingType `json:"type,omitempty"`
 }

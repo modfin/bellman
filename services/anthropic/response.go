@@ -4,11 +4,12 @@ const respone_output_callback_name = "__bellman__result_callback"
 
 type anthropicResponse struct {
 	Content []struct {
-		Type  string `json:"type"` // text or tool_use
-		Text  string `json:"text"`
-		Name  string `json:"name"`
-		ID    string `json:"id"`
-		Input any    `json:"input"`
+		Type     string `json:"type"` // text or tool_use
+		Text     string `json:"text"`
+		Thinking string `json:"thinking"`
+		Name     string `json:"name"`
+		ID       string `json:"id"`
+		Input    any    `json:"input"`
 	} `json:"content"`
 	ID           string `json:"id"`
 	Model        string `json:"model"`
@@ -45,6 +46,7 @@ type anthropicStreamContentBlock struct {
 	Name         *string `json:"name,omitempty"`
 	Type         string  `json:"type"` // text_delta, input_json_delta, tool_use, text
 	Text         *string `json:"text,omitempty"`
+	Thinking     *string `json:"thinking,omitempty"`
 	PartialJSON  *string `json:"partial_json,omitempty"`
 	StopReason   *string `json:"stop_reason,omitempty"`
 	StopSequence *any    `json:"stop_sequence,omitempty"`

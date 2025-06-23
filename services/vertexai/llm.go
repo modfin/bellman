@@ -118,6 +118,15 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			t := time.Now().UnixNano()
 			for idx, part := range candidate.Content.Parts {
 				if part.Text != nil {
+					if part.Thought != nil && *part.Thought {
+						stream <- &gen.StreamResponse{
+							Type:    gen.TYPE_THINKING_DELTA,
+							Role:    role,
+							Index:   0,
+							Content: *part.Text,
+						}
+						continue
+					}
 					stream <- &gen.StreamResponse{
 						Type:    gen.TYPE_DELTA,
 						Role:    role,
@@ -153,10 +162,11 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 				stream <- &gen.StreamResponse{
 					Type: gen.TYPE_METADATA,
 					Metadata: &models.Metadata{
-						Model:        ss.ModelVersion,
-						InputTokens:  ss.UsageMetadata.PromptTokenCount,
-						OutputTokens: ss.UsageMetadata.CandidatesTokenCount,
-						TotalTokens:  ss.UsageMetadata.TotalTokenCount,
+						Model:          ss.ModelVersion,
+						InputTokens:    ss.UsageMetadata.PromptTokenCount,
+						OutputTokens:   ss.UsageMetadata.CandidatesTokenCount,
+						ThinkingTokens: ss.UsageMetadata.ThoughtsTokenCount,
+						TotalTokens:    ss.UsageMetadata.TotalTokenCount,
 					},
 				}
 			}
@@ -189,6 +199,8 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
+		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_parts", g.request.ThinkingParts != nil,
 		"url", model.url,
 	)
 
@@ -214,14 +226,19 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:        g.request.Model.FQN(),
-			InputTokens:  respModel.UsageMetadata.PromptTokenCount,
-			OutputTokens: respModel.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:  respModel.UsageMetadata.TotalTokenCount,
+			Model:          g.request.Model.FQN(),
+			InputTokens:    respModel.UsageMetadata.PromptTokenCount,
+			OutputTokens:   respModel.UsageMetadata.CandidatesTokenCount,
+			ThinkingTokens: respModel.UsageMetadata.ThoughtsTokenCount,
+			TotalTokens:    respModel.UsageMetadata.TotalTokenCount,
 		},
 	}
 	for _, c := range respModel.Candidates {
 		for _, p := range c.Content.Parts {
+			if p.Thought != nil && *p.Thought {
+				res.Thinking = append(res.Thinking, p.Text)
+				continue
+			}
 			if len(p.Text) > 0 {
 				res.Texts = append(res.Texts, p.Text)
 			}
@@ -248,6 +265,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"model", g.request.Model.FQN(),
 		"token-input", res.Metadata.InputTokens,
 		"token-output", res.Metadata.OutputTokens,
+		"token-thinking", res.Metadata.ThinkingTokens,
 		"token-total", res.Metadata.TotalTokens,
 	)
 
@@ -339,6 +357,16 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
 			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.request.ToolConfig.Name}
 		}
+	}
+
+	if g.request.ThinkingBudget != nil || g.request.ThinkingParts != nil {
+		model.GenerationConfig.ThinkingConfig = &thinkingConfig{}
+	}
+	if g.request.ThinkingBudget != nil {
+		model.GenerationConfig.ThinkingConfig.ThinkingBudget = g.request.ThinkingBudget
+	}
+	if g.request.ThinkingParts != nil {
+		model.GenerationConfig.ThinkingConfig.IncludeThoughts = g.request.ThinkingParts
 	}
 
 	for _, p := range prompts {

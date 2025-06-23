@@ -36,6 +36,12 @@ var GenModel_3_7_sonnet_20250219 = gen.Model{
 	InputMaxToken:  200_000,
 	OutputMaxToken: 64_000,
 }
+var GenModel_4_0_sonnet_20250514 = gen.Model{
+	Provider:       Provider,
+	Name:           "claude-sonnet-4-20250514",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 64_000,
+}
 var GenModel_3_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-3-5-sonnet-latest",
@@ -122,6 +128,16 @@ var GenModel_3_opus_latest = gen.Model{
 var GenModel_3_opus_20240229 = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-3-opus-20240229",
+	Description:             "",
+	InputContentTypes:       nil,
+	InputMaxToken:           0,
+	OutputMaxToken:          0,
+	SupportTools:            false,
+	SupportStructuredOutput: false,
+}
+var GenModel_4_0_opus_20250514 = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-4-20250514",
 	Description:             "",
 	InputContentTypes:       nil,
 	InputMaxToken:           0,
