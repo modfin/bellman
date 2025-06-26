@@ -199,7 +199,7 @@ func executeCallbacksSequential(ctx context.Context, callbacks []tools.Call) []c
 	results := make([]callbackResult, len(callbacks))
 
 	for i, callback := range callbacks {
-		response, err := callback.Ref.Function(ctx, callback.Argument)
+		response, err := callback.Ref.Function(ctx, callback)
 		results[i] = callbackResult{
 			Index:    i,
 			ID:       callback.ID,
@@ -230,7 +230,7 @@ func executeCallbacksParallel(ctx context.Context, callbacks []tools.Call, paral
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			response, err := cb.Ref.Function(ctx, cb.Argument)
+			response, err := cb.Ref.Function(ctx, cb)
 			results[index] = callbackResult{
 				Index:    index,
 				ID:       cb.ID,

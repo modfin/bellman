@@ -30,7 +30,7 @@ var ControlTools = []Tool{
 
 type ToolOption func(tool Tool) Tool
 
-type Function func(ctx context.Context, jsonArg []byte) (response string, err error)
+type Function func(ctx context.Context, call Call) (response string, err error)
 
 func WithDescription(description string) ToolOption {
 	return func(tool Tool) Tool {
@@ -64,10 +64,10 @@ func NewTool(name string, options ...ToolOption) Tool {
 }
 
 type Tool struct {
-	Name           string                                                    `json:"name"`
-	Description    string                                                    `json:"description"`
-	ArgumentSchema *schema.JSON                                              `json:"argument_schema,omitempty"`
-	Function       func(ctx context.Context, jsonArg []byte) (string, error) `json:"-"`
+	Name           string                                               `json:"name"`
+	Description    string                                               `json:"description"`
+	ArgumentSchema *schema.JSON                                         `json:"argument_schema,omitempty"`
+	Function       func(ctx context.Context, call Call) (string, error) `json:"-"`
 }
 
 type Call struct {

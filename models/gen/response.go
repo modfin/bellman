@@ -65,7 +65,7 @@ func (r *Response) Eval(ctx context.Context) (err error) {
 			return fmt.Errorf("tool %s has no callback", tool.Name)
 		}
 		count++
-		_, err = tool.Ref.Function(ctx, tool.Argument)
+		_, err = tool.Ref.Function(ctx, tool)
 		if err != nil {
 			return fmt.Errorf("tool %s failed: %w", tool.Name, err)
 		}
