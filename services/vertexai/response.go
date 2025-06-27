@@ -12,6 +12,7 @@ type response struct {
 
 type geminiStreamingResponse struct {
 	Candidates []struct {
+		Index   int `json:"index"`
 		Content struct {
 			Role  string `json:"role"`
 			Parts []struct {

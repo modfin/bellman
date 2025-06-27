@@ -122,7 +122,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						stream <- &gen.StreamResponse{
 							Type:    gen.TYPE_THINKING_DELTA,
 							Role:    role,
-							Index:   0,
+							Index:   candidate.Index,
 							Content: *part.Text,
 						}
 						continue
@@ -130,7 +130,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 					stream <- &gen.StreamResponse{
 						Type:    gen.TYPE_DELTA,
 						Role:    role,
-						Index:   0,
+						Index:   candidate.Index,
 						Content: *part.Text,
 					}
 				}
@@ -147,7 +147,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 					stream <- &gen.StreamResponse{
 						Type:  gen.TYPE_DELTA,
 						Role:  prompt.ToolCallRole,
-						Index: 0,
+						Index: candidate.Index,
 						ToolCall: &tools.Call{
 							Name:     f.Name,
 							Argument: arg,
