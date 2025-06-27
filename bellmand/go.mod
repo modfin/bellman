@@ -3,10 +3,10 @@ module github.com/modfin/bellman/bellmand
 go 1.23.2
 
 require (
-	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/lmittmann/tint v1.0.5
-	github.com/modfin/bellman v0.4.0
+	github.com/modfin/bellman v0.11.8
 	github.com/modfin/clix v1.0.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/samber/slog-chi v1.12.3
