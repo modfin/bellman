@@ -58,7 +58,8 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code, %d", resp.StatusCode)
+		b, err := io.ReadAll(resp.Body)
+		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}", resp.StatusCode, string(b)), err)
 	}
 
 	reader := bufio.NewReader(resp.Body)
@@ -251,8 +252,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, string(b))
+		b, err := io.ReadAll(resp.Body)
+		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}", resp.StatusCode, string(b)), err)
 	}
 
 	var respModel anthropicResponse

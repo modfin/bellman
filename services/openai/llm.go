@@ -57,7 +57,8 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code, %d", resp.StatusCode)
+		b, err := io.ReadAll(resp.Body)
+		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}", resp.StatusCode, string(b)), err)
 	}
 
 	reader := bufio.NewReader(resp.Body)
