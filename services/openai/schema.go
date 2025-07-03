@@ -22,8 +22,7 @@ type JSONSchema struct {
 	Ref  string                 `json:"$ref,omitempty"`  // #/$defs/... etc, overrides everything else
 	Defs map[string]*JSONSchema `json:"$defs,omitempty"` // for $ref
 	// Type specifies the data type of the schema. OpenAI uses []string{Type, Null} to represent nullable types.
-	Type     DataType `json:"type,omitempty"`
-	Nullable bool     `json:"nullable,omitempty"`
+	Type any `json:"type,omitempty"`
 	// Description is the description of the schema.
 	Description string `json:"description,omitempty"`
 	// Enum is used to restrict a value to a fixed set of values. It must be an array with at least
@@ -99,7 +98,7 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	}
 
 	if bellmanSchema.Nullable {
-		def.Nullable = true
+		def.Type = []any{def.Type, Null}
 	}
 
 	if len(bellmanSchema.Enum) > 0 {
