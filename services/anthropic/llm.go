@@ -111,7 +111,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			var ss anthropicStreamResponse
 			err = json.Unmarshal(line, &ss)
 			if err != nil {
-				log.Printf("could not unmarshal chunk, %w", err)
+				log.Printf("could not unmarshal chunk, %v", err)
 				break
 			}
 
@@ -144,22 +144,24 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				}
 			}
 
-			if ss.Message != nil && len(ss.Message.Content) > 0 {
+			if ss.Message != nil {
 				// This is a message start
 				if ss.Message.Role == "assistant" || ss.Message.Role == "user" {
 					role = ss.Message.Role
 				} else {
 					role = "assistant" // Default to assistant if role is not set
 				}
-				for _, content := range ss.Message.Content {
-					if len(content.Text) == 0 {
-						continue
-					}
-					stream <- &gen.StreamResponse{
-						Type:    gen.TYPE_DELTA,
-						Role:    prompt.Role(role),
-						Index:   ss.Index,
-						Content: content.Text,
+				if len(ss.Message.Content) > 0 {
+					for _, content := range ss.Message.Content {
+						if len(content.Text) == 0 {
+							continue
+						}
+						stream <- &gen.StreamResponse{
+							Type:    gen.TYPE_DELTA,
+							Role:    prompt.Role(role),
+							Index:   ss.Index,
+							Content: content.Text,
+						}
 					}
 				}
 			}
