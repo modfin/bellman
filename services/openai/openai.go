@@ -118,7 +118,7 @@ func (g *OpenAI) Embed(request embed.Request) (*embed.Response, error) {
 }
 
 func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
-	var gen = &gen.Generator{
+	var gen_ = &gen.Generator{
 		Prompter: &generator{
 			openai: g,
 		},
@@ -126,10 +126,10 @@ func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
 	}
 
 	for _, op := range options {
-		gen = op(gen)
+		gen_ = op(gen_)
 	}
 
-	return gen
+	return gen_
 }
 
 func (g *OpenAI) SetLogger(logger *slog.Logger) *OpenAI {
