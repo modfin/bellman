@@ -205,7 +205,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				if ss.Delta.Thinking != nil && len(*ss.Delta.Thinking) > 0 {
 					stream <- &gen.StreamResponse{
 						Type:    gen.TYPE_THINKING_DELTA,
-						Role:    prompt.Role(role),
+						Role:    prompt.AssistantRole,
 						Index:   ss.Index,
 						Content: *ss.Delta.Thinking,
 					}
