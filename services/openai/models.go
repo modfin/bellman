@@ -19,6 +19,24 @@ const Provider = "OpenAI"
 //		"owned_by": "system"
 //		}, ....
 
+var GenModel_gpt5_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_mini_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5-mini",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_nano_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5-nano",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
 var GenModel_gpt4_1_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-4.1",
