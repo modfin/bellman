@@ -119,10 +119,11 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				stream <- &gen.StreamResponse{
 					Type: gen.TYPE_METADATA,
 					Metadata: &models.Metadata{
-						Model:        ss.Model,
-						InputTokens:  ss.Usage.PromptTokens,
-						OutputTokens: ss.Usage.CompletionTokens,
-						TotalTokens:  ss.Usage.TotalTokens,
+						Model:          ss.Model,
+						InputTokens:    ss.Usage.PromptTokens,
+						OutputTokens:   ss.Usage.CompletionTokens,
+						ThinkingTokens: ss.Usage.CompletionTokensDetails.ReasoningTokens,
+						TotalTokens:    ss.Usage.TotalTokens,
 					},
 				}
 				continue
