@@ -19,7 +19,7 @@ func TestOf(t *testing.T) {
 		Email     *string            `json:"email" json-type:"string"`
 		Address   Address            `json:"address"`
 		Addresses []Address          `json:"addresses" json-min-items:"2"`
-		Tags      []string           `json:"tags" json-min-items:"1"`
+		Tags      *[]string          `json:"tags" json-min-items:"1" json-min-length:"1" json-max-length:"50" json-pattern:"^[a-zA-Z0-9_]+$" json-enum:"tag1,tag2,tag3"`
 		Status    string             `json:"status" json-enum:"active,inactive,pending"`
 		Ints      int                `json:"ints" json-enum:"1,2,3"`
 		Labels    []string           `json:"labels" json-enum:"Ecstatic,Happy,Sad"`
@@ -54,7 +54,7 @@ func TestOf(t *testing.T) {
 				},
 				MinItems: ptr(2),
 			},
-			"tags":   {Type: schema.Array, Items: &schema.JSON{Type: schema.String}, MinItems: ptr(1)},
+			"tags":   {Type: schema.Array, Items: &schema.JSON{Type: schema.String, MinLength: ptr(1), MaxLength: ptr(50), Pattern: ptr("^[a-zA-Z0-9_]+$"), Enum: []any{"tag1", "tag2", "tag3"}}, MinItems: ptr(1), Nullable: true},
 			"status": {Type: schema.String, Enum: []interface{}{"active", "inactive", "pending"}},
 			"ints":   {Type: schema.Integer, Enum: []interface{}{int64(1), int64(2), int64(3)}},
 			"labels": {

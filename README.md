@@ -208,8 +208,8 @@ There are a few different annotations that you can use on your golang structs to
 | json-exclusive-minimum | The exclusive minimum value for the field. Can be used with: number, integer                                             | VertexAI, OpenAI |
 | json-max-items         | The maximum number of items in the array. Can be used with: slices                                                       | VertexAI, OpenAI |
 | json-min-items         | The minimum number of items in the array. Can be used with: slices                                                       | VertexAI, OpenAI |
-| json-max-length        | The maximum length of the string. Can be used with: string                                                               | VertexAI         |
-| json-min-length        | The minimum length of the string. Can be used with: string                                                               | VertexAI         |
+| json-max-length        | The maximum length of the string. Can be used with: string                                                               | OpenAI         |
+| json-min-length        | The minimum length of the string. Can be used with: string                                                               | OpenAI         |
 | json-format            | Format of a string, one of: date-time, time, date, duration, email, hostname, ipv4, ipv6, uuid. Can be used with: string | VertexAI, OpenAI |
 | json-pattern           | Regex pattern of a string. Can be used with: string                                                                      | OpenAI           |
 

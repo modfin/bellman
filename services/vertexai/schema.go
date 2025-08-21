@@ -40,32 +40,24 @@ type JSONSchema struct {
 	// Schema of the elements of Type.ARRAY.
 	Items *JSONSchema `json:"items,omitempty"`
 	// Optional. Minimum number of the elements for Type.ARRAY.
-	MinItems int `json:"min_items,omitempty"`
+	MinItems int `json:"minItems,omitempty"`
 	// Optional. Maximum number of the elements for Type.ARRAY.
-	MaxItems int `json:"max_items,omitempty"`
+	MaxItems int `json:"maxItems,omitempty"`
 	// Optional. Possible values of the element of Type.STRING with enum format.
 	// For example we can define an Enum Direction as :
 	// {type:STRING, format:enum, enum:["EAST", NORTH", "SOUTH", "WEST"]}
-	Enum []string `json:"enum, omitempty"`
+	Enum []string `json:"enum,omitempty"`
 	// Optional. SCHEMA FIELDS FOR TYPE OBJECT
 	// Properties of Type.OBJECT.
 	Properties map[string]*JSONSchema `json:"properties,omitempty"`
 	// Optional. Required properties of Type.OBJECT.
 	Required []string `json:"required,omitempty"`
-	// Optional. Minimum number of the properties for Type.OBJECT.
-	MinProperties int `json:"min_properties,omitempty"`
-	// Optional. Maximum number of the properties for Type.OBJECT.
-	MaxProperties int `json:"max_properties,omitempty"`
 	// Optional. SCHEMA FIELDS FOR TYPE INTEGER and NUMBER
 	// Minimum value of the Type.INTEGER and Type.NUMBER
 	Minimum float64 `json:"minimum,omitempty"`
 	// Optional. Maximum value of the Type.INTEGER and Type.NUMBER
 	Maximum float64 `json:"maximum,omitempty"`
 	// Optional. SCHEMA FIELDS FOR TYPE STRING
-	// Minimum length of the Type.STRING
-	MinLength int `json:"min_length,omitempty"`
-	// Optional. Maximum length of the Type.STRING
-	MaxLength int `json:"max_length,omitempty"`
 }
 
 func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema.JSON) *JSONSchema {
@@ -126,12 +118,6 @@ func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema
 	}
 	if bellmanSchema.Minimum != nil {
 		def.Minimum = *bellmanSchema.Minimum
-	}
-	if bellmanSchema.MaxLength != nil {
-		def.MaxLength = *bellmanSchema.MaxLength
-	}
-	if bellmanSchema.MinLength != nil {
-		def.MinLength = *bellmanSchema.MinLength
 	}
 	if bellmanSchema.MaxItems != nil {
 		def.MaxItems = *bellmanSchema.MaxItems

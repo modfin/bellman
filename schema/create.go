@@ -102,7 +102,27 @@ func fieldToSchema(field reflect.StructField) *JSON {
 		schema.Type = JSONType(typeName)
 	}
 
-	// Handle number validation for fields
+	if schema.Type == "array" {
+		if maxItems := getIntFromField(field, "json-max-items"); maxItems != nil {
+			schema.MaxItems = maxItems
+		}
+		if minItems := getIntFromField(field, "json-min-items"); minItems != nil {
+			schema.MinItems = minItems
+		}
+		applyValidationTagsToSchema(schema.Items, field)
+	} else {
+		// For non-array types, apply validations directly to the main schema
+		applyValidationTagsToSchema(schema, field)
+	}
+	return schema
+}
+
+func applyValidationTagsToSchema(schema *JSON, field reflect.StructField) {
+	if schema == nil {
+		return
+	}
+
+	// Handle number validation
 	if schema.Type == "number" || schema.Type == "integer" {
 		if incmax := getFloat64Ptr(field.Tag.Get("json-maximum")); incmax != nil {
 			schema.Maximum = incmax
@@ -116,19 +136,9 @@ func fieldToSchema(field reflect.StructField) *JSON {
 		if excMin := getFloat64Ptr(field.Tag.Get("json-exclusive-minimum")); excMin != nil {
 			schema.ExclusiveMinimum = excMin
 		}
-
 	}
 
-	if schema.Type == "array" {
-		if maxItems := getIntFromField(field, "json-max-items"); maxItems != nil {
-			schema.MaxItems = maxItems
-		}
-		if minItems := getIntFromField(field, "json-min-items"); minItems != nil {
-			schema.MinItems = minItems
-		}
-	}
-
-	// Handle string validation for fields
+	// Handle string validation
 	if schema.Type == "string" {
 		if maxLen := getIntFromField(field, "json-max-length"); maxLen != nil {
 			schema.MaxLength = maxLen
@@ -144,23 +154,13 @@ func fieldToSchema(field reflect.StructField) *JSON {
 		}
 	}
 
-	// Handle enum for fields
-	switch schema.Type {
-	case "array":
-		enum := field.Tag.Get("json-enum")
-		if enum != "" && schema.Items != nil && len(schema.Items.Enum) == 0 {
-			switch schema.Items.Type {
-			case "string", "number", "integer", "boolean":
-				schema.Items.Enum = parseEnum(enum, field)
-			}
-		}
-	case "string", "number", "integer", "boolean":
-		if enum := field.Tag.Get("json-enum"); enum != "" {
-			schema.Enum = parseEnum(enum, field)
+	// Handle enum validation
+	if enumStr := field.Tag.Get("json-enum"); enumStr != "" {
+		switch schema.Type {
+		case "string", "number", "integer", "boolean":
+			schema.Enum = parseEnum(enumStr, field)
 		}
 	}
-
-	return schema
 }
 
 // Helper functions

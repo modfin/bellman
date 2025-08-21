@@ -42,6 +42,13 @@ type JSONSchema struct {
 	// additionalProperties: false
 	// additionalProperties: jsonschema.JSONSchema{Type: jsonschema.String}
 	AdditionalProperties any `json:"additionalProperties,omitempty"`
+
+	MinLength int     `json:"minLength,omitempty"` // Minimum length of the string.
+	MaxLength int     `json:"maxLength,omitempty"` // Maximum length of the string.
+	Minimum   float64 `json:"minimum,omitempty"`   // Minimum value of the integer and number types.
+	Maximum   float64 `json:"maximum,omitempty"`   // Minimum value of the integer and number types.
+	MinItems  int     `json:"minItems,omitempty"`  // Minimum number of items in an array.
+	MaxItems  int     `json:"maxItems,omitempty"`  // Maximum number of items in an array.
 }
 
 func (s JSONSchema) IsObjectRequired() bool {
@@ -119,6 +126,24 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 	}
 	if bellmanSchema.Pattern != nil {
 		def.Pattern = *bellmanSchema.Pattern
+	}
+	if bellmanSchema.Maximum != nil {
+		def.Maximum = *bellmanSchema.Maximum
+	}
+	if bellmanSchema.Minimum != nil {
+		def.Minimum = *bellmanSchema.Minimum
+	}
+	if bellmanSchema.MaxLength != nil {
+		def.MaxLength = *bellmanSchema.MaxLength
+	}
+	if bellmanSchema.MinLength != nil {
+		def.MinLength = *bellmanSchema.MinLength
+	}
+	if bellmanSchema.MaxItems != nil {
+		def.MaxItems = *bellmanSchema.MaxItems
+	}
+	if bellmanSchema.MinItems != nil {
+		def.MinItems = *bellmanSchema.MinItems
 	}
 
 	return def
