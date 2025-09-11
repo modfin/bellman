@@ -127,6 +127,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				stream <- &gen.StreamResponse{
 					Type: gen.TYPE_METADATA,
 					Metadata: &models.Metadata{
+						Model:        g.request.Model.Name,
 						InputTokens:  ss.Usage.InputTokens,
 						OutputTokens: ss.Usage.OutputTokens,
 					},

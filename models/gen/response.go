@@ -12,7 +12,7 @@ import (
 type StreamingResponseType string
 
 const TYPE_DELTA StreamingResponseType = "delta"
-const TYPE_THINKING_DELTA StreamingResponseType = "thining_delta"
+const TYPE_THINKING_DELTA StreamingResponseType = "thinking_delta"
 const TYPE_METADATA StreamingResponseType = "metadata"
 const TYPE_EOF StreamingResponseType = "EOF"
 const TYPE_ERROR StreamingResponseType = "ERROR"
