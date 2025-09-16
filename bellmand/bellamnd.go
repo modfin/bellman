@@ -547,7 +547,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 		//})
 
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
-			var req embed.Request
+			var req embed.RequestMany
 			err := json.NewDecoder(r.Body).Decode(&req)
 			if err != nil {
 				err = fmt.Errorf("could not decode request, %w", err)
@@ -556,7 +556,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			}
 			req.Ctx = r.Context()
 
-			response, err := proxy.Embed(req)
+			response, err := proxy.EmbedMany(req)
 			if err != nil {
 				err = fmt.Errorf("could not embed text, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
@@ -567,6 +567,42 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			logger.Info("embed request",
 				"key", keyName,
 				"model", req.Model.FQN(),
+				"texts", len(req.Texts),
+				"token-total", response.Metadata.TotalTokens,
+			)
+
+			// Taking some metrics...
+			reqCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Inc()
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Add(float64(response.Metadata.TotalTokens))
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(response)
+
+		})
+
+		r.Post("/document", func(w http.ResponseWriter, r *http.Request) {
+			var req embed.RequestDocument
+			err := json.NewDecoder(r.Body).Decode(&req)
+			if err != nil {
+				err = fmt.Errorf("could not decode request, %w", err)
+				httpErr(w, err, http.StatusBadRequest)
+				return
+			}
+			req.Ctx = r.Context()
+
+			response, err := proxy.EmbedDocument(req)
+			if err != nil {
+				err = fmt.Errorf("could not embed text, %w", err)
+				httpErr(w, err, http.StatusInternalServerError)
+				return
+			}
+
+			keyName := r.Context().Value("api-key-name")
+			logger.Info("embed document request",
+				"key", keyName,
+				"model", req.Model.FQN(),
+				"chunks", len(req.DocumentChunks),
 				"token-total", response.Metadata.TotalTokens,
 			)
 

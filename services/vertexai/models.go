@@ -135,6 +135,13 @@ var GenModel_gemini_1_5_pro_001 = gen.Model{
 
 // https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#supported-models
 
+var EmbedModel_gemini_001 = embed.Model{
+	Provider:         Provider,
+	Name:             "gemini-embedding-001",
+	Description:      "State-of-the-art performance across English, multilingual and code tasks. It unifies the previously specialized models like text-embedding-005 and text-multilingual-embedding-002 and achieves better performance in their respective domains.",
+	InputMaxTokens:   2048,
+	OutputDimensions: 3072,
+}
 var EmbedModel_text_005 = embed.Model{
 	Provider:         Provider,
 	Name:             "text-embedding-005",
@@ -196,17 +203,20 @@ var EmbedModels = map[string]embed.Model{
 	EmbedModel_text_005.Name:     EmbedModel_text_005,
 	EmbedModel_text_004.Name:     EmbedModel_text_004,
 	EmbedMode_multilang_002.Name: EmbedMode_multilang_002,
-	//EmbedModel_text_gecko_001.Name: EmbedModel_text_gecko_001,  // deprecated?
-	EmbedModel_text_gecko_003.Name:           EmbedModel_text_gecko_003,
-	EmbedModel_text_gecko_multilang_001.Name: EmbedModel_text_gecko_multilang_001,
+	EmbedModel_gemini_001.Name:   EmbedModel_gemini_001,
 }
 
 var GenModels = map[string]gen.Model{
-	GenModel_gemini_2_0_flash_001.Name: GenModel_gemini_2_0_flash_001,
-	GenModel_gemini_1_5_flash.Name:     GenModel_gemini_1_5_flash,
-	GenModel_gemini_1_5_flash_001.Name: GenModel_gemini_1_5_flash_001,
-	GenModel_gemini_1_5_flash_002.Name: GenModel_gemini_1_5_flash_002,
-	GenModel_gemini_1_5_pro.Name:       GenModel_gemini_1_5_pro,
-	GenModel_gemini_1_5_pro_002.Name:   GenModel_gemini_1_5_pro_002,
-	GenModel_gemini_1_5_pro_001.Name:   GenModel_gemini_1_5_pro_001,
+	GenModel_gemini_2_5_pro_latest.Name:        GenModel_gemini_2_5_pro_latest,
+	GenModel_gemini_2_5_flash_latest.Name:      GenModel_gemini_2_5_flash_latest,
+	GenModel_gemini_2_0_flash_latest.Name:      GenModel_gemini_2_0_flash_latest,
+	GenModel_gemini_2_0_flash_lite_latest.Name: GenModel_gemini_2_0_flash_lite_latest,
+	GenModel_gemini_2_0_flash_lite_001.Name:    GenModel_gemini_2_0_flash_lite_001,
+	GenModel_gemini_2_0_flash_001.Name:         GenModel_gemini_2_0_flash_001,
+	GenModel_gemini_1_5_flash.Name:             GenModel_gemini_1_5_flash,
+	GenModel_gemini_1_5_flash_001.Name:         GenModel_gemini_1_5_flash_001,
+	GenModel_gemini_1_5_flash_002.Name:         GenModel_gemini_1_5_flash_002,
+	GenModel_gemini_1_5_pro.Name:               GenModel_gemini_1_5_pro,
+	GenModel_gemini_1_5_pro_002.Name:           GenModel_gemini_1_5_pro_002,
+	GenModel_gemini_1_5_pro_001.Name:           GenModel_gemini_1_5_pro_001,
 }

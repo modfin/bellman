@@ -18,7 +18,6 @@ type embedRequest struct {
 	Model string `json:"model"`
 	Input string `json:"input"`
 }
-
 type embedResponse struct {
 	Embedding [][]float64 `json:"embeddings"`
 
@@ -104,6 +103,14 @@ func (g *Ollama) Embed(request embed.Request) (*embed.Response, error) {
 			TotalTokens: respModel.PromptEvalCount,
 		},
 	}, nil
+}
+
+func (g *Ollama) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (g *Ollama) EmbedDocument(request embed.RequestDocument) (*embed.ResponseDocument, error) {
+	return nil, fmt.Errorf("not supported by ollama embed models")
 }
 
 func (g *Ollama) Generator(options ...gen.Option) *gen.Generator {

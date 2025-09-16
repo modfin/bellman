@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync/atomic"
 )
 
@@ -21,11 +20,11 @@ type VoyageAI struct {
 	Log    *slog.Logger `json:"-"`
 }
 
-func (g *VoyageAI) log(msg string, args ...any) {
-	if g.Log == nil {
+func (v *VoyageAI) log(msg string, args ...any) {
+	if v.Log == nil {
 		return
 	}
-	g.Log.Debug("[bellman/voyage_ai] "+msg, args...)
+	v.Log.Debug("[bellman/voyage_ai] "+msg, args...)
 }
 
 func New(apiKey string) *VoyageAI {
@@ -33,51 +32,75 @@ func New(apiKey string) *VoyageAI {
 }
 
 type localRequest struct {
-	Input []string `json:"input"`
-	Model string   `json:"model"`
+	Input     []string `json:"input"`
+	Model     string   `json:"model"`
+	InputType string   `json:"input_type,omitempty"`
 }
-
+type responseData struct {
+	Object    string         `json:"object"`
+	Embedding []float64      `json:"embedding"`
+	Index     int            `json:"index"`
+	Data      []responseData `json:"data"`
+}
 type localResponse struct {
-	Object string `json:"object"`
-	Data   []struct {
-		Object    string    `json:"object"`
-		Embedding []float64 `json:"embedding"`
-		Index     int       `json:"index"`
-	} `json:"data"`
-	Model string `json:"model"`
-	Usage struct {
+	Object string         `json:"object"`
+	Data   []responseData `json:"data"`
+	Model  string         `json:"model"`
+	Usage  struct {
 		TotalTokens int `json:"total_tokens"`
 	} `json:"usage"`
 }
+type localContextualizedRequest struct {
+	Inputs    [][]string `json:"inputs"`
+	Model     string     `json:"model"`
+	InputType string     `json:"input_type,omitempty"`
+}
 
-func (g *VoyageAI) Provider() string {
+func (v *VoyageAI) Provider() string {
 	return Provider
 }
 func (v *VoyageAI) Embed(request embed.Request) (*embed.Response, error) {
+	resp, err := v.EmbedMany(embed.RequestMany{
+		Texts: []string{request.Text},
+		Model: request.Model,
+		Ctx:   request.Ctx,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Embeddings) != 1 {
+		return nil, fmt.Errorf("expected 1 embedding, got %d", len(resp.Embeddings))
+	}
+	return &embed.Response{
+		Embedding: resp.Embeddings[0],
+		Metadata:  resp.Metadata,
+	}, nil
+}
+
+func (v *VoyageAI) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, error) {
 
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
 	u := `https://api.voyageai.com/v1/embeddings`
 
-	text := request.Text
-
-	switch request.Model.Type {
-	case embed.TypeQuery, TypeQuery:
-		if !strings.HasPrefix(text, string(TypeQuery)) {
-			text = fmt.Sprintf("%s: %s", TypeQuery, text)
-		}
-	case embed.TypeDocument, TypeDocument:
-		if !strings.HasPrefix(text, string(TypeDocument)) {
-			text = fmt.Sprintf("%s: %s", TypeDocument, text)
-		}
+	if len(request.Texts) == 0 {
+		return nil, fmt.Errorf("no texts provided")
 	}
-
+	if len(request.Texts) > 1000 {
+		// https://docs.voyageai.com/reference/embeddings-api
+		return nil, fmt.Errorf("too many texts provided, max 1000")
+	}
 	reqModel := localRequest{
-		Input: []string{
-			text,
-		},
+		Input: request.Texts,
 		Model: request.Model.Name,
 	}
+	switch request.Model.Type {
+	case embed.TypeQuery:
+		reqModel.InputType = "query"
+	case embed.TypeDocument:
+		reqModel.InputType = "document"
+	}
+
 	jsonReq, err := json.Marshal(reqModel)
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal localRequest, %w", err)
@@ -114,20 +137,110 @@ func (v *VoyageAI) Embed(request embed.Request) (*embed.Response, error) {
 	if len(respModel.Data) == 0 {
 		return nil, fmt.Errorf("no data in localResponse")
 	}
+	if len(respModel.Data) != len(request.Texts) {
+		return nil, fmt.Errorf("wrong number of embeddings, %d, expected %d", len(respModel.Data), len(request.Texts))
+	}
 
 	v.log("[embed] response", "request", reqc, "model", request.Model.FQN(), "token-total", respModel.Usage.TotalTokens)
 
-	return &embed.Response{
-		Embedding: respModel.Data[0].Embedding,
+	embedResp := &embed.ResponseMany{
+		Embeddings: make([][]float64, len(respModel.Data)),
 		Metadata: models.Metadata{
 			Model:       request.Model.FQN(),
 			TotalTokens: respModel.Usage.TotalTokens,
 		},
-	}, nil
+	}
+	for idx, data := range respModel.Data {
+		embedResp.Embeddings[idx] = data.Embedding
+	}
+
+	return embedResp, nil
+}
+func (v *VoyageAI) EmbedDocument(request embed.RequestDocument) (*embed.ResponseDocument, error) {
+
+	var reqc = atomic.AddInt64(&requestNo, 1)
+
+	u := `https://api.voyageai.com/v1/contextualizedembeddings`
+
+	if len(request.DocumentChunks) == 0 {
+		return nil, fmt.Errorf("no texts provided")
+	}
+	if len(request.DocumentChunks) > 1000 {
+		// https://docs.voyageai.com/reference/embeddings-api
+		return nil, fmt.Errorf("too many texts provided, max 1000")
+	}
+	reqModel := localContextualizedRequest{
+		Inputs: [][]string{request.DocumentChunks},
+		Model:  request.Model.Name,
+	}
+	switch request.Model.Type {
+	case embed.TypeQuery:
+		reqModel.InputType = "query"
+	case embed.TypeDocument:
+		reqModel.InputType = "document"
+	}
+
+	jsonReq, err := json.Marshal(reqModel)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal localRequest, %w", err)
+	}
+
+	ctx := request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(jsonReq))
+	if err != nil {
+		return nil, fmt.Errorf("could not create localRequest, %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("could not post localRequest, %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		errText, _ := io.ReadAll(resp.Body)
+		length := min(len(errText), 100)
+		return nil, fmt.Errorf("unexpected status code, %d, err: %s", resp.StatusCode, string(errText[:length]))
+	}
+
+	var respModel localResponse
+	err = json.NewDecoder(resp.Body).Decode(&respModel)
+	if err != nil {
+		return nil, fmt.Errorf("could not decode localResponse, %w", err)
+	}
+	if len(respModel.Data) == 0 {
+		return nil, fmt.Errorf("no data in context localResponse")
+	}
+	if len(respModel.Data) != 1 {
+		return nil, fmt.Errorf("no data in context localResponse")
+	}
+	if len(respModel.Data[0].Data) != len(request.DocumentChunks) {
+		return nil, fmt.Errorf("wrong number of embeddings, %d, expected %d", len(respModel.Data[0].Data), len(request.DocumentChunks))
+	}
+
+	v.log("[embed] response", "request", reqc, "model", request.Model.FQN(), "token-total", respModel.Usage.TotalTokens)
+
+	embedResp := &embed.ResponseDocument{
+		Embeddings: make([][]float64, len(respModel.Data[0].Data)),
+		Metadata: models.Metadata{
+			Model:       request.Model.FQN(),
+			TotalTokens: respModel.Usage.TotalTokens,
+		},
+	}
+	for idx, data := range respModel.Data[0].Data {
+		embedResp.Embeddings[idx] = data.Embedding
+	}
+
+	return embedResp, nil
 }
 
-func (g *VoyageAI) SetLogger(logger *slog.Logger) *VoyageAI {
-	g.Log = logger
-	return g
+func (v *VoyageAI) SetLogger(logger *slog.Logger) *VoyageAI {
+	v.Log = logger
+	return v
 
 }

@@ -10,6 +10,8 @@ import (
 type Embeder interface {
 	Provider() string
 	Embed(embed Request) (*Response, error)
+	EmbedMany(embed RequestMany) (*ResponseMany, error)
+	EmbedDocument(embed RequestDocument) (*ResponseDocument, error)
 }
 
 type Type string
@@ -80,4 +82,26 @@ func (r *Response) AsFloat32() []float32 {
 		output[i] = float32(v)
 	}
 	return output
+}
+
+type RequestMany struct {
+	Ctx   context.Context `json:"-"`
+	Model Model           `json:"model"`
+	Texts []string        `json:"texts"`
+}
+
+type ResponseMany struct {
+	Embeddings [][]float64     `json:"embeddings"`
+	Metadata   models.Metadata `json:"metadata,omitempty"`
+}
+
+type RequestDocument struct {
+	Ctx            context.Context `json:"-"`
+	Model          Model           `json:"model"`
+	DocumentChunks []string        `json:"document_chunks"`
+}
+
+type ResponseDocument struct {
+	Embeddings [][]float64     `json:"embeddings"`
+	Metadata   models.Metadata `json:"metadata,omitempty"`
 }
