@@ -1,12 +1,12 @@
 package openai
 
 type openaiStreamResponse struct {
-	ID                string `json:"id"`
-	Object            string `json:"object"`
-	Created           int    `json:"created"`
-	Model             string `json:"model"`
-	ServiceTier       string `json:"service_tier"`
-	SystemFingerprint string `json:"system_fingerprint"`
+	ID                string       `json:"id"`
+	Object            string       `json:"object"`
+	Created           int          `json:"created"`
+	Model             string       `json:"model"`
+	ServiceTier       *ServiceTier `json:"service_tier,omitempty"`
+	SystemFingerprint string       `json:"system_fingerprint"`
 	Choices           []struct {
 		Index int `json:"index"`
 		Delta struct {
@@ -61,6 +61,7 @@ type openaiResponse struct {
 		FinishReason string `json:"finish_reason"`
 		Index        int    `json:"index"`
 	} `json:"choices"`
+	ServiceTier *ServiceTier `json:"service_tier,omitempty"`
 }
 
 type responseToolCall struct {

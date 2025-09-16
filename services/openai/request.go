@@ -74,6 +74,15 @@ const (
 	ReasoningEffortHigh   ReasoningEffort = "high"
 )
 
+type ServiceTier string
+
+const (
+	ServiceTierAuto     ServiceTier = "auto"
+	ServiceTierDefault  ServiceTier = "default"
+	ServiceTierFlex     ServiceTier = "flex"
+	ServiceTierPriority ServiceTier = "priority"
+)
+
 type genRequest struct {
 	Stream        bool           `json:"stream,omitempty"`
 	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
@@ -95,6 +104,8 @@ type genRequest struct {
 	PresencePenalty  *float64         `json:"presence_penalty,omitempty"`
 
 	toolBelt map[string]*tools.Tool
+
+	ServiceTier *ServiceTier `json:"service_tier,omitempty"`
 }
 
 type responseFormatSchema struct {

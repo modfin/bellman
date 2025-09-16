@@ -111,22 +111,30 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			var ss openaiStreamResponse
 			err = json.Unmarshal(line, &ss)
 			if err != nil {
-				log.Printf("could not unmarshal chunk, %w", err)
+				log.Printf("could not unmarshal chunk, %v", err)
 				break
 			}
 
 			if ss.Usage != nil {
+				m := &models.Metadata{
+					Model:          ss.Model,
+					InputTokens:    ss.Usage.PromptTokens,
+					OutputTokens:   ss.Usage.CompletionTokens,
+					ThinkingTokens: ss.Usage.CompletionTokensDetails.ReasoningTokens,
+					TotalTokens:    ss.Usage.TotalTokens,
+				}
+				if ss.ServiceTier != nil {
+					m.Other = map[string]any{"service_tier": *ss.ServiceTier}
+				}
 				stream <- &gen.StreamResponse{
-					Type: gen.TYPE_METADATA,
-					Metadata: &models.Metadata{
-						Model:          ss.Model,
-						InputTokens:    ss.Usage.PromptTokens,
-						OutputTokens:   ss.Usage.CompletionTokens,
-						ThinkingTokens: ss.Usage.CompletionTokensDetails.ReasoningTokens,
-						TotalTokens:    ss.Usage.TotalTokens,
-					},
+					Type:     gen.TYPE_METADATA,
+					Metadata: m,
 				}
 				continue
+			}
+
+			if ss.ServiceTier != nil {
+				g.openai.log("[gen] stream resp, service tier", "msg", string(line), "service_tier", *ss.ServiceTier)
 			}
 
 			if len(ss.Choices) == 0 { // Something wrong
@@ -244,6 +252,13 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			TotalTokens:    respModel.Usage.TotalTokens,
 		},
 	}
+	if respModel.ServiceTier != nil {
+		g.openai.log("[gen] prompt resp, service tier", "service_tier", *respModel.ServiceTier)
+		if res.Metadata.Other == nil {
+			res.Metadata.Other = map[string]any{}
+		}
+		res.Metadata.Other["service_tier"] = *respModel.ServiceTier
+	}
 	for _, c := range respModel.Choices {
 		message := c.Message
 		if len(message.ToolCalls) == 0 { // Not Tools
@@ -293,6 +308,27 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 
 	if g.request.Model.Name == "" {
 		return nil, reqModel, fmt.Errorf("model is required")
+	}
+
+	if len(g.request.Model.Config) > 0 {
+		if v, ok := g.request.Model.Config["service_tier"]; ok {
+			switch fmt.Sprintf("%v", v) {
+			case "auto":
+				st := ServiceTierAuto
+				reqModel.ServiceTier = &st
+			case "default":
+				st := ServiceTierDefault
+				reqModel.ServiceTier = &st
+			case "flex":
+				st := ServiceTierFlex
+				reqModel.ServiceTier = &st
+			case "priority":
+				st := ServiceTierPriority
+				reqModel.ServiceTier = &st
+			default:
+				return nil, reqModel, fmt.Errorf("unknown service tier: %s", v)
+			}
+		}
 	}
 
 	reqModel.toolBelt = map[string]*tools.Tool{}

@@ -406,6 +406,23 @@ answer, err := res.AsText()
 fmt.Println(awnser, err)
 ```
 
+## Provider specific config
+Some providers have specific configuration that is not supported by the common interface.
+You can set these options manually on the `gen.Model.Config` struct.
+
+```go
+model := gen.Model{
+    Provider: openai.Provider,
+    Name:     openai.GenModel_gpt5_mini_latest.Name,
+    Config: map[string]interface{}{
+        "service_tier": openai.ServiceTierPriority,
+    },
+}
+
+// prompt..
+The returned metadata will then contain the service_tier used.
+```
+
 ## Agent Example
 
 Supporter lib for simple agentic tasks
