@@ -31,7 +31,7 @@ func (p *Proxy) RegisterGen(llm gen.Gen) {
 	p.gens[llm.Provider()] = llm
 }
 
-func (p *Proxy) Embed(embed embed.Request) (*embed.Response, error) {
+func (p *Proxy) Embed(embed *embed.Request) (*embed.Response, error) {
 	client, ok := p.embeders[embed.Model.Provider]
 	if !ok {
 		return nil, fmt.Errorf("no client registerd for provider '%s', %w", embed.Model.Provider, ErrClientNotFound)
@@ -45,6 +45,22 @@ func (p *Proxy) Embed(embed embed.Request) (*embed.Response, error) {
 		return nil, fmt.Errorf("embed.Model.Name is not set, %w", ErrNoModelProvided)
 	}
 	return client.Embed(embed)
+}
+
+func (p *Proxy) EmbedDocument(embed *embed.DocumentRequest) (*embed.DocumentResponse, error) {
+	client, ok := p.embeders[embed.Model.Provider]
+	if !ok {
+		return nil, fmt.Errorf("no client registerd for provider '%s', %w", embed.Model.Provider, ErrClientNotFound)
+	}
+
+	if client == nil {
+		return nil, ErrNoModelProvided
+	}
+
+	if embed.Model.Name == "" {
+		return nil, fmt.Errorf("embed.Model.Name is not set, %w", ErrNoModelProvided)
+	}
+	return client.EmbedDocument(embed)
 }
 
 func (p *Proxy) Gen(model gen.Model) (*gen.Generator, error) {

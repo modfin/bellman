@@ -496,19 +496,48 @@ for _, p := range res.Promps {
 
 ## Embeddings
 
-Bellman integrates with most the embeddig models aswell as the llms that is provided by the supported
-providers. There is also a VoyageAI, voyageai.com, that only really deals with embeddings
+Bellman integrates with most the embedding models as well as the LLMs that is provided by the supported
+providers. There is also a VoyageAI, voyageai.com, that only really deals with embeddings.
 
 ```go
 client := bellman_client := bellman.New(...)
 
-res, err := client.Embed(embed.Request{
-    Model: vertexai.EmbedModel_text_005.WithType(embed.TypeDocument),
-    Text:  "The document to embed",
-})
+res, err := client.Embed(embed.NewSingleRequest(
+    context.Background(),
+    vertexai.EmbedModel_text_005.WithType(embed.TypeDocument),
+    "The document to embed",
+))
 
-fmt.Println(res.AsFloat32())
-// [-0.06821047514677048 -0.00014664272021036595 0.011814368888735771 ....
+fmt.Println(res.SingleAsFloat32())
+// [-0.06821047514677048 -0.00014664272021036595 0.011814368888735771 ....], nil
+```
+
+Or using the query type.
+```go
+client := bellman_client := bellman.New(...)
+
+res, err := client.Embed(embed.NewSingleRequest(
+    context.Background(),
+    vertexai.EmbedModel_text_005.WithType(embed.TypeQuery),
+    "The query to embed",
+))
+
+fmt.Println(res.SingleAsFloat32())
+// [-0.06821047514677048 -0.00014664272021036595 0.011814368888735771 ....], nil
+```
+
+### Context aware embeddings
+Bellman also supports context aware embeddings. As of now, only with VoyageAI models.
+
+```go
+res, err := client.Embed(embed.NewDocumentRequest(
+    context.Background(),
+    voyageai.EmbedModel_voyage_context_3.WithType(embed.TypeDocument),
+    []string{"document_chunk_1", "document_chunk_2", "document_chunk_3", ...},
+))
+
+fmt.Println(res.AsFloat64())
+// [[-0.06821047514677048 ...], [0.011814368888735771 ....], ...], nil
 ```
 
 ### Type

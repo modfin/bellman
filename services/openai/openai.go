@@ -15,9 +15,9 @@ import (
 )
 
 type embedRequest struct {
-	Input          string `json:"input"`
-	Model          string `json:"Model"`
-	EncodingFormat string `json:"encoding_format"`
+	Input          []string `json:"input"`
+	Model          string   `json:"Model"`
+	EncodingFormat string   `json:"encoding_format"`
 }
 
 type embedResponse struct {
@@ -61,11 +61,14 @@ func (g *OpenAI) log(msg string, args ...any) {
 func (g *OpenAI) Provider() string {
 	return Provider
 }
-func (g *OpenAI) Embed(request embed.Request) (*embed.Response, error) {
-	var reqc = atomic.AddInt64(&requestNo, 1)
 
+func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
+	var reqc = atomic.AddInt64(&requestNo, 1)
+	if len(request.Texts) == 0 {
+		return nil, fmt.Errorf("no texts provided")
+	}
 	reqModel := embedRequest{
-		Input:          request.Text,
+		Input:          request.Texts,
 		Model:          request.Model.Name,
 		EncodingFormat: "float",
 	}
@@ -105,16 +108,27 @@ func (g *OpenAI) Embed(request embed.Request) (*embed.Response, error) {
 	if len(respModel.Data) == 0 {
 		return nil, fmt.Errorf("no data in response")
 	}
+	if len(respModel.Data) != len(request.Texts) {
+		return nil, fmt.Errorf("wrong number of embeddings, %d, expected %d", len(respModel.Data), len(request.Texts))
+	}
 
 	g.log("[embed] response", "request", reqc, "token-total", respModel.Usage.TotalTokens)
-
-	return &embed.Response{
-		Embedding: respModel.Data[0].Embedding,
+	embeddingResp := &embed.Response{
+		Embeddings: make([][]float64, len(respModel.Data)),
 		Metadata: models.Metadata{
 			Model:       request.Model.FQN(),
 			TotalTokens: respModel.Usage.TotalTokens,
 		},
-	}, nil
+	}
+	for idx, data := range respModel.Data {
+		embeddingResp.Embeddings[idx] = data.Embedding
+	}
+
+	return embeddingResp, nil
+}
+
+func (g *OpenAI) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
+	return nil, fmt.Errorf("not supported by openai embed models")
 }
 
 func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {

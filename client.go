@@ -121,7 +121,7 @@ func (v *Bellman) GenModels() ([]gen.Model, error) {
 	return models, nil
 }
 
-func (v *Bellman) Embed(request embed.Request) (*embed.Response, error) {
+func (v *Bellman) Embed(request *embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&bellmanRequestNo, 1)
 
 	u, err := url.JoinPath(v.url, "embed")
@@ -159,6 +159,54 @@ func (v *Bellman) Embed(request embed.Request) (*embed.Response, error) {
 	}
 
 	var response embed.Response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		v.log("[gen] unmarshal response error", "error", err, "body", string(body))
+		return nil, fmt.Errorf("could not unmarshal bellman response; %w", err)
+	}
+
+	v.log("[embed] response", "request", reqc, "model", request.Model.FQN(), "token-total", response.Metadata.TotalTokens)
+
+	return &response, nil
+}
+func (v *Bellman) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
+	var reqc = atomic.AddInt64(&bellmanRequestNo, 1)
+
+	u, err := url.JoinPath(v.url, "embed", "document")
+	if err != nil {
+		return nil, fmt.Errorf("could not join url %s; %w", v.url, err)
+	}
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal bellman request; %w", err)
+	}
+
+	ctx := request.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("could not create bellman request; %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+v.key.String())
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("could not post bellman request to %s; %w", u, err)
+	}
+	defer res.Body.Close()
+
+	body, err = io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read bellman response; %w", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d; %s", res.StatusCode, string(body))
+	}
+
+	var response embed.DocumentResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		v.log("[gen] unmarshal response error", "error", err, "body", string(body))

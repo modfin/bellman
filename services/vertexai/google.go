@@ -18,12 +18,13 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+type googleEmbedRequestInstance struct {
+	TaskType string `json:"task_type,omitempty"`
+	//Title    string `json:"title"`
+	Content string `json:"content"`
+}
 type GoogleEmbedRequest struct {
-	Instances []struct {
-		TaskType string `json:"task_type,omitempty"`
-		//Title    string `json:"title"`
-		Content string `json:"content"`
-	} `json:"instances"`
+	Instances []googleEmbedRequestInstance `json:"instances"`
 }
 
 type GoogleEmbedResponse struct {
@@ -91,7 +92,7 @@ var projectIdPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{4,28}[a-z0-9])?$`)
 var regionPattern = regexp.MustCompile(`^(global)|([a-z]+-[a-z]+[1-9][0-9]*)$`)
 var modelNamePattern = regexp.MustCompile(`^[\w.-]+$`) // should probably be gemini-[\w.-]
 
-func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
+func (g *Google) Embed(request *embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
 	tasktype := ""
@@ -103,17 +104,22 @@ func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 	default:
 		tasktype = string(request.Model.Type)
 	}
+	if len(request.Texts) == 0 {
+		return nil, fmt.Errorf("no texts provided to embed")
+	}
+	if len(request.Texts) > 250 {
+		// https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#api_limits
+		return nil, fmt.Errorf("too many texts provided to embed, max is 250")
+	}
 
 	req := GoogleEmbedRequest{
-		Instances: []struct {
-			TaskType string `json:"task_type,omitempty"`
-			Content  string `json:"content"`
-		}{
-			{
-				TaskType: tasktype,
-				Content:  request.Text,
-			},
-		},
+		Instances: make([]googleEmbedRequestInstance, len(request.Texts)),
+	}
+	for idx, text := range request.Texts {
+		req.Instances[idx] = googleEmbedRequestInstance{
+			TaskType: tasktype,
+			Content:  text,
+		}
 	}
 
 	region := g.config.Region
@@ -184,19 +190,27 @@ func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not decode google response, %w", err)
 	}
-	if len(embeddings.Predictions) != 1 {
-		return nil, fmt.Errorf("wrong number of predictions, %d, expected 1", len(embeddings.Predictions))
+	if len(embeddings.Predictions) != len(request.Texts) {
+		return nil, fmt.Errorf("wrong number of predictions, %d, expected %d	", len(embeddings.Predictions), len(request.Texts))
+	}
+
+	embedResp := &embed.Response{
+		Embeddings: make([][]float64, len(embeddings.Predictions)),
+		Metadata: models.Metadata{
+			Model: request.Model.FQN(),
+		},
+	}
+	for idx, prediction := range embeddings.Predictions {
+		embedResp.Embeddings[idx] = prediction.Embeddings.Values
+		embedResp.Metadata.TotalTokens += prediction.Embeddings.Statistics.TokenCount
 	}
 
 	g.log("[embed] response", "request", reqc, "token-total", embeddings.Predictions[0].Embeddings.Statistics.TokenCount)
+	return embedResp, nil
+}
 
-	return &embed.Response{
-		Embedding: embeddings.Predictions[0].Embeddings.Values,
-		Metadata: models.Metadata{
-			Model:       request.Model.FQN(),
-			TotalTokens: embeddings.Predictions[0].Embeddings.Statistics.TokenCount,
-		},
-	}, nil
+func (g *Google) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
+	return nil, fmt.Errorf("not supported by google embed models")
 }
 
 func (g *Google) Generator(options ...gen.Option) *gen.Generator {

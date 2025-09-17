@@ -11,6 +11,30 @@ const Provider = "VoyageAI"
 
 // https://docs.voyageai.com/docs/embeddings
 
+var EmbedModel_voyage_context_3 = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-context-3",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "Used for contextualized embeddings and used with EmbedDocument",
+}
+
+var EmbedModel_voyage_3_5 = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-3.5",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "Optimized for general-purpose and multilingual retrieval quality.",
+}
+
+var EmbedModel_voyage_3_5_lite = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-3.5-lite",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "Optimized for latency and cost.",
+}
+
 var EmbedModel_voyage_3_large = embed.Model{
 	Provider:         Provider,
 	Name:             "voyage-3-large",
