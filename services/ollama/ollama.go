@@ -48,68 +48,73 @@ func (g *Ollama) Provider() string {
 	return Provider
 }
 
-func (g *Ollama) Embed(request embed.Request) (*embed.Response, error) {
+func (g *Ollama) Embed(request *embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
+	if len(request.Texts) == 0 {
+		return nil, fmt.Errorf("no texts provided")
+	}
+	var embeddings [][]float64
+	var tokenTotal int
+	for _, text := range request.Texts {
+		reqModel := embedRequest{
+			Input: text,
+			Model: request.Model.Name,
+		}
 
-	reqModel := embedRequest{
-		Input: request.Text,
-		Model: request.Model.Name,
+		body, err := json.Marshal(reqModel)
+		if err != nil {
+			return nil, fmt.Errorf("could not marshal openai request, %w", err)
+		}
+
+		u, err := url.JoinPath(g.uri, "/api/embed")
+		if err != nil {
+			return nil, fmt.Errorf("could not join url, %w", err)
+		}
+		req, err := http.NewRequest("POST", u, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("could not create openai request, %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+
+		if err != nil {
+			return nil, fmt.Errorf("could not post openai request, %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			d, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, string(d))
+		}
+
+		var respModel embedResponse
+		err = json.NewDecoder(resp.Body).Decode(&respModel)
+
+		if err != nil {
+			return nil, fmt.Errorf("could not decode openai response, %w", err)
+		}
+
+		if len(respModel.Embedding) == 0 {
+			return nil, fmt.Errorf("no embeddings in response")
+		}
+		embeddings = append(embeddings, respModel.Embedding[0])
+		tokenTotal += respModel.PromptEvalCount
+
 	}
 
-	body, err := json.Marshal(reqModel)
-	if err != nil {
-		return nil, fmt.Errorf("could not marshal openai request, %w", err)
-	}
-
-	u, err := url.JoinPath(g.uri, "/api/embed")
-	if err != nil {
-		return nil, fmt.Errorf("could not join url, %w", err)
-	}
-	req, err := http.NewRequest("POST", u, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("could not create openai request, %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("could not post openai request, %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		d, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, string(d))
-	}
-
-	var respModel embedResponse
-	err = json.NewDecoder(resp.Body).Decode(&respModel)
-
-	if err != nil {
-		return nil, fmt.Errorf("could not decode openai response, %w", err)
-	}
-
-	if len(respModel.Embedding) == 0 {
-		return nil, fmt.Errorf("no embeddings in response")
-	}
-
-	g.log("[embed] response", "request", reqc, "token-total", respModel.PromptEvalCount)
+	g.log("[embed] response", "request", reqc, "token-total", tokenTotal)
 
 	return &embed.Response{
-		Embedding: respModel.Embedding[0],
+		Embeddings: embeddings,
 		Metadata: models.Metadata{
 			Model:       request.Model.FQN(),
-			TotalTokens: respModel.PromptEvalCount,
+			TotalTokens: tokenTotal,
 		},
 	}, nil
 }
 
-func (g *Ollama) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (g *Ollama) EmbedDocument(request embed.RequestDocument) (*embed.ResponseDocument, error) {
+func (g *Ollama) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
 	return nil, fmt.Errorf("not supported by ollama embed models")
 }
 

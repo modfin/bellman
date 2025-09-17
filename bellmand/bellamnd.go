@@ -547,7 +547,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 		//})
 
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
-			var req embed.RequestMany
+			var req embed.Request
 			err := json.NewDecoder(r.Body).Decode(&req)
 			if err != nil {
 				err = fmt.Errorf("could not decode request, %w", err)
@@ -556,7 +556,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			}
 			req.Ctx = r.Context()
 
-			response, err := proxy.EmbedMany(req)
+			response, err := proxy.Embed(&req)
 			if err != nil {
 				err = fmt.Errorf("could not embed text, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
@@ -582,7 +582,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 		})
 
 		r.Post("/document", func(w http.ResponseWriter, r *http.Request) {
-			var req embed.RequestDocument
+			var req embed.DocumentRequest
 			err := json.NewDecoder(r.Body).Decode(&req)
 			if err != nil {
 				err = fmt.Errorf("could not decode request, %w", err)
@@ -591,7 +591,7 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			}
 			req.Ctx = r.Context()
 
-			response, err := proxy.EmbedDocument(req)
+			response, err := proxy.EmbedDocument(&req)
 			if err != nil {
 				err = fmt.Errorf("could not embed text, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)

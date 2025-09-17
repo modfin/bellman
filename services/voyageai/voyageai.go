@@ -59,25 +59,8 @@ type localContextualizedRequest struct {
 func (v *VoyageAI) Provider() string {
 	return Provider
 }
-func (v *VoyageAI) Embed(request embed.Request) (*embed.Response, error) {
-	resp, err := v.EmbedMany(embed.RequestMany{
-		Texts: []string{request.Text},
-		Model: request.Model,
-		Ctx:   request.Ctx,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(resp.Embeddings) != 1 {
-		return nil, fmt.Errorf("expected 1 embedding, got %d", len(resp.Embeddings))
-	}
-	return &embed.Response{
-		Embedding: resp.Embeddings[0],
-		Metadata:  resp.Metadata,
-	}, nil
-}
 
-func (v *VoyageAI) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, error) {
+func (v *VoyageAI) Embed(request *embed.Request) (*embed.Response, error) {
 
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
@@ -143,7 +126,7 @@ func (v *VoyageAI) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, er
 
 	v.log("[embed] response", "request", reqc, "model", request.Model.FQN(), "token-total", respModel.Usage.TotalTokens)
 
-	embedResp := &embed.ResponseMany{
+	embedResp := &embed.Response{
 		Embeddings: make([][]float64, len(respModel.Data)),
 		Metadata: models.Metadata{
 			Model:       request.Model.FQN(),
@@ -156,7 +139,7 @@ func (v *VoyageAI) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, er
 
 	return embedResp, nil
 }
-func (v *VoyageAI) EmbedDocument(request embed.RequestDocument) (*embed.ResponseDocument, error) {
+func (v *VoyageAI) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
 
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
@@ -225,7 +208,7 @@ func (v *VoyageAI) EmbedDocument(request embed.RequestDocument) (*embed.Response
 
 	v.log("[embed] response", "request", reqc, "model", request.Model.FQN(), "token-total", respModel.Usage.TotalTokens)
 
-	embedResp := &embed.ResponseDocument{
+	embedResp := &embed.DocumentResponse{
 		Embeddings: make([][]float64, len(respModel.Data[0].Data)),
 		Metadata: models.Metadata{
 			Model:       request.Model.FQN(),

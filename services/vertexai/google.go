@@ -92,25 +92,7 @@ var projectIdPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{4,28}[a-z0-9])?$`)
 var regionPattern = regexp.MustCompile(`^(global)|([a-z]+-[a-z]+[1-9][0-9]*)$`)
 var modelNamePattern = regexp.MustCompile(`^[\w.-]+$`) // should probably be gemini-[\w.-]
 
-func (g *Google) Embed(request embed.Request) (*embed.Response, error) {
-	resp, err := g.EmbedMany(embed.RequestMany{
-		Texts: []string{request.Text},
-		Model: request.Model,
-		Ctx:   request.Ctx,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(resp.Embeddings) != 1 {
-		return nil, fmt.Errorf("wrong number of embeddings returned, %d, expected 1", len(resp.Embeddings))
-	}
-	return &embed.Response{
-		Embedding: resp.Embeddings[0],
-		Metadata:  resp.Metadata,
-	}, nil
-}
-
-func (g *Google) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, error) {
+func (g *Google) Embed(request *embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&requestNo, 1)
 
 	tasktype := ""
@@ -212,7 +194,7 @@ func (g *Google) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, erro
 		return nil, fmt.Errorf("wrong number of predictions, %d, expected %d	", len(embeddings.Predictions), len(request.Texts))
 	}
 
-	embedResp := &embed.ResponseMany{
+	embedResp := &embed.Response{
 		Embeddings: make([][]float64, len(embeddings.Predictions)),
 		Metadata: models.Metadata{
 			Model: request.Model.FQN(),
@@ -227,7 +209,7 @@ func (g *Google) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, erro
 	return embedResp, nil
 }
 
-func (g *Google) EmbedDocument(request embed.RequestDocument) (*embed.ResponseDocument, error) {
+func (g *Google) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
 	return nil, fmt.Errorf("not supported by google embed models")
 }
 

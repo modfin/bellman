@@ -121,25 +121,7 @@ func (v *Bellman) GenModels() ([]gen.Model, error) {
 	return models, nil
 }
 
-func (v *Bellman) Embed(request embed.Request) (*embed.Response, error) {
-	resp, err := v.EmbedMany(embed.RequestMany{
-		Model: request.Model,
-		Texts: []string{request.Text},
-		Ctx:   request.Ctx,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(resp.Embeddings) == 0 {
-		return nil, fmt.Errorf("no embedding returned")
-	}
-	return &embed.Response{
-		Embedding: resp.Embeddings[0],
-		Metadata:  resp.Metadata,
-	}, nil
-}
-
-func (v *Bellman) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, error) {
+func (v *Bellman) Embed(request *embed.Request) (*embed.Response, error) {
 	var reqc = atomic.AddInt64(&bellmanRequestNo, 1)
 
 	u, err := url.JoinPath(v.url, "embed")
@@ -176,7 +158,7 @@ func (v *Bellman) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, err
 		return nil, fmt.Errorf("unexpected status code %d; %s", res.StatusCode, string(body))
 	}
 
-	var response embed.ResponseMany
+	var response embed.Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		v.log("[gen] unmarshal response error", "error", err, "body", string(body))
@@ -187,7 +169,7 @@ func (v *Bellman) EmbedMany(request embed.RequestMany) (*embed.ResponseMany, err
 
 	return &response, nil
 }
-func (v *Bellman) EmbedDocument(request embed.RequestDocument) (*embed.ResponseDocument, error) {
+func (v *Bellman) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
 	var reqc = atomic.AddInt64(&bellmanRequestNo, 1)
 
 	u, err := url.JoinPath(v.url, "embed", "document")
@@ -224,7 +206,7 @@ func (v *Bellman) EmbedDocument(request embed.RequestDocument) (*embed.ResponseD
 		return nil, fmt.Errorf("unexpected status code %d; %s", res.StatusCode, string(body))
 	}
 
-	var response embed.ResponseDocument
+	var response embed.DocumentResponse
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		v.log("[gen] unmarshal response error", "error", err, "body", string(body))
