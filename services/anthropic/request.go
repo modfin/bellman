@@ -56,7 +56,7 @@ type reqContent struct {
 	ID        string            `json:"id,omitempty"`
 	ToolUseID string            `json:"tool_use_id,omitempty"`
 	Name      string            `json:"name,omitempty"`
-	Input     map[string]any    `json:"input,omitempty"`
+	Input     any               `json:"input,omitempty"`
 	Content   any               `json:"content,omitempty"`
 }
 
