@@ -71,7 +71,7 @@ func main() {
 				EnvVars: []string{"BELLMAN_API_KEY"},
 			},
 
-			&cli.StringSliceFlag{
+			&cli.StringFlag{
 				Name:    "api-prefix",
 				EnvVars: []string{"BELLMAN_API_PREFIX"},
 			},
