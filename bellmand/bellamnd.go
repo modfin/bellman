@@ -5,6 +5,19 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"log/slog"
+	"math/rand"
+	"net/http"
+	"net/url"
+	"os"
+	"os/signal"
+	"slices"
+	"strings"
+	"syscall"
+	"time"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -23,18 +36,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/push"
 	slogchi "github.com/samber/slog-chi"
 	"github.com/urfave/cli/v2"
-	"io"
-	"log"
-	"log/slog"
-	"math/rand"
-	"net/http"
-	"net/url"
-	"os"
-	"os/signal"
-	"slices"
-	"strings"
-	"syscall"
-	"time"
 )
 
 var logger *slog.Logger
@@ -68,6 +69,11 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    "api-key",
 				EnvVars: []string{"BELLMAN_API_KEY"},
+			},
+
+			&cli.StringSliceFlag{
+				Name:    "api-prefix",
+				EnvVars: []string{"BELLMAN_API_PREFIX"},
 			},
 
 			&cli.StringFlag{
@@ -195,7 +201,8 @@ type GoogleConfig struct {
 }
 
 type Config struct {
-	ApiKeys []string `cli:"api-key"`
+	ApiKeys   []string `cli:"api-key"`
+	ApiPrefix string   `cli:"api-prefix"`
 
 	HttpPort int `cli:"http-port"`
 
@@ -321,7 +328,19 @@ func serve(cfg Config) error {
 		return fmt.Errorf("could not setup proxy, %w", err)
 	}
 
-	r := chi.NewRouter()
+	h := chi.NewRouter()
+
+	r := func() *chi.Mux {
+		apiPrefix := strings.TrimSpace(cfg.ApiPrefix)
+		if apiPrefix == "" {
+			return h
+		}
+		r := chi.NewRouter()
+		h.Mount(apiPrefix, r)
+		logger.Info("Start", "action", "using api-prefix", apiPrefix)
+		return r
+	}()
+
 	r.Use(middleware.Recoverer)
 	r.Use(slogchi.New(logger))
 
@@ -339,7 +358,7 @@ func serve(cfg Config) error {
 		r.Route("/gen", Gen(proxy, cfg))
 	}
 
-	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: r}
+	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: h}
 	go func() {
 		logger.Info("Start", "action", "starting server", "port", cfg.HttpPort)
 		err = server.ListenAndServe()
