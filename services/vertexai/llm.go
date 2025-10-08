@@ -7,16 +7,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/schema"
-	"github.com/modfin/bellman/tools"
 	"io"
 	"log"
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/gen"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/schema"
+	"github.com/modfin/bellman/tools"
 )
 
 var requestNo int64
@@ -99,7 +100,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			var ss geminiStreamingResponse
 			err = json.Unmarshal(line, &ss)
 			if err != nil {
-				log.Printf("could not unmarshal chunk, %w", err)
+				log.Printf("could not unmarshal chunk, %v", err)
 				break
 			}
 
