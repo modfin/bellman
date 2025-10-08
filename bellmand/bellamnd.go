@@ -337,7 +337,7 @@ func serve(cfg Config) error {
 		}
 		r := chi.NewRouter()
 		h.Mount(apiPrefix, r)
-		logger.Info("Start", "action", "using api-prefix", apiPrefix)
+		logger.Info("Start", "using api-prefix", apiPrefix)
 		return r
 	}()
 
@@ -473,7 +473,25 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 		},
 		[]string{"model", "key", "type"},
 	)
-	prometheus.MustRegister(reqCounter, tokensCounter)
+
+	var streamReqCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:        "bellman_gen_stream_request_count",
+			Help:        "Number of streaming request per key",
+			ConstLabels: nil,
+		},
+		[]string{"model", "key"},
+	)
+
+	var streamTokensCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:        "bellman_gen_stream_token_count",
+			Help:        "Number of token processed by model and key in streaming mode",
+			ConstLabels: nil,
+		},
+		[]string{"model", "key", "type"},
+	)
+	prometheus.MustRegister(reqCounter, tokensCounter, streamReqCounter, streamTokensCounter)
 
 	return func(r chi.Router) {
 		r.Use(auth(cfg))
@@ -532,6 +550,122 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 
 		})
 
+		r.Post("/stream", func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				err = fmt.Errorf("could not read request, %w", err)
+				httpErr(w, err, http.StatusBadRequest)
+				return
+			}
+
+			var req gen.FullRequest
+			err = json.Unmarshal(body, &req)
+			if err != nil {
+				err = fmt.Errorf("could not decode request, %w", err)
+				httpErr(w, err, http.StatusBadRequest)
+				return
+			}
+
+			// Force streaming mode
+			req.Stream = true
+
+			gen, err := proxy.Gen(req.Model)
+			if err != nil {
+				err = fmt.Errorf("could not get generator, %w", err)
+				httpErr(w, err, http.StatusInternalServerError)
+				return
+			}
+
+			gen = gen.SetConfig(req.Request).WithContext(r.Context())
+
+			// Get streaming response
+			stream, err := gen.Stream(req.Prompts...)
+			if err != nil {
+				logger.Error("gen stream request", "err", err)
+				err = fmt.Errorf("could not start streaming, %w", err)
+				httpErr(w, err, http.StatusInternalServerError)
+				return
+			}
+
+			keyName := r.Context().Value("api-key-name")
+			logger.Info("gen stream request",
+				"key", keyName,
+				"model", req.Model.FQN(),
+			)
+
+			// Set SSE headers
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+
+			// Ensure the response is flushed immediately
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+
+			// Track metrics
+			var totalInputTokens, totalOutputTokens int
+			var modelName string
+
+			// Process streaming responses
+			for streamResp := range stream {
+				// Handle context cancellation
+				select {
+				case <-r.Context().Done():
+					logger.Info("gen stream cancelled", "key", keyName, "model", req.Model.FQN())
+					return
+				default:
+				}
+
+				// Update metrics
+				if streamResp.Metadata != nil {
+					totalInputTokens = streamResp.Metadata.InputTokens
+					totalOutputTokens = streamResp.Metadata.OutputTokens
+					modelName = streamResp.Metadata.Model
+				}
+
+				// Convert to SSE format
+				data, err := json.Marshal(streamResp)
+				if err != nil {
+					logger.Error("gen stream marshal error", "err", err)
+					continue
+				}
+
+				// Write SSE event
+				_, err = fmt.Fprintf(w, "data: %s\n\n", data)
+				if err != nil {
+					logger.Error("gen stream write error", "err", err)
+					break
+				}
+
+				// Flush the response
+				if flusher, ok := w.(http.Flusher); ok {
+					flusher.Flush()
+				}
+
+				// Check for end of stream
+				if streamResp.Type == "EOF" {
+					break
+				}
+			}
+
+			// Log final metrics
+			logger.Info("gen stream completed",
+				"key", keyName,
+				"model", req.Model.FQN(),
+				"token-input", totalInputTokens,
+				"token-output", totalOutputTokens,
+				"token-total", totalInputTokens+totalOutputTokens,
+			)
+
+			// Update metrics
+			streamReqCounter.WithLabelValues(modelName, keyName.(string)).Inc()
+			streamTokensCounter.WithLabelValues(modelName, keyName.(string), "total").Add(float64(totalInputTokens + totalOutputTokens))
+			streamTokensCounter.WithLabelValues(modelName, keyName.(string), "input").Add(float64(totalInputTokens))
+			streamTokensCounter.WithLabelValues(modelName, keyName.(string), "output").Add(float64(totalOutputTokens))
+		})
 	}
 }
 
