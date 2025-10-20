@@ -42,6 +42,20 @@ var GenModel_4_0_sonnet_20250514 = gen.Model{
 	InputMaxToken:  200_000,
 	OutputMaxToken: 64_000,
 }
+var GenModel_4_5_sonnet_latest = gen.Model{
+	Provider:       Provider,
+	Description:    "Our smartest model for complex agents and coding",
+	Name:           "claude-4-5-sonnet",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 64_000,
+}
+var GenModel_4_5_sonnet_20250929 = gen.Model{
+	Provider:       Provider,
+	Description:    "Our smartest model for complex agents and coding",
+	Name:           "claude-sonnet-4-5-20250929",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 64_000,
+}
 var GenModel_3_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-3-5-sonnet-latest",
@@ -83,6 +97,27 @@ var GenModel_3_5_sonnet_20240620 = gen.Model{
 //	SupportTools:            false,
 //	SupportStructuredOutput: false,
 //}
+
+var GenModel_4_5_haiku_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-haiku-4-5",
+	Description:             "Our fastest model with near-frontier intelligence",
+	InputContentTypes:       nil,
+	InputMaxToken:           200_000,
+	OutputMaxToken:          64_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_4_5_haiku_20251001 = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-haiku-4-5-20251001",
+	Description:             "Our fastest model with near-frontier intelligence",
+	InputContentTypes:       nil,
+	InputMaxToken:           200_000,
+	OutputMaxToken:          64_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
 
 var GenModel_3_5_haiku_latest = gen.Model{
 	Provider:                Provider,
@@ -142,6 +177,16 @@ var GenModel_4_0_opus_20250514 = gen.Model{
 	InputContentTypes:       nil,
 	InputMaxToken:           0,
 	OutputMaxToken:          0,
+	SupportTools:            false,
+	SupportStructuredOutput: false,
+}
+var GenModel_4_1_opus_20250805 = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-4-1-20250805",
+	Description:             "Exceptional model for specialized reasoning tasks",
+	InputContentTypes:       nil,
+	InputMaxToken:           200_000,
+	OutputMaxToken:          32_000,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }

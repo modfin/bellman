@@ -18,8 +18,8 @@ This project was built to the lack of official sdk/clients for the major players
 slight differences in API.
 It also became clear when we started to play around with different LLMs in our projects that the
 differences, while slight, had implications and for each new model introduced it became an overhead.
-There are other projects out there, like go version of langchain, that deals with some of it.
-But having one proxy to hadle all types of models made things alot easier for us to iterate over
+There are other projects out there, like go version of LangChain, that deals with some of it.
+But having one proxy to handle all types of models made things a lot easier for us to iterate over
 problems, models and solutions.
 
 ## The Service
@@ -81,12 +81,11 @@ client, err := bellman.New(...)
 
 ## bellman.New()
 
-The benefit of using the bellman client,
-when you are running `bellmand`,
+The benefit of using the bellman client, when you are running `bellmand`,
 is that we can interchangeably use any model that we wish to interact with.
 
 ```go
-client, err := bellman.New(...)
+client, err := bellman.New("BELLMAN_URL", bellman.Key{Name: "test", Token: "BELLMAN_TOKEN"})
 llm := client.Generator()
 res, err := llm.Model(openai.GenModel_gpt4o_mini).
     Prompt(
@@ -95,7 +94,7 @@ res, err := llm.Model(openai.GenModel_gpt4o_mini).
 fmt.Println(res, err)
 // OpenAI
 
-res, err := llm.Model(vertexai.GenModel_gemini_1_5_flash).
+res, err := llm.Model(vertexai.GenModel_gemini_2_0_flash).
     Prompt(
         prompt.AsUser("What company made you?"),
     )
@@ -124,7 +123,7 @@ fmt.Println(res, err)
 Just normal conversation mode
 
 ```go
-res, err := openai.New(apiKy).Generator().
+res, err := openai.New(apiKey).Generator().
     Model(openai.GenModel_gpt4o_mini).
     Prompt(
         prompt.AsUser("What is the distance to the moon?"),
@@ -133,9 +132,9 @@ if err != nil {
     log.Fatalf("Prompt() error = %v", err)
 }
 
-awnser, err := res.AsText()
+answer, err := res.AsText()
 
-fmt.Println(awnser, err)
+fmt.Println(answer, err)
 // The average distance from Earth to the Moon is approximately 384,400 kilometers 
 // (about 238,855 miles). This distance can vary slightly because the Moon's orbit
 // is elliptical, ranging from about 363,300 km (225,623 miles) at its closest 
@@ -157,15 +156,15 @@ if err != nil {
     log.Fatalf("Prompt() error = %v", err)
 }
 
-awnser, err := res.AsText()
+answer, err := res.AsText()
 
-fmt.Println(awnser, err)
+fmt.Println(answer, err)
 // Ghostbusters! <nil>
 ```
 
 ## General Configuration
 
-Setting things like temperature, max tokens, top p, and stop secuences
+Setting things like temperature, max tokens, top p, and stop sequences
 
 ```go
 res, err := openai.New(apiKey).Generator().
@@ -181,9 +180,9 @@ if err != nil {
     log.Fatalf("Prompt() error = %v", err)
 }
 
-awnser, err := res.AsText()
+answer, err := res.AsText()
 
-fmt.Println(awnser, err)
+fmt.Println(answer, err)
 // Gophers are small, 
 // burrowing rodents belonging to the family Geomyidae, 
 // primarily found in North America
@@ -234,8 +233,8 @@ if err != nil {
     log.Fatalf("Prompt() error = %v", err)
 }
 
-awnser, err := res.AsText() // will return the json of the struct
-fmt.Println(awnser, err)
+answer, err := res.AsText() // will return the json of the struct
+fmt.Println(answer, err)
 //{
 //  "quotes": [
 //    {
@@ -403,7 +402,7 @@ if err != nil {
 
 answer, err := res.AsText()
 
-fmt.Println(awnser, err)
+fmt.Println(answer, err)
 ```
 
 ## Provider specific config
