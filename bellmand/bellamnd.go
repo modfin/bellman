@@ -139,6 +139,11 @@ func main() {
 				EnvVars: []string{"BELLMAN_PROMETHEUS_PUSH_URL"},
 				Usage:   "Use https://user:password@example.com to push metrics to prometheus push gateway",
 			},
+			&cli.StringFlag{
+				Name:    "rate-limit-config",
+				EnvVars: []string{"BELLMAN_RATE_LIMIT_CONFIG"},
+				Usage:   "JSON configuration for per-API-key rate limits. Format: {\"key\": {\"burst_tokens\": 10000, \"burst_window\": \"1m\", \"sustained_tokens\": 1000000, \"sustained_window\": \"1h\"}}",
+			},
 		},
 
 		Action: func(context *cli.Context) error {
@@ -217,6 +222,8 @@ type Config struct {
 
 	PrometheusMetricsBasicAuth string `cli:"prometheus-metrics-basic-auth"`
 	PrometheusPushUrl          string `cli:"prometheus-push-url"`
+
+	RateLimitConfig string `cli:"rate-limit-config"`
 }
 
 func auth(cfg Config) func(next http.Handler) http.Handler {
@@ -248,7 +255,10 @@ func auth(cfg Config) func(next http.Handler) http.Handler {
 				return
 			}
 
-			r = r.WithContext(context.WithValue(r.Context(), "api-key-name", name))
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, "api-key-name", name)
+			ctx = context.WithValue(ctx, "api-key", key)
+			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)
 		}
@@ -328,6 +338,22 @@ func serve(cfg Config) error {
 		return fmt.Errorf("could not setup proxy, %w", err)
 	}
 
+	// Setup rate limiter
+	rateLimiter := NewRateLimiter(nil)
+	if cfg.RateLimitConfig != "" {
+		rateLimitConfigs, err := ParseRateLimitConfig(cfg.RateLimitConfig)
+		if err != nil {
+			return fmt.Errorf("could not parse rate limit config: %w", err)
+		}
+		rateLimiter = NewRateLimiter(rateLimitConfigs)
+		if !rateLimiter.disabled {
+			logger.Info("Rate limiting enabled", "keys", len(rateLimitConfigs))
+		}
+	}
+	if rateLimiter.disabled {
+		logger.Info("Rate limiting is disabled")
+	}
+
 	h := chi.NewRouter()
 
 	r := func() *chi.Mux {
@@ -352,10 +378,10 @@ func serve(cfg Config) error {
 	})
 
 	if !cfg.DisableEmbedModels {
-		r.Route("/embed", Embed(proxy, cfg))
+		r.Route("/embed", Embed(proxy, cfg, rateLimiter))
 	}
 	if !cfg.DisableGenModels {
-		r.Route("/gen", Gen(proxy, cfg))
+		r.Route("/gen", Gen(proxy, cfg, rateLimiter))
 	}
 
 	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: h}
@@ -454,7 +480,7 @@ func (p *PromPusher) Stop(ctx context.Context) error {
 	return nil
 }
 
-func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
+func Gen(proxy *bellman.Proxy, cfg Config, rateLimiter *RateLimiter) func(r chi.Router) {
 
 	var reqCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -513,15 +539,27 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			gen, err := proxy.Gen(req.Model)
+			apiKey := r.Context().Value("api-key").(string)
+			keyName := r.Context().Value("api-key-name").(string)
+
+			if !rateLimiter.HasCapacity(apiKey) {
+				logger.Warn("rate limit exceeded (pre-check)",
+					"key", keyName,
+					"model", req.Model.FQN(),
+				)
+				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
+				return
+			}
+
+			generator, err := proxy.Gen(req.Model)
 			if err != nil {
 				err = fmt.Errorf("could not get generator, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
 				return
 			}
 
-			gen = gen.SetConfig(req.Request).WithContext(r.Context())
-			response, err := gen.Prompt(req.Prompts...)
+			generator = generator.SetConfig(req.Request).WithContext(r.Context())
+			response, err := generator.Prompt(req.Prompts...)
 			if err != nil {
 				logger.Error("gen request", "err", err)
 				err = fmt.Errorf("could not generate text, %w", err)
@@ -529,7 +567,9 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			keyName := r.Context().Value("api-key-name")
+			// Consume actual tokens used
+			rateLimiter.Consume(apiKey, response.Metadata.TotalTokens)
+
 			logger.Info("gen request",
 				"key", keyName,
 				"model", req.Model.FQN(),
@@ -539,10 +579,10 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			)
 
 			// Taking some metrics...
-			reqCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Inc()
-			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string), "total").Add(float64(response.Metadata.TotalTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string), "input").Add(float64(response.Metadata.InputTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string), "output").Add(float64(response.Metadata.OutputTokens))
+			reqCounter.WithLabelValues(response.Metadata.Model, keyName).Inc()
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName, "total").Add(float64(response.Metadata.TotalTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName, "input").Add(float64(response.Metadata.InputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName, "output").Add(float64(response.Metadata.OutputTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -569,17 +609,29 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			// Force streaming mode
 			req.Stream = true
 
-			gen, err := proxy.Gen(req.Model)
+			apiKey := r.Context().Value("api-key").(string)
+			keyName := r.Context().Value("api-key-name").(string)
+
+			if !rateLimiter.HasCapacity(apiKey) {
+				logger.Warn("rate limit exceeded (pre-check)",
+					"key", keyName,
+					"model", req.Model.FQN(),
+				)
+				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
+				return
+			}
+
+			generator, err := proxy.Gen(req.Model)
 			if err != nil {
 				err = fmt.Errorf("could not get generator, %w", err)
 				httpErr(w, err, http.StatusInternalServerError)
 				return
 			}
 
-			gen = gen.SetConfig(req.Request).WithContext(r.Context())
+			generator = generator.SetConfig(req.Request).WithContext(r.Context())
 
 			// Get streaming response
-			stream, err := gen.Stream(req.Prompts...)
+			stream, err := generator.Stream(req.Prompts...)
 			if err != nil {
 				logger.Error("gen stream request", "err", err)
 				err = fmt.Errorf("could not start streaming, %w", err)
@@ -587,7 +639,6 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			keyName := r.Context().Value("api-key-name")
 			logger.Info("gen stream request",
 				"key", keyName,
 				"model", req.Model.FQN(),
@@ -651,25 +702,30 @@ func Gen(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				}
 			}
 
+			totalTokens := totalInputTokens + totalOutputTokens
+
+			// Consume actual tokens used (using API key for rate limiting)
+			rateLimiter.Consume(apiKey, totalTokens)
+
 			// Log final metrics
 			logger.Info("gen stream completed",
 				"key", keyName,
 				"model", req.Model.FQN(),
 				"token-input", totalInputTokens,
 				"token-output", totalOutputTokens,
-				"token-total", totalInputTokens+totalOutputTokens,
+				"token-total", totalTokens,
 			)
 
 			// Update metrics
-			streamReqCounter.WithLabelValues(modelName, keyName.(string)).Inc()
-			streamTokensCounter.WithLabelValues(modelName, keyName.(string), "total").Add(float64(totalInputTokens + totalOutputTokens))
-			streamTokensCounter.WithLabelValues(modelName, keyName.(string), "input").Add(float64(totalInputTokens))
-			streamTokensCounter.WithLabelValues(modelName, keyName.(string), "output").Add(float64(totalOutputTokens))
+			streamReqCounter.WithLabelValues(modelName, keyName).Inc()
+			streamTokensCounter.WithLabelValues(modelName, keyName, "total").Add(float64(totalTokens))
+			streamTokensCounter.WithLabelValues(modelName, keyName, "input").Add(float64(totalInputTokens))
+			streamTokensCounter.WithLabelValues(modelName, keyName, "output").Add(float64(totalOutputTokens))
 		})
 	}
 }
 
-func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
+func Embed(proxy *bellman.Proxy, cfg Config, rateLimiter *RateLimiter) func(r chi.Router) {
 
 	var reqCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -693,12 +749,6 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Use(auth(cfg))
 
-		//r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
-		//	models := proxy.EmbedModels()
-		//	w.Header().Set("Content-Type", "application/json")
-		//	_ = json.NewEncoder(w).Encode(models)
-		//})
-
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 			var req embed.Request
 			err := json.NewDecoder(r.Body).Decode(&req)
@@ -709,6 +759,18 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			}
 			req.Ctx = r.Context()
 
+			apiKey := r.Context().Value("api-key").(string)
+			keyName := r.Context().Value("api-key-name").(string)
+
+			if !rateLimiter.HasCapacity(apiKey) {
+				logger.Warn("rate limit exceeded (pre-check)",
+					"key", keyName,
+					"model", req.Model.FQN(),
+				)
+				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
+				return
+			}
+
 			response, err := proxy.Embed(&req)
 			if err != nil {
 				err = fmt.Errorf("could not embed text, %w", err)
@@ -716,7 +778,8 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			keyName := r.Context().Value("api-key-name")
+			rateLimiter.Consume(apiKey, response.Metadata.TotalTokens)
+
 			logger.Info("embed request",
 				"key", keyName,
 				"model", req.Model.FQN(),
@@ -725,8 +788,8 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			)
 
 			// Taking some metrics...
-			reqCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Inc()
-			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Add(float64(response.Metadata.TotalTokens))
+			reqCounter.WithLabelValues(response.Metadata.Model, keyName).Inc()
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName).Add(float64(response.Metadata.TotalTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -744,6 +807,18 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 			}
 			req.Ctx = r.Context()
 
+			apiKey := r.Context().Value("api-key").(string)
+			keyName := r.Context().Value("api-key-name").(string)
+
+			if !rateLimiter.HasCapacity(apiKey) {
+				logger.Warn("rate limit exceeded (pre-check)",
+					"key", keyName,
+					"model", req.Model.FQN(),
+				)
+				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
+				return
+			}
+
 			response, err := proxy.EmbedDocument(&req)
 			if err != nil {
 				err = fmt.Errorf("could not embed text, %w", err)
@@ -751,7 +826,8 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				return
 			}
 
-			keyName := r.Context().Value("api-key-name")
+			rateLimiter.Consume(apiKey, response.Metadata.TotalTokens)
+
 			logger.Info("embed document request",
 				"key", keyName,
 				"model", req.Model.FQN(),
@@ -759,9 +835,8 @@ func Embed(proxy *bellman.Proxy, cfg Config) func(r chi.Router) {
 				"token-total", response.Metadata.TotalTokens,
 			)
 
-			// Taking some metrics...
-			reqCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Inc()
-			tokensCounter.WithLabelValues(response.Metadata.Model, keyName.(string)).Add(float64(response.Metadata.TotalTokens))
+			reqCounter.WithLabelValues(response.Metadata.Model, keyName).Inc()
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName).Add(float64(response.Metadata.TotalTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
