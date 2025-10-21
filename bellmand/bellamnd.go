@@ -339,21 +339,19 @@ func serve(cfg Config) error {
 	}
 
 	// Setup rate limiter
-	var rateLimiter *RateLimiter
+	rateLimiter := NewRateLimiter(nil)
 	if cfg.RateLimitConfig != "" {
 		rateLimitConfigs, err := ParseRateLimitConfig(cfg.RateLimitConfig)
 		if err != nil {
 			return fmt.Errorf("could not parse rate limit config: %w", err)
 		}
 		rateLimiter = NewRateLimiter(rateLimitConfigs)
-		if rateLimiter.disabled {
-			logger.Info("Rate limiting is disabled")
-		} else {
+		if !rateLimiter.disabled {
 			logger.Info("Rate limiting enabled", "keys", len(rateLimitConfigs))
 		}
-	} else {
-		rateLimiter = NewRateLimiter(nil)
-		logger.Info("Rate limiting is disabled (no config provided)")
+	}
+	if rateLimiter.disabled {
+		logger.Info("Rate limiting is disabled")
 	}
 
 	h := chi.NewRouter()
@@ -751,12 +749,6 @@ func Embed(proxy *bellman.Proxy, cfg Config, rateLimiter *RateLimiter) func(r ch
 	return func(r chi.Router) {
 		r.Use(auth(cfg))
 
-		//r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
-		//	models := proxy.EmbedModels()
-		//	w.Header().Set("Content-Type", "application/json")
-		//	_ = json.NewEncoder(w).Encode(models)
-		//})
-
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 			var req embed.Request
 			err := json.NewDecoder(r.Body).Decode(&req)
@@ -770,7 +762,6 @@ func Embed(proxy *bellman.Proxy, cfg Config, rateLimiter *RateLimiter) func(r ch
 			apiKey := r.Context().Value("api-key").(string)
 			keyName := r.Context().Value("api-key-name").(string)
 
-			// Check rate limit capacity BEFORE making expensive AI request
 			if !rateLimiter.HasCapacity(apiKey) {
 				logger.Warn("rate limit exceeded (pre-check)",
 					"key", keyName,
@@ -787,7 +778,6 @@ func Embed(proxy *bellman.Proxy, cfg Config, rateLimiter *RateLimiter) func(r ch
 				return
 			}
 
-			// Consume actual tokens used
 			rateLimiter.Consume(apiKey, response.Metadata.TotalTokens)
 
 			logger.Info("embed request",
@@ -836,7 +826,6 @@ func Embed(proxy *bellman.Proxy, cfg Config, rateLimiter *RateLimiter) func(r ch
 				return
 			}
 
-			// Consume actual tokens used
 			rateLimiter.Consume(apiKey, response.Metadata.TotalTokens)
 
 			logger.Info("embed document request",
@@ -846,7 +835,6 @@ func Embed(proxy *bellman.Proxy, cfg Config, rateLimiter *RateLimiter) func(r ch
 				"token-total", response.Metadata.TotalTokens,
 			)
 
-			// Taking some metrics...
 			reqCounter.WithLabelValues(response.Metadata.Model, keyName).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, keyName).Add(float64(response.Metadata.TotalTokens))
 
