@@ -1,17 +1,18 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 )
 
 type RateLimitConfig struct {
-	BurstTokens     int           `json:"burst_tokens"`
-	BurstWindow     time.Duration `json:"burst_window"`
-	SustainedTokens int           `json:"sustained_tokens"`
-	SustainedWindow time.Duration `json:"sustained_window"`
+	BurstTokens         int           `json:"burst_tokens"`
+	BurstWindow         string        `json:"burst_window"`
+	BurstWindowDuration time.Duration `json:"-"`
+
+	SustainedTokens         int           `json:"sustained_tokens"`
+	SustainedWindow         string        `json:"sustained_window"`
+	SustainedWindowDuration time.Duration `json:"-"`
 }
 
 type keyLimiter struct {
@@ -19,7 +20,7 @@ type keyLimiter struct {
 
 	sustainedTokens         float64
 	lastSustainedRefillTime time.Time
-	sustainedRefillDuration time.Duration
+	sustainedWindowDuration time.Duration
 
 	burstTokens         float64
 	lastBurstRefillTime time.Time
@@ -34,45 +35,62 @@ type RateLimiter struct {
 	disabled bool
 }
 
-// NewRateLimiter creates a new rate limiter with the given configurations.
-func NewRateLimiter(configs map[string]RateLimitConfig) *RateLimiter {
-	if configs == nil || len(configs) == 0 {
-		return &RateLimiter{disabled: true}
+func NewRateLimiter(apiKeyConfigs map[string]ApiKeyConfig) (*RateLimiter, error) {
+	var configsWithLimits = make(map[string]RateLimitConfig)
+	for _, apiKeyConfig := range apiKeyConfigs {
+		if apiKeyConfig.RateLimit != nil {
+			configsWithLimits[apiKeyConfig.Id] = *apiKeyConfig.RateLimit
+		}
+	}
+	if configsWithLimits == nil || len(configsWithLimits) == 0 {
+		return &RateLimiter{disabled: true}, nil
 	}
 
 	rl := &RateLimiter{
 		limits: make(map[string]*keyLimiter),
 	}
 
-	for keyName, config := range configs {
+	for keyId, config := range configsWithLimits {
 		// Calculate burst refill rate
 		var burstRefillRate float64
-		if config.BurstWindow > 0 && config.BurstTokens > 0 {
-			burstRefillRate = float64(config.BurstTokens) / config.BurstWindow.Seconds()
+		if config.BurstWindow != "" && config.BurstTokens > 0 {
+			burstWindowDuration, err := time.ParseDuration(config.BurstWindow)
+			if err != nil {
+				return nil, err
+			}
+			burstRefillRate = float64(config.BurstTokens) / burstWindowDuration.Seconds()
+		}
+		var sustainedWindowDuration time.Duration
+		if config.SustainedWindow != "" {
+			_sustainedWindowDuration, err := time.ParseDuration(config.SustainedWindow)
+			if err != nil {
+				return nil, err
+			}
+			sustainedWindowDuration = _sustainedWindowDuration
 		}
 
 		kl := &keyLimiter{
 			config:                  config,
 			sustainedTokens:         float64(config.SustainedTokens),
 			lastSustainedRefillTime: time.Now(),
-			sustainedRefillDuration: config.SustainedWindow,
+			sustainedWindowDuration: sustainedWindowDuration,
 			burstTokens:             float64(config.BurstTokens),
 			lastBurstRefillTime:     time.Now(),
 			burstRefillRate:         burstRefillRate,
 		}
-		rl.limits[keyName] = kl
+		rl.limits[keyId] = kl
 	}
 
-	return rl
+	return rl, nil
 }
 
 func (kl *keyLimiter) refill() {
 	now := time.Now()
 
 	// Refill sustained bucket
-	if kl.sustainedRefillDuration > 0 {
+	if kl.sustainedWindowDuration > 0 {
 		elapsed := now.Sub(kl.lastSustainedRefillTime)
-		if elapsed > kl.sustainedRefillDuration {
+		if elapsed > kl.sustainedWindowDuration {
 			kl.sustainedTokens = float64(kl.config.SustainedTokens)
 			kl.lastSustainedRefillTime = now
 		}
@@ -93,13 +111,13 @@ func (kl *keyLimiter) refill() {
 	}
 }
 
-func (rl *RateLimiter) HasCapacity(keyName string) bool {
+func (rl *RateLimiter) HasCapacity(keyId string) bool {
 	if rl.disabled {
 		return true
 	}
 
 	rl.mu.RLock()
-	limiter, exists := rl.limits[keyName]
+	limiter, exists := rl.limits[keyId]
 	rl.mu.RUnlock()
 
 	if !exists {
@@ -117,13 +135,13 @@ func (rl *RateLimiter) HasCapacity(keyName string) bool {
 	return sustainedHasCapacity && burstHasCapacity
 }
 
-func (rl *RateLimiter) Consume(keyName string, n int) {
+func (rl *RateLimiter) Consume(keyId string, n int) {
 	if rl.disabled {
 		return
 	}
 
 	rl.mu.RLock()
-	limiter, exists := rl.limits[keyName]
+	limiter, exists := rl.limits[keyId]
 	rl.mu.RUnlock()
 
 	if !exists {
@@ -139,48 +157,4 @@ func (rl *RateLimiter) Consume(keyName string, n int) {
 
 	limiter.sustainedTokens -= tokensToConsume
 	limiter.burstTokens -= tokensToConsume
-}
-
-func ParseRateLimitConfig(jsonData string) (map[string]RateLimitConfig, error) {
-	if jsonData == "" {
-		return nil, nil
-	}
-
-	var rawConfig map[string]struct {
-		BurstTokens     int    `json:"burst_tokens"`
-		BurstWindow     string `json:"burst_window"`
-		SustainedTokens int    `json:"sustained_tokens"`
-		SustainedWindow string `json:"sustained_window"`
-	}
-
-	err := json.Unmarshal([]byte(jsonData), &rawConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse rate limit config: %w", err)
-	}
-
-	configs := make(map[string]RateLimitConfig)
-	for keyName, raw := range rawConfig {
-		config := RateLimitConfig{
-			BurstTokens:     raw.BurstTokens,
-			SustainedTokens: raw.SustainedTokens,
-		}
-
-		if raw.BurstWindow != "" {
-			config.BurstWindow, err = time.ParseDuration(raw.BurstWindow)
-			if err != nil {
-				return nil, fmt.Errorf("invalid burst_window for key %s: %w", keyName, err)
-			}
-		}
-
-		if raw.SustainedWindow != "" {
-			config.SustainedWindow, err = time.ParseDuration(raw.SustainedWindow)
-			if err != nil {
-				return nil, fmt.Errorf("invalid sustained_window for key %s: %w", keyName, err)
-			}
-		}
-
-		configs[keyName] = config
-	}
-
-	return configs, nil
 }
