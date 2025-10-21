@@ -1,6 +1,6 @@
 module github.com/modfin/bellman/bellmand
 
-go 1.23.2
+go 1.24.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.2
