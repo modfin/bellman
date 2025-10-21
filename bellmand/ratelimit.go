@@ -42,7 +42,7 @@ func NewRateLimiter(apiKeyConfigs map[string]ApiKeyConfig) (*RateLimiter, error)
 			configsWithLimits[apiKeyConfig.Id] = *apiKeyConfig.RateLimit
 		}
 	}
-	if configsWithLimits == nil || len(configsWithLimits) == 0 {
+	if len(configsWithLimits) == 0 {
 		return &RateLimiter{disabled: true}, nil
 	}
 

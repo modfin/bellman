@@ -162,10 +162,9 @@ func main() {
 				}
 			}
 			if cfg.ApiKeys != nil {
-				h := sha256.New()
 				for _, key := range cfg.ApiKeys {
 					// create hash of the key as id
-					h.Reset()
+					h := sha256.New()
 					_, _ = h.Write([]byte(key))
 					sum := h.Sum(nil)
 					apiKeys = append(apiKeys, ApiKeyConfig{
