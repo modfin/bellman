@@ -108,7 +108,7 @@ func (v *VoyageAI) Embed(request *embed.Request) (*embed.Response, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		errText, _ := io.ReadAll(resp.Body)
-		length := min(len(errText), 100)
+		length := min(len(errText), 1000)
 		return nil, fmt.Errorf("unexpected status code, %d, err: %s", resp.StatusCode, string(errText[:length]))
 	}
 
@@ -187,7 +187,7 @@ func (v *VoyageAI) EmbedDocument(request *embed.DocumentRequest) (*embed.Documen
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		errText, _ := io.ReadAll(resp.Body)
-		length := min(len(errText), 100)
+		length := min(len(errText), 1000)
 		return nil, fmt.Errorf("unexpected status code, %d, err: %s", resp.StatusCode, string(errText[:length]))
 	}
 
