@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -52,7 +53,11 @@ func main() {
 				EnvVars: []string{"BELLMAN_HTTP_PORT"},
 				Value:   8080,
 			},
-
+			&cli.IntFlag{
+				Name:    "internal-http-port",
+				EnvVars: []string{"BELLMAN_INTERNAL_HTTP_PORT"},
+				Value:   8081,
+			},
 			&cli.StringFlag{
 				Name:    "log-format",
 				EnvVars: []string{"BELLMAN_LOG_FORMAT"},
@@ -247,7 +252,8 @@ type Config struct {
 	ApiKeyJsonConfig string   `cli:"api-key-json-config"`
 	ApiPrefix        string   `cli:"api-prefix"`
 
-	HttpPort int `cli:"http-port"`
+	HttpPort         int `cli:"http-port"`
+	InternalHttpPort int `cli:"internal-http-port"`
 
 	DisableGenModels   bool `cli:"disable-gen-models"`
 	DisableEmbedModels bool `cli:"disable-embed-models"`
@@ -258,8 +264,7 @@ type Config struct {
 	VoyageAiKey  string `cli:"voyageai-key"`
 	OllamaURL    string `cli:"ollama-url"`
 
-	PrometheusMetricsBasicAuth string `cli:"prometheus-metrics-basic-auth"`
-	PrometheusPushUrl          string `cli:"prometheus-push-url"`
+	PrometheusPushUrl string `cli:"prometheus-push-url"`
 }
 
 type ApiKeyConfig struct {
@@ -328,69 +333,6 @@ func auth(apiKeyConfigs map[string]ApiKeyConfig, feature featureType) func(next 
 	}
 }
 
-func metricsAuth(userpass string) func(http.Handler) http.Handler {
-
-	active := len(userpass) > 0
-	open := userpass == ":"
-	user, pass, _ := strings.Cut(userpass, ":")
-
-	if !active {
-		logger.Info("/metrics endpoint is disabled")
-	}
-
-	if open {
-		logger.Warn("/metrics endpoint is open and has no protection")
-	}
-
-	if active && !open {
-		logger.Info("/metrics endpoint is protected")
-	}
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-			if !active {
-				http.NotFound(w, r)
-				return
-			}
-			if open {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			auth := r.Header.Get("Authorization")
-			if auth == "" {
-				w.Header().Set("WWW-Authenticate", `Basic realm="restricted"`)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			_type, pwd, found := strings.Cut(auth, " ")
-			if !found || _type != "Basic" {
-				w.Header().Set("WWW-Authenticate", `Basic realm="restricted"`)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			payload, err := base64.StdEncoding.DecodeString(pwd)
-			if err != nil {
-				w.Header().Set("WWW-Authenticate", `Basic realm="restricted"`)
-				http.Error(w, "Unauthorized, bad header", http.StatusUnauthorized)
-				return
-			}
-			tryuser, trypass, found := strings.Cut(string(payload), ":")
-
-			if !found || tryuser != user || trypass != pass {
-				time.Sleep(time.Duration(rand.Int63n(300)) * time.Millisecond)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 	var err error
 	logger.Info("Start", "action", "setting up ai proxy", "keys", len(apiKeyConfigs))
@@ -424,8 +366,6 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 	r.Use(middleware.Recoverer)
 	r.Use(slogchi.New(logger))
 
-	r.Handle("/metrics", metricsAuth(cfg.PrometheusMetricsBasicAuth)(promhttp.Handler()))
-
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
@@ -442,9 +382,20 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 	go func() {
 		logger.Info("Start", "action", "starting server", "port", cfg.HttpPort)
 		err = server.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("http server error", "err", err)
 			os.Exit(1)
+		}
+	}()
+
+	internalH := chi.NewRouter()
+	internalH.Handle("/metrics", promhttp.Handler())
+	internalServer := &http.Server{Addr: fmt.Sprintf(":%d", cfg.InternalHttpPort), Handler: internalH}
+	go func() {
+		logger.Info("Start", "action", "starting internal server", "port", cfg.HttpPort)
+		err = internalServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("http internal server error", "err", err)
 		}
 	}()
 
@@ -468,6 +419,7 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 
 	logger.Info("Shutdown", "action", "shutting down http server")
 	_ = server.Shutdown(ctx)
+	_ = internalServer.Shutdown(ctx)
 
 	if pusher != nil {
 		logger.Info("Shutdown", "action", "shutting down prometheus pusher")
