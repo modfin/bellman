@@ -2,7 +2,6 @@ package vertexai
 
 import (
 	"github.com/modfin/bellman/schema"
-	"strings"
 )
 
 // https://ai.google.dev/gemini-api/docs/structured-output?lang=rest
@@ -23,6 +22,8 @@ const (
 // object](https://spec.openapis.org/oas/v3.0.3#schema). More fields may be
 // added in the future as needed.
 type JSONSchema struct {
+	Ref  string                 `json:"ref,omitempty"`  // #/defs/... etc, overrides everything else
+	Defs map[string]*JSONSchema `json:"defs,omitempty"` // for ref
 	// Optional. The type of the data.
 	Type Type `json:"type,omitempty"`
 	// Optional. The format of the data.
@@ -60,17 +61,12 @@ type JSONSchema struct {
 	// Optional. SCHEMA FIELDS FOR TYPE STRING
 }
 
-func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema.JSON) *JSONSchema {
-	// vertexai does not support $ref, so we try to build the schema from the $defs properties manually instead
-	if bellmanSchema.Ref != "" && schemaDefs != nil {
-		refKey := strings.TrimLeft(bellmanSchema.Ref, "#/$defs/")
-		prop, ok := schemaDefs[refKey]
-		if !ok {
-			return nil
+func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
+	if bellmanSchema.Ref != "" {
+		return &JSONSchema{
+			Ref: bellmanSchema.Ref,
 		}
-		return fromBellmanSchema(prop, schemaDefs)
 	}
-
 	def := &JSONSchema{
 		Description: bellmanSchema.Description,
 		Required:    bellmanSchema.Required,
@@ -96,11 +92,11 @@ func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema
 	if len(bellmanSchema.Properties) > 0 {
 		def.Properties = make(map[string]*JSONSchema)
 		for key, prop := range bellmanSchema.Properties {
-			def.Properties[key] = fromBellmanSchema(prop, schemaDefs)
+			def.Properties[key] = fromBellmanSchema(prop)
 		}
 	}
 	if bellmanSchema.Items != nil {
-		def.Items = fromBellmanSchema(bellmanSchema.Items, schemaDefs)
+		def.Items = fromBellmanSchema(bellmanSchema.Items)
 	}
 
 	if len(bellmanSchema.Enum) > 0 {
@@ -113,6 +109,12 @@ func fromBellmanSchema(bellmanSchema *schema.JSON, schemaDefs map[string]*schema
 		}
 	}
 
+	if bellmanSchema.Defs != nil && len(bellmanSchema.Defs) > 0 {
+		def.Defs = make(map[string]*JSONSchema)
+		for key, prop := range bellmanSchema.Defs {
+			def.Defs[key] = fromBellmanSchema(prop)
+		}
+	}
 	if bellmanSchema.Maximum != nil {
 		def.Maximum = *bellmanSchema.Maximum
 	}

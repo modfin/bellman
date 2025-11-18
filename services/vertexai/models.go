@@ -22,6 +22,13 @@ var GenModel_gemini_2_5_flash_latest = gen.Model{
 	OutputMaxToken: 65_536,
 }
 
+var GenModel_gemini_2_5_flash_lite_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-2.5-flash-lite",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+
 var GenModel_gemini_2_0_flash_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-2.0-flash",

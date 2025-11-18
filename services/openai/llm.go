@@ -374,11 +374,14 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 
 	if g.request.ThinkingBudget != nil {
 		var reffort ReasoningEffort
-		if *g.request.ThinkingBudget < 2_000 {
+		switch true {
+		case *g.request.ThinkingBudget == 0:
+			reffort = ReasoningEffortNone
+		case *g.request.ThinkingBudget < 2_000:
 			reffort = ReasoningEffortLow
-		} else if *g.request.ThinkingBudget < 10_000 {
+		case *g.request.ThinkingBudget < 10_000:
 			reffort = ReasoningEffortMedium
-		} else {
+		default:
 			reffort = ReasoningEffortHigh
 		}
 		reqModel.ReasoningEffort = &reffort

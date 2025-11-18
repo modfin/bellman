@@ -19,6 +19,12 @@ const Provider = "OpenAI"
 //		"owned_by": "system"
 //		}, ....
 
+var GenModel_gpt5_1_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.1",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
 var GenModel_gpt5_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5",
