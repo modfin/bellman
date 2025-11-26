@@ -43,10 +43,44 @@ type reqToolChoice struct {
 	Name string `json:"name,omitempty"`
 }
 
-type reqTool struct {
+type reqTool interface {
+	GetType() string
+	GetName() string
+}
+
+type reqToolBasic struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	InputSchema *JSONSchema `json:"input_schema,omitempty"`
+}
+
+func (t reqToolBasic) GetType() string {
+	return "basic"
+}
+func (t reqToolBasic) GetName() string {
+	return t.Name
+}
+
+type reqToolWebSearch struct {
+	Name           string   `json:"name"` // must be "web_search"
+	Type           string   `json:"type"` // must be "web_search_..."
+	MaxUses        int      `json:"max_uses,omitempty"`
+	AllowedDomains []string `json:"allowed_domains,omitempty"`
+	BlockedDomains []string `json:"blocked_domains,omitempty"`
+	UserLocation   struct {
+		Type     string `json:"type"` // "approximate"
+		City     string `json:"city,omitempty"`
+		Region   string `json:"region,omitempty"`
+		Country  string `json:"country,omitempty"`
+		Timezone string `json:"timezone,omitempty"`
+	} `json:"user_location,omitempty"`
+}
+
+func (t reqToolWebSearch) GetType() string {
+	return t.Type
+}
+func (t reqToolWebSearch) GetName() string {
+	return t.Name
 }
 
 type reqContent struct {

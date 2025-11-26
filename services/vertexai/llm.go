@@ -331,7 +331,7 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 	// Dealing with SetToolConfig request
 	if g.request.ToolConfig != nil {
 		model.ToolConfig = &genToolConfig{
-			GoogleFunctionCallingConfig: genFunctionCallingConfig{
+			GoogleFunctionCallingConfig: &genFunctionCallingConfig{
 				Mode: "ANY",
 			},
 		}
@@ -346,6 +346,28 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		default:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
 			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.request.ToolConfig.Name}
+		}
+	}
+	if g.request.WebSearchTool != nil {
+		if model.Tools == nil {
+			model.Tools = []genTool{}
+		}
+		var webSearchTool genGoogleSearchTool
+		if len(g.request.WebSearchTool.ExcludedDomains) > 0 {
+			webSearchTool.ExcludeDomains = g.request.WebSearchTool.ExcludedDomains
+		}
+		model.Tools = append(model.Tools, genTool{GoogleSearch: &webSearchTool})
+		if g.request.WebSearchTool.UserLocation.Latitude != 0 || g.request.WebSearchTool.UserLocation.Longitude != 0 {
+			if model.ToolConfig == nil {
+				model.ToolConfig = &genToolConfig{}
+			}
+			if model.ToolConfig.RetrievalConfig == nil {
+				model.ToolConfig.RetrievalConfig = &genFunctionCallingRetrievalConfig{}
+			}
+			model.ToolConfig.RetrievalConfig.LatLng = &genFunctionCallingRetrievalLatLngConfig{
+				Latitude:  g.request.WebSearchTool.UserLocation.Latitude,
+				Longitude: g.request.WebSearchTool.UserLocation.Longitude,
+			}
 		}
 	}
 

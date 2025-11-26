@@ -62,7 +62,8 @@ type genConfig struct {
 }
 
 type genTool struct {
-	FunctionDeclaration []genToolFunc `json:"functionDeclarations"`
+	FunctionDeclaration []genToolFunc        `json:"functionDeclarations"`
+	GoogleSearch        *genGoogleSearchTool `json:"googleSearch,omitempty"`
 }
 
 type genToolFunc struct {
@@ -71,13 +72,27 @@ type genToolFunc struct {
 	Parameters  *JSONSchema `json:"parameters"`
 }
 
+type genGoogleSearchTool struct {
+	ExcludeDomains []string `json:"exclude_domains,omitempty"`
+}
+
 type genToolConfig struct {
-	GoogleFunctionCallingConfig genFunctionCallingConfig `json:"functionCallingConfig"`
+	GoogleFunctionCallingConfig *genFunctionCallingConfig          `json:"functionCallingConfig,omitempty"`
+	RetrievalConfig             *genFunctionCallingRetrievalConfig `json:"retrievalConfig,omitempty"`
 }
 
 type genFunctionCallingConfig struct {
 	Mode                 string   `json:"mode"`
 	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"`
+}
+
+type genFunctionCallingRetrievalConfig struct {
+	LatLng *genFunctionCallingRetrievalLatLngConfig `json:"latLng,omitempty"`
+}
+
+type genFunctionCallingRetrievalLatLngConfig struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 }
 
 type genRequest struct {

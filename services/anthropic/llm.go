@@ -259,8 +259,12 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}", resp.StatusCode, string(b)), err)
 	}
 
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read response body, %w", err)
+	}
 	var respModel anthropicResponse
-	err = json.NewDecoder(resp.Body).Decode(&respModel)
+	err = json.Unmarshal(b, &respModel)
 	if err != nil {
 		return nil, fmt.Errorf("could not decode response, %w", err)
 	}
@@ -338,7 +342,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 
 	if g.request.OutputSchema != nil {
 		model.Tools = []reqTool{
-			{
+			reqToolBasic{
 				Name:        respone_output_callback_name,
 				Description: "function that is called with the result of the llm query",
 				InputSchema: fromBellmanSchema(g.request.OutputSchema),
@@ -351,7 +355,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 
 	if len(g.request.Tools) > 0 {
 		for _, t := range g.request.Tools {
-			model.Tools = append(model.Tools, reqTool{
+			model.Tools = append(model.Tools, reqToolBasic{
 				Name:        t.Name,
 				Description: t.Description,
 				InputSchema: fromBellmanSchema(t.ArgumentSchema),
@@ -385,6 +389,27 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 			model.Tool = nil
 			model.Tools = nil
 		}
+	}
+
+	if g.request.WebSearchTool != nil {
+		wsTool := reqToolWebSearch{
+			Type: "web_search_20250305",
+			Name: "web_search",
+		}
+		if g.request.WebSearchTool.AllowedDomains != nil {
+			wsTool.AllowedDomains = g.request.WebSearchTool.AllowedDomains
+		}
+		if g.request.WebSearchTool.ExcludedDomains != nil {
+			wsTool.BlockedDomains = g.request.WebSearchTool.ExcludedDomains
+		}
+		if g.request.WebSearchTool.UserLocation.City != "" || g.request.WebSearchTool.UserLocation.Region != "" || g.request.WebSearchTool.UserLocation.Country != "" || g.request.WebSearchTool.UserLocation.Timezone != "" {
+			wsTool.UserLocation.City = g.request.WebSearchTool.UserLocation.City
+			wsTool.UserLocation.Region = g.request.WebSearchTool.UserLocation.Region
+			wsTool.UserLocation.Country = g.request.WebSearchTool.UserLocation.Country
+			wsTool.UserLocation.Timezone = g.request.WebSearchTool.UserLocation.Timezone
+			wsTool.UserLocation.Type = "approximate"
+		}
+		model.Tools = append(model.Tools, wsTool)
 	}
 
 	if g.request.ThinkingBudget != nil {

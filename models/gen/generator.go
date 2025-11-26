@@ -59,6 +59,10 @@ func (b *Generator) clone() *Generator {
 	if b.Request.Tools != nil {
 		bb.Request.Tools = append([]tools.Tool{}, b.Request.Tools...)
 	}
+	if b.Request.WebSearchTool != nil {
+		cp := *b.Request.WebSearchTool
+		bb.Request.WebSearchTool = &cp
+	}
 	if b.Request.PresencePenalty != nil {
 		cp := *b.Request.PresencePenalty
 		bb.Request.PresencePenalty = &cp
@@ -147,6 +151,12 @@ func (b *Generator) SetToolConfig(tool tools.Tool) *Generator {
 		}
 	}
 	bb.Request.Tools = []tools.Tool{tool}
+	return bb
+}
+func (b *Generator) SetWebSearchTool(webSearchTool tools.WebSearchTool) *Generator {
+	bb := b.clone()
+
+	bb.Request.WebSearchTool = &webSearchTool
 	return bb
 }
 

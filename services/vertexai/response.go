@@ -53,8 +53,31 @@ type geminiResponse struct {
 				FunctionCall functionCall `json:"functionCall"`
 			} `json:"parts"`
 		} `json:"content"`
-		FinishReason  string `json:"finishReason"`
-		SafetyRatings []struct {
+		FinishReason      string `json:"finishReason"`
+		GroundingMetadata struct {
+			WebSearchQueries []string `json:"webSearchQueries"`
+			SearchEntryPoint struct {
+				RenderedContent string `json:"renderedContent"`
+			} `json:"searchEntryPoint"`
+			GroundingChunks []struct {
+				Web struct {
+					URI    string `json:"uri"`
+					Title  string `json:"title"`
+					Domain string `json:"domain"`
+				} `json:"web"`
+			} `json:"groundingChunks,omitempty"`
+			GroundingSupports []struct {
+				Segment struct {
+					StartIndex int    `json:"startIndex"`
+					EndIndex   int    `json:"endIndex"`
+					Text       string `json:"text"`
+				} `json:"segment"`
+				GroundingChunkIndices []int     `json:"groundingChunkIndices"`
+				ConfidenceScores      []float64 `json:"confidenceScores"`
+			} `json:"groundingSupports,omitempty"`
+		} `json:"groundingMetadata,omitempty"`
+		RetrievalMetadata any `json:"retrievalMetadata,omitempty"`
+		SafetyRatings     []struct {
 			Category         string  `json:"category"`
 			Probability      string  `json:"probability"`
 			ProbabilityScore float64 `json:"probabilityScore"`
