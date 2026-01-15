@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/embed"
-	"github.com/modfin/bellman/models/gen"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
 )
 
 type embedRequest struct {
@@ -27,13 +28,26 @@ type embedResponse struct {
 }
 
 type Ollama struct {
-	uri string
-	Log *slog.Logger `json:"-"`
+	uris      []string
+	available chan int // Pool of available instance indices
+	Log       *slog.Logger `json:"-"`
 }
 
-func New(uri string) *Ollama {
+func New(uris ...string) *Ollama {
+	if len(uris) == 0 {
+		panic("at least one Ollama URI must be provided")
+	}
+
+	// Create a buffered channel with capacity equal to number of instances
+	// Each instance index is added to represent an available instance
+	available := make(chan int, len(uris))
+	for i := range uris {
+		available <- i
+	}
+
 	return &Ollama{
-		uri: uri,
+		uris:      uris,
+		available: available,
 	}
 }
 
@@ -53,6 +67,17 @@ func (g *Ollama) Embed(request *embed.Request) (*embed.Response, error) {
 	if len(request.Texts) == 0 {
 		return nil, fmt.Errorf("no texts provided")
 	}
+
+	// Acquire an available instance (blocks if all instances are busy)
+	instanceIdx := <-g.available
+	defer func() {
+		// Return the instance to the pool when done
+		g.available <- instanceIdx
+	}()
+
+	uri := g.uris[instanceIdx]
+	g.log("[embed] using instance", "index", instanceIdx, "uri", uri, "request", reqc)
+
 	var embeddings [][]float64
 	var tokenTotal int
 	for _, text := range request.Texts {
@@ -66,7 +91,7 @@ func (g *Ollama) Embed(request *embed.Request) (*embed.Response, error) {
 			return nil, fmt.Errorf("could not marshal openai request, %w", err)
 		}
 
-		u, err := url.JoinPath(g.uri, "/api/embed")
+		u, err := url.JoinPath(uri, "/api/embed")
 		if err != nil {
 			return nil, fmt.Errorf("could not join url, %w", err)
 		}
@@ -81,15 +106,16 @@ func (g *Ollama) Embed(request *embed.Request) (*embed.Response, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not post openai request, %w", err)
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			d, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			return nil, fmt.Errorf("unexpected status code, %d, %s", resp.StatusCode, string(d))
 		}
 
 		var respModel embedResponse
 		err = json.NewDecoder(resp.Body).Decode(&respModel)
+		resp.Body.Close()
 
 		if err != nil {
 			return nil, fmt.Errorf("could not decode openai response, %w", err)

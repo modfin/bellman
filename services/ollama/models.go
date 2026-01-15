@@ -139,6 +139,27 @@ var EmbedModel_bge_m3 = embed.Model{
 	//bert.embedding_length 1024
 	//bert.feed_forward_length 4096
 }
+var EmbedModel_qwen3_06b = embed.Model{
+	Provider:         Provider,
+	Name:             "qwen3-embedding:0.6b",
+	Description:      "Building upon the foundational models of the Qwen3 series, Qwen3 Embedding provides a comprehensive range of text embeddings models in various sizes. 0.6B. https://ollama.com/library/qwen3-embedding",
+	InputMaxTokens:   32_000,
+	OutputDimensions: 4096,
+}
+var EmbedModel_qwen3_4b = embed.Model{
+	Provider:         Provider,
+	Name:             "qwen3-embedding:4b",
+	Description:      "Building upon the foundational models of the Qwen3 series, Qwen3 Embedding provides a comprehensive range of text embeddings models in various sizes. 4B. https://ollama.com/library/qwen3-embedding",
+	InputMaxTokens:   32_000,
+	OutputDimensions: 4096,
+}
+var EmbedModel_qwen3_8b = embed.Model{
+	Provider:         Provider,
+	Name:             "qwen3-embedding:8b",
+	Description:      "Building upon the foundational models of the Qwen3 series, Qwen3 Embedding provides a comprehensive range of text embeddings models in various sizes. 8B. https://ollama.com/library/qwen3-embedding",
+	InputMaxTokens:   32_000,
+	OutputDimensions: 4096,
+}
 
 var EmbedModels = map[string]embed.Model{
 	EmbedModel_nomic_embed_text.Name:        EmbedModel_nomic_embed_text,

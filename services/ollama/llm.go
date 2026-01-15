@@ -117,7 +117,16 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		return nil, fmt.Errorf("could not marshal open ai request, %w", err)
 	}
 
-	u, err := url.JoinPath(g.ollama.uri, "/api/chat")
+	// Acquire an available instance (blocks if all instances are busy)
+	instanceIdx := <-g.ollama.available
+	defer func() {
+		// Return the instance to the pool when done
+		g.ollama.available <- instanceIdx
+	}()
+
+	uri := g.ollama.uris[instanceIdx]
+
+	u, err := url.JoinPath(uri, "/api/chat")
 	if err != nil {
 		return nil, fmt.Errorf("could not join url, %w", err)
 	}
@@ -135,6 +144,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	reqc := atomic.AddInt64(&requestNo, 1)
 	g.ollama.log("[gen] request",
 		"request", reqc,
+		"instance", instanceIdx,
+		"uri", uri,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
 		"tool_choice", g.request.ToolConfig != nil,
