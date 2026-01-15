@@ -124,10 +124,10 @@ func main() {
 				EnvVars: []string{"BELLMAN_VOYAGEAI_KEY"},
 			},
 
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:    "ollama-url",
 				EnvVars: []string{"BELLMAN_OLLAMA_URL"},
-				Usage:   `The url of the ollama service, eg http://localhost:11434`,
+				Usage:   `The url(s) of the ollama service(s), eg http://localhost:11434. Can be specified multiple times for load balancing.`,
 			},
 
 			&cli.BoolFlag{
@@ -261,8 +261,8 @@ type Config struct {
 	AnthropicKey string `cli:"anthropic-key"`
 	OpenAiKey    string `cli:"openai-key"`
 	Google       GoogleConfig
-	VoyageAiKey  string `cli:"voyageai-key"`
-	OllamaURL    string `cli:"ollama-url"`
+	VoyageAiKey  string   `cli:"voyageai-key"`
+	OllamaURLs   []string `cli:"ollama-url"`
 
 	PrometheusPushUrl string `cli:"prometheus-push-url"`
 }
@@ -904,8 +904,8 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
 	}
 
-	if cfg.OllamaURL != "" {
-		client := ollama.New(cfg.OllamaURL)
+	if len(cfg.OllamaURLs) > 0 {
+		client := ollama.New(cfg.OllamaURLs...)
 
 		proxy.RegisterGen(client)
 		proxy.RegisterEmbeder(client)
