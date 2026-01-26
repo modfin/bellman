@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/tools"
 	"io"
 	"net/http"
 	"net/url"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/gen"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 )
 
 var requestNo int64
@@ -53,6 +54,10 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			StopSequences: g.request.StopSequences,
 		},
 		Stream: false,
+	}
+
+	if g.request.ThinkingBudget != nil {
+		reqModel.Think = *g.request.ThinkingBudget > 0
 	}
 
 	if g.request.Model.Name == "" {
