@@ -29,7 +29,7 @@ type genRequest struct {
 	Format *JSONSchema `json:"format,omitempty"`
 
 	Option genRequestOption `json:"option,omitempty"`
-	Think  bool             `json:"think"`
+	Think  bool             `json:"think,omitempty"`
 	Stream bool             `json:"stream"`
 
 	Tools []tool `json:"tools,omitempty"`
