@@ -139,7 +139,7 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    "vllm-model",
 				EnvVars: []string{"BELLMAN_VLLM_MODEL"},
-				Usage:   `The model loaded on url, has to be in the same order as vllm-url`,
+				Usage:   `The model loaded on url, has to be in the same order as vllm-url. Supports * if you want to direct all requests to the same url.`,
 			},
 
 			&cli.BoolFlag{

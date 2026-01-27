@@ -305,8 +305,11 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	}
 
 	uri := g.vllm.modelToUri[g.request.Model.Name]
+	if uri == "" && g.vllm.modelToUri["*"] == "" {
+		return nil, reqModel, fmt.Errorf("model %s not found", g.request.Model.Name)
+	}
 	if uri == "" {
-		return nil, reqModel, fmt.Errorf("model %s is not supported by vllm", g.request.Model.Name)
+		uri = g.vllm.modelToUri["*"]
 	}
 
 	if reqModel.Stream {

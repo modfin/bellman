@@ -73,8 +73,11 @@ func (g *VLLM) Embed(request *embed.Request) (*embed.Response, error) {
 		EncodingFormat: "float",
 	}
 	uri := g.modelToUri[request.Model.Name]
-	if uri == "" {
+	if uri == "" && g.modelToUri["*"] == "" {
 		return nil, fmt.Errorf("model %s not found", request.Model.Name)
+	}
+	if uri == "" {
+		uri = g.modelToUri["*"]
 	}
 
 	u, err := url.JoinPath(uri, "/v1/embeddings")
