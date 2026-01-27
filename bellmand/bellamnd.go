@@ -30,6 +30,7 @@ import (
 	"github.com/modfin/bellman/services/ollama"
 	"github.com/modfin/bellman/services/openai"
 	"github.com/modfin/bellman/services/vertexai"
+	"github.com/modfin/bellman/services/vllm"
 	"github.com/modfin/bellman/services/voyageai"
 	"github.com/modfin/clix"
 	"github.com/prometheus/client_golang/prometheus"
@@ -128,6 +129,17 @@ func main() {
 				Name:    "ollama-url",
 				EnvVars: []string{"BELLMAN_OLLAMA_URL"},
 				Usage:   `The url of the ollama service, eg http://localhost:11434`,
+			},
+
+			&cli.StringSliceFlag{
+				Name:    "vllm-url",
+				EnvVars: []string{"BELLMAN_VLLM_URL"},
+				Usage:   `The url of the vllm service, eg http://localhost:8000`,
+			},
+			&cli.StringSliceFlag{
+				Name:    "vllm-model",
+				EnvVars: []string{"BELLMAN_VLLM_MODEL"},
+				Usage:   `The model loaded on url, has to be in the same order as vllm-url`,
 			},
 
 			&cli.BoolFlag{
@@ -261,8 +273,10 @@ type Config struct {
 	AnthropicKey string `cli:"anthropic-key"`
 	OpenAiKey    string `cli:"openai-key"`
 	Google       GoogleConfig
-	VoyageAiKey  string `cli:"voyageai-key"`
-	OllamaURL    string `cli:"ollama-url"`
+	VoyageAiKey  string   `cli:"voyageai-key"`
+	OllamaURL    string   `cli:"ollama-url"`
+	VLLMURL      []string `cli:"vllm-url"`
+	VLLMModel    []string `cli:"vllm-model"`
 
 	PrometheusPushUrl string `cli:"prometheus-push-url"`
 }
@@ -878,7 +892,7 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 		proxy.RegisterGen(client)
 		proxy.RegisterEmbeder(client)
 		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
-		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
 	}
 
 	if cfg.Google.Region != "" && cfg.Google.Project != "" {
@@ -895,13 +909,13 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 		proxy.RegisterGen(client)
 		proxy.RegisterEmbeder(client)
 		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
-		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
 	}
 
 	if cfg.VoyageAiKey != "" {
 		client := voyageai.New(cfg.VoyageAiKey)
 		proxy.RegisterEmbeder(client)
-		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
 	}
 
 	if cfg.OllamaURL != "" {
@@ -909,7 +923,17 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 
 		proxy.RegisterGen(client)
 		proxy.RegisterEmbeder(client)
-		logger.Info("Start", "action", "[embed] adding  provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
+	}
+	if len(cfg.VLLMURL) > 0 {
+		if len(cfg.VLLMURL) != len(cfg.VLLMModel) {
+			return nil, fmt.Errorf("vllm-url and vllm-model have to be of same length")
+		}
+		client := vllm.New(cfg.VLLMURL, cfg.VLLMModel)
+
+		proxy.RegisterGen(client)
+		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
 	}
 
 	return proxy, nil
