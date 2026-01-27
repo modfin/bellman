@@ -79,6 +79,11 @@ var GenModel_gemma2_27b = gen.Model{
 	Description: "Google Gemma 2 is a high-performing and efficient model available in three sizes: 2B, 9B, and 27B.",
 }
 
+var GenModel_glm_4_7_flash_q4 = gen.Model{
+	Provider: Provider,
+	Name:     "glm-4.7-flash:q4_K_M",
+}
+
 // https://platform.openai.com/docs/models#embeddings
 
 var EmbedModel_nomic_embed_text = embed.Model{
@@ -138,6 +143,20 @@ var EmbedModel_bge_m3 = embed.Model{
 	//bert.context_length 8192
 	//bert.embedding_length 1024
 	//bert.feed_forward_length 4096
+}
+
+var EmbedModel_qwen_3_8b = embed.Model{
+	Provider:         Provider,
+	Name:             "qwen3-embedding:8b",
+	InputMaxTokens:   32_768,
+	OutputDimensions: 4096,
+}
+
+var EmbedModel_qwen_3_06b = embed.Model{
+	Provider:         Provider,
+	Name:             "qwen3-embedding:0.6b",
+	InputMaxTokens:   32_768,
+	OutputDimensions: 4096,
 }
 
 var EmbedModels = map[string]embed.Model{
