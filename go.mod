@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
+	github.com/joho/godotenv v1.5.1
 	golang.org/x/oauth2 v0.32.0
 )
 

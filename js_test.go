@@ -2,68 +2,94 @@ package bellman
 
 import (
 	"fmt"
+	"log"
 	"math"
+	"os"
 	"testing"
 
 	"github.com/dop251/goja"
+	"github.com/joho/godotenv"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/services/vllm"
 )
 
-func TestJS(t *testing.T) {
-	fmt.Println("Hello and welcome!")
+func TestToolman(t *testing.T) {
+	client := New("BELLMAN_URL", Key{Name: "test", Token: "BELLMAN_TOKEN"})
+	llm := client.Generator()
+	res, err := llm.Model(vllm.GenModel_gpt_oss_20b).
+		Prompt(
+			prompt.AsUser("What company made you?"),
+		)
+	fmt.Println(res, err)
 
-	vm := goja.New()
-	v, err := vm.RunString("2 + 2")
-	if err != nil {
-		panic(err)
-	}
-	if num := v.Export().(int64); num != 4 {
-		panic(num)
-	}
-	fmt.Println(v)
+	// another prompt
+	model := llm.Model(vllm.GenModel_gpt_oss_20b)
+	res, err = model.Prompt(prompt.AsUser("Tell me a joke"))
+	fmt.Println(res, err)
 }
 
-func Test2(t *testing.T) {
-	vm := goja.New()
+func TestJSLLM(t *testing.T) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
-	// 1. Define the JS function in the VM
+	bellmanUrl := os.Getenv("BELLMAN_URL")
+	bellmanToken := os.Getenv("BELLMAN_TOKEN")
+
+	askBellman := func(userMessage string) string {
+		client := New("BELLMAN_URL", Key{Name: "test", Token: "BELLMAN_TOKEN"})
+		llm := client.Generator()
+		res, _ := llm.Model(vllm.GenModel_gpt_oss_20b).
+			Prompt(
+				prompt.AsUser(userMessage),
+			)
+		text, _ := res.AsText()
+		return text
+	}
+
+	vm := goja.New()
+	vm.Set("CONFIG", map[string]string{
+		"token": bellmanToken,
+		"url":   bellmanUrl,
+	})
+	vm.Set("askBellman", askBellman)
+	vm.Set("goLog", func(msg string) {
+		fmt.Printf("[JS-LOG]: %s\n", msg)
+	})
+
 	script := `
-	function calculateRisk(user) {
-	    if (user.age < 18) {
-	        return "High (Minor)";
-	    }
-	    return user.balance > 1000 ? "Low" : "Medium";
-	}`
+		goLog("Asking Bellman...");
+		var result = askBellman("What company made you?");
+		goLog("Answer is: " + result);
+		result; // Return the result to Go
+	`
 
-	_, err := vm.RunString(script)
+	val, err := vm.RunString(script)
 	if err != nil {
 		panic(err)
 	}
 
-	// 2. Map a Go object to pass into the JS function
-	userData := map[string]interface{}{
-		"age":     25,
-		"balance": 500,
-	}
-
-	// 3. Get the function reference from the VM
-	// We cast it to goja.Callable so we can invoke it directly
-	fn, ok := goja.AssertFunction(vm.Get("calculateRisk"))
-	if !ok {
-		panic("Not a function")
-	}
-
-	// 4. Call the JS function from Go
-	// Params: (this context, arguments...)
-	result, err := fn(goja.Undefined(), vm.ToValue(userData))
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("The Risk Level is: %v\n", result) // Output: Medium
+	fmt.Printf("Final value returned to Go: %v\n", val.Export())
 }
 
-func Test3(t *testing.T) {
+func TestJS(t *testing.T) {
+	// 1. Load the .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	// 2. Access variables using the standard 'os' package
+	apiToken := os.Getenv("API_TOKEN")
+	fmt.Println(apiToken)
+
 	vm := goja.New()
+
+	//set env var in js runtime
+	vm.Set("CONFIG", map[string]string{
+		"token": apiToken,
+	})
 
 	// 1. Define a Go function
 	// You can use standard Go types; goja handles the conversion!
@@ -80,8 +106,12 @@ func Test3(t *testing.T) {
 		fmt.Printf("[JS-LOG]: %s\n", msg)
 	})
 
+	// Now JS can use it!
+	script := `goLog("JS received token: " + CONFIG.token);`
+	_, err = vm.RunString(script)
+
 	// 4. Run JS code that calls these Go functions
-	script := `
+	script = `
 		goLog("Starting calculation...");
 		var result = getHypotenuse(3, 4);
 		goLog("Result is: " + result);
