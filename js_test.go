@@ -1,6 +1,8 @@
 package bellman
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -10,22 +12,133 @@ import (
 	"github.com/dop251/goja"
 	"github.com/joho/godotenv"
 	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/services/vertexai"
 	"github.com/modfin/bellman/services/vllm"
+	"github.com/modfin/bellman/tools"
 )
 
-func TestToolman(t *testing.T) {
-	client := New("BELLMAN_URL", Key{Name: "test", Token: "BELLMAN_TOKEN"})
-	llm := client.Generator()
+func TestTool(t *testing.T) {
+	// get env vars
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	bellmanUrl := os.Getenv("BELLMAN_URL")
+	bellmanToken := os.Getenv("BELLMAN_TOKEN")
+
+	// define go func for JS use
+	askBellman := func(url, token, userMessage string) string {
+		client := New(url, Key{Name: "test", Token: token})
+		llm := client.Generator()
+		res, _ := llm.Model(vllm.GenModel_gpt_oss_20b).
+			Prompt(
+				prompt.AsUser(userMessage),
+			)
+		text, _ := res.AsText()
+		return text
+	}
+
+	// goja stuff
+	vm := goja.New()
+	vm.Set("CONFIG", map[string]string{
+		"token": bellmanToken,
+		"url":   bellmanUrl,
+	})
+	vm.Set("askBellman", askBellman)
+	vm.Set("goLog", func(msg string) {
+		fmt.Printf("[JS-LOG]: %s\n", msg)
+	})
+
+	script := `
+		//goLog("Asking Bellman...");
+		var result = askBellman(CONFIG.url, CONFIG.token, "What company made you?");
+		//goLog("Answer is: " + result);
+		result; // Return the result to Go
+	`
+
+	_, err = vm.RunString(script)
+	if err != nil {
+		panic(err)
+	}
+
+	//fmt.Printf("Final value returned to Go: %v\n", val.Export())
+
+	// define tool
+	type Args struct {
+		Name string `json:"name"`
+	}
+
+	var fun tools.Function = func(ctx context.Context, call tools.Call) (string, error) {
+		var arg Args
+		err := json.Unmarshal(call.Argument, &arg)
+		if err != nil {
+			return "", err
+		}
+		return arg.Name, nil
+	}
+
+	getEarnings := tools.NewTool("get_earnings",
+		tools.WithDescription(
+			"a function to get company earnings by name",
+		),
+		tools.WithArgSchema(Args{}),
+		tools.WithFunction(fun),
+	)
+
+	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	llm := client.Generator().ThinkingBudget(0)
+	res, err := llm.Model(vertexai.GenModel_gemini_2_5_flash_lite_latest).
+		System("You are a financial assistant. You can get company earnings by name using the get_earnings() tool.").
+		//SetTools(getEarnings).
+		AddTools(getEarnings).
+		SetToolConfig(tools.RequiredTool).
+		Prompt(
+			prompt.AsUser("What are the earnings for company 'LKAB'?"),
+		)
+
+	if err != nil {
+		log.Fatalf("Prompt() error = %v", err)
+	}
+
+	err = res.Eval(context.Background()) // TODO: needs context?
+	if err != nil {
+		log.Fatalf("Eval() error = %v", err)
+	}
+
+	// print res?
+	text, _ := res.AsText()
+	fmt.Println("final response: ", text, res)
+
+	for _, tool := range res.Tools {
+		response, _ := tool.Ref.Function(context.Background(), tool)
+		fmt.Println(response)
+	}
+}
+
+func TestBellman(t *testing.T) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	bellmanUrl := os.Getenv("BELLMAN_URL")
+	bellmanToken := os.Getenv("BELLMAN_TOKEN")
+
+	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	llm := client.Generator().ThinkingBudget(0)
 	res, err := llm.Model(vllm.GenModel_gpt_oss_20b).
 		Prompt(
 			prompt.AsUser("What company made you?"),
 		)
-	fmt.Println(res, err)
+	text, _ := res.AsText()
+	fmt.Println(text)
 
 	// another prompt
 	model := llm.Model(vllm.GenModel_gpt_oss_20b)
 	res, err = model.Prompt(prompt.AsUser("Tell me a joke"))
-	fmt.Println(res, err)
+	text, _ = res.AsText()
+	fmt.Println(text)
 }
 
 func TestJSLLM(t *testing.T) {
@@ -37,8 +150,8 @@ func TestJSLLM(t *testing.T) {
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
-	askBellman := func(userMessage string) string {
-		client := New("BELLMAN_URL", Key{Name: "test", Token: "BELLMAN_TOKEN"})
+	askBellman := func(url, token, userMessage string) string {
+		client := New(url, Key{Name: "test", Token: token})
 		llm := client.Generator()
 		res, _ := llm.Model(vllm.GenModel_gpt_oss_20b).
 			Prompt(
@@ -60,7 +173,7 @@ func TestJSLLM(t *testing.T) {
 
 	script := `
 		goLog("Asking Bellman...");
-		var result = askBellman("What company made you?");
+		var result = askBellman(CONFIG.url, CONFIG.token, "What company made you?");
 		goLog("Answer is: " + result);
 		result; // Return the result to Go
 	`
