@@ -68,7 +68,7 @@ func TestAgent(t *testing.T) {
 
 	// define tool
 	type Args struct {
-		Name string `json:"name"`
+		Name string `json:"name" json-description:"the name of the company"`
 	}
 
 	var fun tools.Function = func(ctx context.Context, call tools.Call) (string, error) {
@@ -77,31 +77,41 @@ func TestAgent(t *testing.T) {
 		if err != nil {
 			return "", err
 		}
-		return arg.Name, nil
+		return `{"result": 6969696969}`, nil
 	}
 
 	getEarnings := tools.NewTool("get_earnings",
 		tools.WithDescription(
-			"a function to get company earnings by name",
+			"a function to get company earnings by name.",
 		),
 		tools.WithArgSchema(Args{}),
 		tools.WithFunction(fun),
 	)
 
 	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
-	llm := client.Generator().Model(openai.GenModel_gpt4o_mini).ThinkingBudget(0)
-	llm.SetTools(getEarnings) //.System("You are a financial assistant. You can get company earnings by name using the get_earnings() tool.")
 
+	//llm := client.Generator().Model(vertexai.GenModel_gemini_2_5_flash_latest).
+	llm := client.Generator().Model(openai.GenModel_gpt4o_mini).
+		SetTools(getEarnings).System("You are a financial assistant. For context, today is 2026-02-02. You can get company earnings by name using the get_earnings() tool.")
+
+	// prompt
+	userPrompt := "What are the earnings for company 'LKAB'?"
 	type Result struct {
-		Result string `json:"result"`
+		Result int `json:"result"`
 	}
-
-	res, err := agent.Run[string](3, 0, llm, prompt.AsUser("What are the earnings for company 'LKAB'?"))
+	var res *agent.Result[Result]
+	switch llm.Request.Model.Provider {
+	case vertexai.Provider:
+		res, err = agent.RunWithToolsOnly[Result](10, 1, llm, prompt.AsUser(userPrompt))
+	default:
+		res, err = agent.RunWithToolsOnly[Result](10, 1, llm, prompt.AsUser(userPrompt))
+	}
 
 	if err != nil {
 		log.Fatalf("Prompt() error = %v", err)
 	}
 
+	// pretty print
 	fmt.Printf("==== Result after %d calls ====\n", res.Depth)
 	fmt.Printf("%+v\n", res.Result)
 	fmt.Printf("==== Conversation ====\n")
@@ -109,20 +119,6 @@ func TestAgent(t *testing.T) {
 	for _, p := range res.Prompts {
 		fmt.Printf("%s: %s\n", p.Role, p.Text)
 	}
-
-	//err = res.Eval(context.Background()) // TODO: needs context?
-	//if err != nil {
-	//	log.Fatalf("Eval() error = %v", err)
-	//}
-	//
-	//// print res?
-	//text, _ := res.AsText()
-	//fmt.Println("final response: ", text, res)
-	//
-	//for _, tool := range res.Tools {
-	//	response, _ := tool.Ref.Function(context.Background(), tool)
-	//	fmt.Println(response)
-	//}
 }
 
 func TestTool(t *testing.T) {
