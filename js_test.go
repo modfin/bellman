@@ -58,9 +58,9 @@ func TestMockPTC(t *testing.T) {
 	}
 	vm.Set("Sum", Sum)
 
-	// define PTC tool and func
+	// define PTC tool, input args and func
 	type Args struct {
-		Code string `json:"code" json-description:"the JavaScript code that will be executed. Can use defined JS tools."`
+		Code string `json:"code" json-description:"Executable JavaScript source code ONLY. Should use available JS Functions (Environment). Do not include explanations or reasoning."`
 	}
 
 	var codeExecutor tools.Function = func(ctx context.Context, call tools.Call) (string, error) {
@@ -91,8 +91,8 @@ func TestMockPTC(t *testing.T) {
 	codeExecution := tools.NewTool("code_execution",
 		tools.WithDescription(
 			"MANDATORY: You must write executable JavaScript code. "+
-				"Use this to perform logic or call Available JS Functions (Environment). "+
-				"The input MUST be valid JS code ending with a returned object.",
+				"Executes JS code. Environment has: Sum(a,b), askBellman(url,token,prompt), and CONFIG object. "+
+				"Combine all required tool calls into ONE script and return an object with all results.",
 		),
 		tools.WithArgSchema(Args{}),
 		tools.WithFunction(codeExecutor),
@@ -104,22 +104,19 @@ You are a Financial Assistant. Today is 2026-02-03.
 ## Capabilities
 You solve complex logic by writing JavaScript code for the code_execution tool.
 
-## Available JS Functions (Environment)
-- askBellman(url, token, prompt): Generates a joke. Use CONFIG.url and CONFIG.token.
-- Sum(a, b): Adds two integers.
-- CONFIG: Global object containing url and token.
-
 ## Rules for code_execution
 1. CALL LIMIT: You may call code_execution ONLY ONCE per turn. 
-2. LOGIC: Perform all calculations and multi-tool logic INSIDE the JS script.
+2. LOGIC: Perform all calculations and multi-tool logic INSIDE the JS script. Before calling code_execution, plan how to combine all tasks into a single script. You are penalized for making more than one tool call.
 3. RETURN: The JS script MUST end with an object containing all final data.
 4. FORMAT: Do not use console.log for final data; the last evaluated expression is the return value.
+6. SYNTHESIS: Once you have the result from code_execution, you have everything you need. 
+7. TERMINATION: Do not call the tool again with the same or modified code.
+8. SYNC: Do not use async functions unless specified.
 
-## Example Output Format
+## Example JS Script Input
 ({
   joke: askBellman(CONFIG.url, CONFIG.token, ""),
-  total: Sum(10, 20),
-  reasoning: "The sum exceeded the threshold."
+  total: Sum(123, 456)
 })`
 
 	// create Bellman llm and run agent
@@ -128,7 +125,7 @@ You solve complex logic by writing JavaScript code for the code_execution tool.
 		System(systemPrompt).
 		SetTools(codeExecution).Temperature(0)
 
-	const useGemini = false // quick-swap provider (gemini separate agent implementation)
+	const useGemini = true // quick-swap provider (gemini separate agent implementation)
 	if useGemini {
 		llm = llm.Model(vertexai.GenModel_gemini_2_5_flash_latest)
 	}
@@ -136,14 +133,14 @@ You solve complex logic by writing JavaScript code for the code_execution tool.
 	// prompt, expected result --> <bad-bellman-joke> and 2222222211
 	userPrompt := "Tell me a Bellman joke and sum the numbers 1234567890 and 0987654321."
 	type Result struct {
-		Text string `json:"result" json-description:"The final comprehensive answer to the user's request, incorporating all tool outputs and logic."`
+		Text string `json:"text" json-description:"The final natural text answer to the user's request."`
 	}
 	var res *agent.Result[Result]
 	switch llm.Request.Model.Provider {
 	case vertexai.Provider:
-		res, err = agent.RunWithToolsOnly[Result](10, 1, llm, prompt.AsUser(userPrompt))
+		res, err = agent.RunWithToolsOnly[Result](10, 0, llm, prompt.AsUser(userPrompt))
 	default:
-		res, err = agent.Run[Result](10, 1, llm, prompt.AsUser(userPrompt))
+		res, err = agent.Run[Result](10, 0, llm, prompt.AsUser(userPrompt))
 	}
 
 	if err != nil {
@@ -151,7 +148,7 @@ You solve complex logic by writing JavaScript code for the code_execution tool.
 	}
 
 	// pretty print
-	fmt.Printf("==== Model: %s ====\n", res.Metadata.Model)
+	fmt.Printf("==== %s ====\n", res.Metadata.Model)
 	fmt.Printf("==== Result after %d calls ====\n", res.Depth)
 	fmt.Printf("%+v\n", res.Result.Text)
 	fmt.Printf("==== Conversation ====\n")
