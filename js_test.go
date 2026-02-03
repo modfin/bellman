@@ -19,6 +19,155 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
+func TestMockPTC(t *testing.T) {
+	// get env vars
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	bellmanUrl := os.Getenv("BELLMAN_URL")
+	bellmanToken := os.Getenv("BELLMAN_TOKEN")
+
+	// setup goja
+	vm := goja.New()
+	vm.Set("CONFIG", map[string]string{
+		"token": bellmanToken,
+		"url":   bellmanUrl,
+	})
+	vm.Set("goLog", func(msg string) { // enables logging to go env
+		fmt.Printf("[JS-LOG]: %s\n", msg)
+	})
+
+	// define go func "tools" for JS use
+	askBellman := func(url, token, userMessage string) string {
+		client := New(url, Key{Name: "test", Token: token})
+		llm := client.Generator()
+		res, _ := llm.Model(openai.GenModel_gpt4o_mini).Temperature(1).
+			Prompt(
+				//prompt.AsUser(userMessage),
+				prompt.AsUser("tell me a (very short) Bellman joke in English (Swedish Bellman joke)!"),
+			)
+		text, _ := res.AsText()
+		return text
+	}
+	// add the "tool"
+	vm.Set("askBellman", askBellman)
+	// add another "tool"
+	Sum := func(a, b int) int {
+		return a + b
+	}
+	vm.Set("Sum", Sum)
+
+	// define PTC tool and func
+	type Args struct {
+		Code string `json:"code" json-description:"the JavaScript code that will be executed. Can use defined JS tools."`
+	}
+
+	var codeExecutor tools.Function = func(ctx context.Context, call tools.Call) (string, error) {
+		// extract tool-call arguments
+		var arg Args
+		err := json.Unmarshal(call.Argument, &arg)
+		if err != nil {
+			return "", err
+		}
+
+		//fmt.Println("##### JS exec code:\n", arg.Code)
+
+		// run JS code TODO: time limit for loops?
+		res, err := vm.RunString(arg.Code)
+		if err != nil {
+			return fmt.Sprintf(`{"error": %q}`, err.Error()), fmt.Errorf(`{"error": %q}`, err.Error())
+		}
+
+		// marshall res into valid JSON
+		jsonBytes, err := json.Marshal(res.Export())
+		if err != nil {
+			return "", err
+		}
+
+		return string(jsonBytes), nil
+	}
+
+	codeExecution := tools.NewTool("code_execution",
+		tools.WithDescription(
+			"MANDATORY: You must write executable JavaScript code. "+
+				"Use this to perform logic or call Available JS Functions (Environment). "+
+				"The input MUST be valid JS code ending with a returned object.",
+		),
+		tools.WithArgSchema(Args{}),
+		tools.WithFunction(codeExecutor),
+	)
+
+	const systemPrompt = `## Role
+You are a Financial Assistant. Today is 2026-02-03.
+
+## Capabilities
+You solve complex logic by writing JavaScript code for the code_execution tool.
+
+## Available JS Functions (Environment)
+- askBellman(url, token, prompt): Generates a joke. Use CONFIG.url and CONFIG.token.
+- Sum(a, b): Adds two integers.
+- CONFIG: Global object containing url and token.
+
+## Rules for code_execution
+1. CALL LIMIT: You may call code_execution ONLY ONCE per turn. 
+2. LOGIC: Perform all calculations and multi-tool logic INSIDE the JS script.
+3. RETURN: The JS script MUST end with an object containing all final data.
+4. FORMAT: Do not use console.log for final data; the last evaluated expression is the return value.
+
+## Example Output Format
+({
+  joke: askBellman(CONFIG.url, CONFIG.token, ""),
+  total: Sum(10, 20),
+  reasoning: "The sum exceeded the threshold."
+})`
+
+	// create Bellman llm and run agent
+	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	llm := client.Generator().Model(openai.GenModel_gpt4o_mini).
+		System(systemPrompt).
+		SetTools(codeExecution).Temperature(0)
+
+	const useGemini = false // quick-swap provider (gemini separate agent implementation)
+	if useGemini {
+		llm = llm.Model(vertexai.GenModel_gemini_2_5_flash_latest)
+	}
+
+	// prompt, expected result --> <bad-bellman-joke> and 2222222211
+	userPrompt := "Tell me a Bellman joke and sum the numbers 1234567890 and 0987654321."
+	type Result struct {
+		Text string `json:"result" json-description:"The final comprehensive answer to the user's request, incorporating all tool outputs and logic."`
+	}
+	var res *agent.Result[Result]
+	switch llm.Request.Model.Provider {
+	case vertexai.Provider:
+		res, err = agent.RunWithToolsOnly[Result](10, 1, llm, prompt.AsUser(userPrompt))
+	default:
+		res, err = agent.Run[Result](10, 1, llm, prompt.AsUser(userPrompt))
+	}
+
+	if err != nil {
+		log.Fatalf("Prompt() error = %v", err)
+	}
+
+	// pretty print
+	fmt.Printf("==== Model: %s ====\n", res.Metadata.Model)
+	fmt.Printf("==== Result after %d calls ====\n", res.Depth)
+	fmt.Printf("%+v\n", res.Result.Text)
+	fmt.Printf("==== Conversation ====\n")
+
+	for _, p := range res.Prompts {
+		switch p.Role {
+		case prompt.ToolCallRole:
+			fmt.Printf("%s: %s\n", p.Role, *p.ToolCall)
+		case prompt.ToolResponseRole:
+			fmt.Printf("%s: %s\n", p.Role, *p.ToolResponse)
+		default:
+			fmt.Printf("%s: %s\n", p.Role, p.Text)
+		}
+	}
+}
+
 func TestAgent(t *testing.T) {
 	// get env vars
 	err := godotenv.Load()
