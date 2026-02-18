@@ -412,6 +412,10 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 			if c.ToolCall == nil {
 				return nil, reqModel, fmt.Errorf("ToolCall is required for role tool call")
 			}
+			var jsonArguments map[string]any
+			if err := json.Unmarshal(c.ToolCall.Arguments, &jsonArguments); err != nil {
+				return nil, reqModel, fmt.Errorf("ToolCall.Arguments is not valid JSON object: %w", err)
+			}
 			messages = append(messages, genRequestMessageToolCalls{
 				Role: "assistant",
 				ToolCalls: []genRequestMessageToolCall{
@@ -420,7 +424,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 						Type: "function",
 						Function: genRequestMessageToolCallFunction{
 							Name:      c.ToolCall.Name,
-							Arguments: c.ToolCall.Arguments,
+							Arguments: jsonArguments,
 						},
 					},
 				},
