@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 )
 
@@ -458,7 +459,10 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		return nil, reqModel, fmt.Errorf("could not marshal open ai request, %w", err)
 	}
 
-	u := `https://api.openai.com/v1/chat/completions`
+	u, err := url.JoinPath(g.openai.getBaseURL(), "/v1/chat/completions")
+	if err != nil {
+		return nil, reqModel, fmt.Errorf("could not construct chat completions URL, %w", err)
+	}
 
 	ctx := g.request.Context
 	if ctx == nil {
