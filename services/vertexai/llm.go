@@ -98,7 +98,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			var ss geminiStreamingResponse
 			err = json.Unmarshal(line, &ss)
 			if err != nil {
-				log.Printf("could not unmarshal chunk, %w", err)
+				log.Printf("could not unmarshal chunk, %v", err)
 				break
 			}
 

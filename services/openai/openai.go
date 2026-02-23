@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"sync/atomic"
 )
@@ -41,8 +42,9 @@ type embedResponse struct {
 //}
 
 type OpenAI struct {
-	apiKey string
-	Log    *slog.Logger `json:"-"`
+	apiKey  string
+	baseURL string
+	Log     *slog.Logger `json:"-"`
 }
 
 func New(key string) *OpenAI {
@@ -73,7 +75,10 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 		EncodingFormat: "float",
 	}
 
-	u := "https://api.openai.com/v1/embeddings"
+	u, err := url.JoinPath(g.getBaseURL(), "/v1/embeddings")
+	if err != nil {
+		return nil, fmt.Errorf("could not construct embeddings URL, %w", err)
+	}
 
 	body, err := json.Marshal(reqModel)
 	if err != nil {
@@ -144,6 +149,18 @@ func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
 	}
 
 	return gen
+}
+
+func (g *OpenAI) SetBaseURL(baseURL string) *OpenAI {
+	g.baseURL = baseURL
+	return g
+}
+
+func (g *OpenAI) getBaseURL() string {
+	if g.baseURL != "" {
+		return g.baseURL
+	}
+	return "https://api.openai.com"
 }
 
 func (g *OpenAI) SetLogger(logger *slog.Logger) *OpenAI {
