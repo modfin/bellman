@@ -75,18 +75,18 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				Description: t.Description,
 			},
 		})
-		toolBelt[t.Name] = &t
+		toolBelt[t.Name] = t
 	}
 	//// Selecting specific tool
-	//if g.request.ToolConfig != nil {
-	//	switch g.request.ToolConfig.Name {
+	//if g.request.ToolChoice != nil {
+	//	switch g.request.ToolChoice.Name {
 	//	case tools.NoTool.Name, tools.AutoTool.Name, tools.RequiredTool.Name:
-	//		reqModel.ToolChoice = g.request.ToolConfig.Name
+	//		reqModel.ToolConfig = g.request.ToolChoice.Name
 	//	default:
-	//		reqModel.ToolChoice = requestTool{
+	//		reqModel.ToolConfig = requestTool{
 	//			Type: "function",
 	//			Function: toolFunc{
-	//				Name: g.request.ToolConfig.Name,
+	//				Name: g.request.ToolChoice.Name,
 	//			},
 	//		}
 	//	}
@@ -142,7 +142,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,

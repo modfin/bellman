@@ -3,6 +3,7 @@ package gen
 import (
 	"context"
 	"errors"
+
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
@@ -52,12 +53,12 @@ func (b *Generator) clone() *Generator {
 		cp := *b.Request.OutputSchema
 		bb.Request.OutputSchema = &cp
 	}
-	if b.Request.ToolConfig != nil {
-		cp := *b.Request.ToolConfig
-		bb.Request.ToolConfig = &cp
+	if b.Request.ToolChoice != nil {
+		cp := *b.Request.ToolChoice
+		bb.Request.ToolChoice = &cp
 	}
 	if b.Request.Tools != nil {
-		bb.Request.Tools = append([]tools.Tool{}, b.Request.Tools...)
+		bb.Request.Tools = append([]*tools.Tool{}, b.Request.Tools...)
 	}
 	if b.Request.PresencePenalty != nil {
 		cp := *b.Request.PresencePenalty
@@ -123,30 +124,37 @@ func (b *Generator) StrictOutput(strict bool) *Generator {
 	bb.Request.StrictOutput = strict
 	return bb
 }
-func (b *Generator) Tools() []tools.Tool {
+func (b *Generator) Tools() []*tools.Tool {
 	return b.Request.Tools
 }
 
-func (b *Generator) SetTools(tool ...tools.Tool) *Generator {
+func (b *Generator) SetTools(tool ...*tools.Tool) *Generator {
 	bb := b.clone()
 
-	bb.Request.Tools = append([]tools.Tool{}, tool...)
+	bb.Request.Tools = append([]*tools.Tool{}, tool...)
 	return bb
 }
-func (b *Generator) AddTools(tool ...tools.Tool) *Generator {
+func (b *Generator) AddTools(tool ...*tools.Tool) *Generator {
 	return b.SetTools(append(b.Request.Tools, tool...)...)
 }
 
-func (b *Generator) SetToolConfig(tool tools.Tool) *Generator {
+func (b *Generator) ToolConfig(config *tools.ToolConfig) *Generator {
 	bb := b.clone()
-	bb.Request.ToolConfig = &tool
+	bb.Request.ToolChoice = config
 
-	for _, t := range tools.ControlTools {
-		if t.Name == tool.Name {
-			return bb
+	// If specific tool, auto-add to Tools list if not present
+	if config.Mode == tools.ToolModeSpecific {
+		found := false
+		for _, t := range bb.Request.Tools {
+			if t.Name == config.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			bb.Request.Tools = append(bb.Request.Tools, &tools.Tool{Name: config.Name})
 		}
 	}
-	bb.Request.Tools = []tools.Tool{tool}
 	return bb
 }
 
@@ -231,15 +239,15 @@ func WithModel(model Model) Option {
 	}
 }
 
-func WithTools(tools ...tools.Tool) Option {
+func WithTools(tools ...*tools.Tool) Option {
 	return func(g *Generator) *Generator {
 		return g.SetTools(tools...)
 	}
 }
 
-func WithToolConfig(tool tools.Tool) Option {
+func WithToolConfig(config *tools.ToolConfig) Option {
 	return func(g *Generator) *Generator {
-		return g.SetToolConfig(tool)
+		return g.ToolConfig(config)
 	}
 }
 

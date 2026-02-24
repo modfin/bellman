@@ -7,15 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/tools"
 	"io"
 	"log"
 	"net/http"
 	"strings"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/gen"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 )
 
 var requestNo int64
@@ -40,7 +41,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -236,7 +237,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -356,34 +357,32 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 				Description: t.Description,
 				InputSchema: fromBellmanSchema(t.ArgumentSchema),
 			})
-			model.toolBelt[t.Name] = &t
+			model.toolBelt[t.Name] = t
 		}
 	}
 
-	if g.request.ToolConfig != nil {
+	if g.request.ToolChoice != nil {
 		_name := ""
 		_type := ""
 
-		switch g.request.ToolConfig.Name {
-		case tools.NoTool.Name:
-		case tools.AutoTool.Name:
-			_type = "auto"
-		case tools.RequiredTool.Name:
-			_type = "any"
-		default:
-			_type = "tool"
-			_name = g.request.ToolConfig.Name
-		}
-		if model.Tool != nil {
-			model.Tool = &reqToolChoice{
-				Type: _type, // // "auto, any, tool"
-				Name: _name,
-			}
-		}
-
-		if g.request.ToolConfig.Name == tools.NoTool.Name { // None is not supporded by Anthropic, so lets just remove the toolks.
+		switch g.request.ToolChoice.Mode {
+		case tools.ToolModeNone:
+			// None is not supported by Anthropic, so remove tools
 			model.Tool = nil
 			model.Tools = nil
+		case tools.ToolModeAuto:
+			_type = "auto"
+		case tools.ToolModeRequired:
+			_type = "any"
+		case tools.ToolModeSpecific:
+			_type = "tool"
+			_name = g.request.ToolChoice.Name
+		}
+		if model.Tool != nil && g.request.ToolChoice.Mode != tools.ToolModeNone {
+			model.Tool = &reqToolChoice{
+				Type: _type, // "auto, any, tool"
+				Name: _name,
+			}
 		}
 	}
 

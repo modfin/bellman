@@ -41,7 +41,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -191,7 +191,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -324,28 +324,28 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 				Description: t.Description,
 				Parameters:  fromBellmanSchema(t.ArgumentSchema),
 			})
-			model.toolBelt[t.Name] = &t
+			model.toolBelt[t.Name] = t
 		}
 	}
 
 	// Dealing with SetToolConfig request
-	if g.request.ToolConfig != nil {
+	if g.request.ToolChoice != nil {
 		model.ToolConfig = &genToolConfig{
 			GoogleFunctionCallingConfig: genFunctionCallingConfig{
 				Mode: "ANY",
 			},
 		}
 		// https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling#functioncallingconfig
-		switch g.request.ToolConfig.Name {
-		case tools.NoTool.Name:
+		switch g.request.ToolChoice.Mode {
+		case tools.ToolModeNone:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "NONE"
-		case tools.AutoTool.Name:
+		case tools.ToolModeAuto:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "AUTO"
-		case tools.RequiredTool.Name:
+		case tools.ToolModeRequired:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
-		default:
+		case tools.ToolModeSpecific:
 			model.ToolConfig.GoogleFunctionCallingConfig.Mode = "ANY"
-			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.request.ToolConfig.Name}
+			model.ToolConfig.GoogleFunctionCallingConfig.AllowedFunctionNames = []string{g.request.ToolChoice.Name}
 		}
 	}
 

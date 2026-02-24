@@ -261,14 +261,14 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	toolBelt := map[string]*tools.Tool{}
 	for _, tool := range g.request.Tools {
-		toolBelt[tool.Name] = &tool
+		toolBelt[tool.Name] = tool
 	}
 
 	g.bellman.log("[gen] request",
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -351,7 +351,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -514,7 +514,7 @@ func (g *generator) buildStreamingRequest(conversation []prompt.Prompt) (gen.Ful
 	// Build tool belt for tool call references
 	toolBelt := map[string]*tools.Tool{}
 	for _, tool := range g.request.Tools {
-		toolBelt[tool.Name] = &tool
+		toolBelt[tool.Name] = tool
 	}
 
 	return request, toolBelt, nil
@@ -532,17 +532,17 @@ func (g *generator) validateStreamingRequest(request *gen.FullRequest) error {
 	}
 
 	// Validate tool configuration if tools are present
-	if len(request.Tools) > 0 && request.ToolConfig != nil {
+	if len(request.Tools) > 0 && request.ToolChoice != nil {
 		// Check if the specified tool exists
 		toolExists := false
 		for _, tool := range request.Tools {
-			if tool.Name == request.ToolConfig.Name {
+			if tool.Name == request.ToolChoice.Name {
 				toolExists = true
 				break
 			}
 		}
 		if !toolExists {
-			return fmt.Errorf("specified tool '%s' not found in available tools", request.ToolConfig.Name)
+			return fmt.Errorf("specified tool '%s' not found in available tools", request.ToolChoice.Name)
 		}
 	}
 

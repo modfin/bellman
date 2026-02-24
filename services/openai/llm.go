@@ -41,7 +41,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -211,7 +211,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"tools", len(g.request.Tools) > 0,
-		"tool_choice", g.request.ToolConfig != nil,
+		"tool_choice", g.request.ToolChoice != nil,
 		"output_schema", g.request.OutputSchema != nil,
 		"system_prompt", g.request.SystemPrompt != "",
 		"temperature", g.request.Temperature,
@@ -344,18 +344,22 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 				Strict:      g.request.StrictOutput,
 			},
 		})
-		reqModel.toolBelt[t.Name] = &t
+		reqModel.toolBelt[t.Name] = t
 	}
 	// Selecting specific tool
-	if g.request.ToolConfig != nil {
-		switch g.request.ToolConfig.Name {
-		case tools.NoTool.Name, tools.AutoTool.Name, tools.RequiredTool.Name:
-			reqModel.ToolChoice = g.request.ToolConfig.Name
-		default:
+	if g.request.ToolChoice != nil {
+		switch g.request.ToolChoice.Mode {
+		case tools.ToolModeNone:
+			reqModel.ToolChoice = "none"
+		case tools.ToolModeAuto:
+			reqModel.ToolChoice = "auto"
+		case tools.ToolModeRequired:
+			reqModel.ToolChoice = "required"
+		case tools.ToolModeSpecific:
 			reqModel.ToolChoice = requestTool{
 				Type: "function",
 				Function: toolFunc{
-					Name: g.request.ToolConfig.Name,
+					Name: g.request.ToolChoice.Name,
 				},
 			}
 		}

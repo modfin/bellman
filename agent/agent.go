@@ -101,7 +101,7 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 		g = g.Output(nil)
 	}
 
-	var newTools []tools.Tool
+	var newTools []*tools.Tool
 	for _, t := range g.Tools() {
 		if t.Name == customResultCalculatedTool {
 			continue
@@ -111,12 +111,12 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 	g = g.SetTools(newTools...)
 
 	var result T
-	g = g.AddTools(tools.Tool{
+	g = g.AddTools(&tools.Tool{
 		Name:           customResultCalculatedTool,
 		Description:    "Return the final results to the user",
 		ArgumentSchema: schema.From(result),
 	})
-	g = g.SetToolConfig(tools.RequiredTool)
+	g = g.ToolConfig(tools.ToolRequired())
 
 	promptMetadata := models.Metadata{Model: g.Request.Model.Name}
 	for i := 0; i < maxDepth; i++ {

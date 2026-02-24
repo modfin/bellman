@@ -2,6 +2,7 @@ package gen
 
 import (
 	"context"
+
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
@@ -18,8 +19,8 @@ type Request struct {
 	OutputSchema *schema.JSON `json:"output_schema,omitempty"`
 	StrictOutput bool         `json:"output_strict,omitempty"`
 
-	Tools      []tools.Tool `json:"tools,omitempty"`
-	ToolConfig *tools.Tool  `json:"tool,omitempty"`
+	Tools      []*tools.Tool     `json:"tools,omitempty"`
+	ToolChoice *tools.ToolConfig `json:"tool,omitempty"`
 
 	ThinkingBudget *int  `json:"thinking_budget,omitempty"`
 	ThinkingParts  *bool `json:"thinking_parts,omitempty"`
