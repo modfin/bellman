@@ -71,7 +71,7 @@ func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, s
 		// execute JS - Note: vm.RunString returns the value of the LAST evaluated expression automatically!
 		res, err := runtime.JS.RunString(code)
 		if err != nil {
-			// return error as JSON so LLM can see it
+			// Important: return error as JSON so LLM can see it
 			return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
 		}
 

@@ -21,9 +21,8 @@ type ReplayCache struct {
 // CallRecord stores the history of executed tools and their benchmark responses
 type CallRecord struct {
 	ToolName string
-	//ToolID   string
 	Argument map[string]interface{}
-	Result   string // The mock JSON string from benchmarks
+	Result   string
 }
 
 // Script represents a code script to run
@@ -40,12 +39,6 @@ type ReplayResult struct {
 	ToolID string
 	Error  error
 }
-
-//// YieldSignal is the custom type we will use to gracefully interrupt the Goja VM
-//type YieldSignal struct {
-//	ToolName string
-//	Argument string
-//}
 
 // NewCache creates a new cache
 func NewCache() *ReplayCache {
@@ -65,6 +58,9 @@ func (r *ReplayCache) AddResponse(record CallRecord) {
 func (r *ReplayCache) AddScript(script Script) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if script.Code == "" { // TODO handle/prevent with guardrail
+		log.Printf("empty code script!")
+	}
 	r.Scripts = append(r.Scripts, script)
 }
 
@@ -117,40 +113,20 @@ func (r *ReplayCache) ExecutionReplay(tools []tools.Tool) ReplayResult {
 	// Run the next code script
 	for i, s := range r.Scripts {
 		fmt.Printf("____ running script: %s\n", s.Code)
-		val, err := vm.RunString(s.Code)
+		val, err := vm.RunString(s.Code) // TODO: guardrail against empty code?
 		if err != nil {
 			// script crash, or intentional interrupt?
 			var jsErr *goja.InterruptedError
 			if errors.As(err, &jsErr) {
 				if record, isYield := jsErr.Value().(*CallRecord); isYield {
-
 					// new tool call!
 					fmt.Printf("Yielding to Benchmark for: %s...\n", record.ToolName)
 
-					//// set Tool ID
-					//record.ToolID = s.ToolID
-
 					return ReplayResult{Record: record, ToolID: s.ToolID}
-					//return record, "", nil
-
-					//// ---> Call your CFB Python Bridge or benchmark adapter here <---
-					//// mockResult := fetchFromCFB(yield.ToolName, yield.Argument)
-					//mockResult := `{"mock": "data from CFB"}` // Placeholder
-					//
-					//// Save the benchmark's mock response to the cache
-					//r.Records = append(r.Records, CallRecord{
-					//	ToolName: yield.ToolName,
-					//	Argument: yield.Argument,
-					//	Result:   mockResult,
-					//})
-					//
-					//// Continue the loop to spin up a fresh VM and replay from the top!
-					//continue
 				}
 			}
-			// It was a legitimate JavaScript syntax error (e.g., missing semicolon)
-			return ReplayResult{Error: fmt.Errorf("JS Runtime Error: %v", err)}
-			//return nil, "", fmt.Errorf("JS Runtime Error: %v", err)
+			// Important: return JS error as JSON so LLM can see it
+			return ReplayResult{Output: fmt.Sprintf("error: %q", err.Error())}
 		}
 
 		// If we reach here, the script finished successfully without yielding!
@@ -170,12 +146,10 @@ func (r *ReplayCache) ExecutionReplay(tools []tools.Tool) ReplayResult {
 			}
 			fmt.Printf("=== script output: %s\n", string(jsonBytes))
 			return ReplayResult{Output: string(jsonBytes), ToolID: s.ToolID}
-			//return nil, val.String(), nil
 		}
 	}
 	log.Printf("already replayed scripts") // TODO should this be allowed?
 	return ReplayResult{}
-	//return nil, "", nil
 }
 
 func interceptCall(vm *goja.Runtime, cache *ReplayCache, tool tools.Tool) error {
