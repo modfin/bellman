@@ -97,8 +97,8 @@ type Tool struct {
 	Description    string                                               `json:"description"`
 	ArgumentSchema *schema.JSON                                         `json:"argument_schema,omitempty"`
 	Function       func(ctx context.Context, call Call) (string, error) `json:"-"`
-	ResponseSchema *schema.JSON                                         `json:"response_schema,omitempty"` //TODO: whats the best representation? struct, json, other?
-	UsePTC         bool                                                 `json:"use_ptc"`                   // false is default
+	ResponseSchema *schema.JSON                                         `json:"response_schema,omitempty"`
+	UsePTC         bool                                                 `json:"use_ptc"` // false is default
 }
 
 type Call struct {

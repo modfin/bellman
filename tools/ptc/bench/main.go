@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/joho/godotenv"
+	"github.com/modfin/bellman/tools/ptc/bench/replay"
 	"github.com/modfin/bellman/tools/ptc/bfcl"
 	"github.com/modfin/bellman/tools/ptc/cfb"
 )
@@ -17,9 +18,17 @@ func main() {
 		panic(err)
 	}
 
+	// Create a persistent cache
+
+	// Create persistent cache and Inject it into handler
+	bfclCache := replay.NewCache()
+	bfclReplay := &bfcl.Replay{ReplayCache: bfclCache}
+	cfbCache := replay.NewCache()
+	cfbReplay := &cfb.Replay{Cache: cfbCache}
+
 	// Register API Endpoint
-	http.HandleFunc("/bfcl", MiddlewareDebugLogger("BFCL", bfcl.HandleGenerateBFCL))
-	http.HandleFunc("/cfb", MiddlewareDebugLogger("CFB", cfb.HandleGenerateCFB))
+	http.HandleFunc("/bfcl", MiddlewareDebugLogger("BFCL", bfclReplay.HandleGenerateBFCL))
+	http.HandleFunc("/cfb", MiddlewareDebugLogger("CFB", cfbReplay.HandleGenerateCFB))
 
 	// Register Debug UI Endpoints
 	http.HandleFunc("/debug", HandleDebugUI)

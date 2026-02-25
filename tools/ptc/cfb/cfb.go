@@ -2,7 +2,6 @@ package cfb
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -19,8 +17,10 @@ import (
 	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
+	"github.com/modfin/bellman/tools/ptc"
+	"github.com/modfin/bellman/tools/ptc/bench/replay"
+	"github.com/modfin/bellman/tools/ptc/bench/utils"
 )
 
 type BenchmarkRequest struct {
@@ -97,12 +97,16 @@ type ExecutionResult struct {
 	Error error      `json:"error"`
 }
 
+type Replay struct {
+	Cache *replay.ReplayCache
+}
+
 var (
 	GlobalInputTokens  uint64
 	GlobalOutputTokens uint64
 )
 
-func HandleGenerateCFB(w http.ResponseWriter, r *http.Request) {
+func (replay *Replay) HandleGenerateCFB(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -120,7 +124,7 @@ func HandleGenerateCFB(w http.ResponseWriter, r *http.Request) {
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 	client := bellman.New(bellmanUrl, bellman.Key{Name: "cfb", Token: bellmanToken})
 
-	bfclTools := ParseJsonSchemaTools(req.Tools, req.EnablePTC)
+	bfclTools := utils.ParseJsonSchemaTools(req.Tools, req.EnablePTC)
 
 	toolmanHistory := req.ToolmanHistory
 
@@ -216,7 +220,6 @@ func HandleGenerateCFB(w http.ResponseWriter, r *http.Request) {
 
 	// extract individual new tool calls for bfcl + toolman
 	extractedCalls, toolmanCalls, err := GetToolCalls(res, bfclTools)
-
 	if err != nil {
 		log.Fatalf("error: %e", err)
 	}
@@ -281,95 +284,6 @@ func PrintRequest(r *http.Request) {
 	}
 }
 
-// Regex to find invalid characters (only letters, numbers, underscores, dashes allowed)
-var invalidNameChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
-
-func ParseJsonSchemaTools(rawTools []interface{}, enablePTC bool) []tools.Tool {
-	var parsedTools []tools.Tool
-
-	for _, rt := range rawTools {
-		jsonBytes, _ := json.Marshal(rt)
-
-		var tDef struct {
-			Name        string          `json:"name"`
-			Description string          `json:"description"`
-			Parameters  json.RawMessage `json:"parameters"`
-		}
-
-		// Handle CFB's nested "function" wrapper if present
-		var wrapper struct {
-			Function json.RawMessage `json:"function"`
-		}
-		if err := json.Unmarshal(jsonBytes, &wrapper); err == nil && len(wrapper.Function) > 0 {
-			_ = json.Unmarshal(wrapper.Function, &tDef)
-		} else {
-			_ = json.Unmarshal(jsonBytes, &tDef)
-		}
-
-		if tDef.Name == "" {
-			continue
-		}
-
-		// OpenAI rejects dots. "math.factorial" -> "math_factorial"
-		sanitizedName := invalidNameChars.ReplaceAllString(tDef.Name, "_")
-
-		// "dict" -> "object"
-		var paramSchema schema.JSON
-
-		if len(tDef.Parameters) > 0 {
-			var check map[string]interface{}
-			if err := json.Unmarshal(tDef.Parameters, &check); err == nil {
-
-				typeVal, _ := check["type"].(string)
-
-				// BFCL uses "dict", OpenAI wants "object"
-				if typeVal == "dict" {
-					check["type"] = "object"
-					typeVal = "object" // Update for the check below
-				}
-
-				// If type is NOT object (e.g. "string"), must wrap it
-				if typeVal != "" && typeVal != "object" {
-					wrapped := map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"arg": check, // Wrap original schema
-						},
-						"required": []string{"arg"},
-					}
-					fixedBytes, _ := json.Marshal(wrapped)
-					_ = json.Unmarshal(fixedBytes, &paramSchema)
-				} else {
-					// It's a valid object/dict, but we might have modified "type" in check
-					// So we marshal 'check' back, not 'tDef.Parameters'
-					fixedBytes, _ := json.Marshal(check)
-					_ = json.Unmarshal(fixedBytes, &paramSchema)
-				}
-			}
-		} else {
-			// Handle empty parameters
-			emptyObj := map[string]interface{}{"type": "object", "properties": map[string]interface{}{}}
-			b, _ := json.Marshal(emptyObj)
-			_ = json.Unmarshal(b, &paramSchema)
-		}
-
-		tool := tools.NewTool(sanitizedName,
-			tools.WithDescription(tDef.Description),
-			tools.WithPTC(enablePTC),
-			tools.WithFunction(
-				func(context.Context, tools.Call) (string, error) { return "{}", nil },
-			),
-		)
-
-		tool.ArgumentSchema = &paramSchema
-		//tool.ResponseSchema = &responseSchema // Important: cant use since we cant inject real response from CFB!!!!!!
-
-		parsedTools = append(parsedTools, tool)
-	}
-
-	return parsedTools
-}
-
 // GetToolCalls extracts calls in the Ground Truth format: [{"func": {"arg": val}}]
 func GetToolCalls(res *gen.Response, availableTools []tools.Tool) ([]ToolCall, []prompt.Prompt, error) {
 	// CFB
@@ -388,7 +302,7 @@ func GetToolCalls(res *gen.Response, availableTools []tools.Tool) ([]ToolCall, [
 
 	for _, tool := range res.Tools {
 		// --- PTC / Code Execution ---
-		if tool.Name == "code_execution" {
+		if tool.Name == ptc.CodeExecutionToolName {
 			var codeArgs struct {
 				Code string `json:"code"`
 			}
@@ -416,14 +330,14 @@ func GetToolCalls(res *gen.Response, availableTools []tools.Tool) ([]ToolCall, [
 		}
 
 		// --- Standard Tool Call ---
-		// Map it to the same structure: {"func_name": {"arg": val}}
-		var argsMap map[string]interface{}
-
-		// Try unmarshalling argument. If it fails (rare), we skip args or make empty map
-		if err := json.Unmarshal(tool.Argument, &argsMap); err != nil {
-			fmt.Printf("Warning: Failed to unmarshal args for %s: %v\n", tool.Name, err)
-			argsMap = make(map[string]interface{})
-		}
+		//Map it to the same structure: {"func_name": {"arg": val}}
+		//var argsMap map[string]interface{}
+		//
+		//// Try unmarshalling argument. If it fails (rare), we skip args or make empty map
+		//if err := json.Unmarshal(tool.Argument, &argsMap); err != nil {
+		//	fmt.Printf("Warning: Failed to unmarshal args for %s: %v\n", tool.Name, err)
+		//	argsMap = make(map[string]interface{})
+		//}
 
 		toolCalls = append(toolCalls, prompt.AsToolCall(tool.ID, tool.Name, tool.Argument))
 
