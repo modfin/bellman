@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -57,6 +58,7 @@ func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, s
 
 		// timeout interrupt
 		timer := time.AfterFunc(5*time.Second, func() {
+			log.Printf("error: JS timeout interrupt!")
 			runtime.JS.Interrupt("timeout: script execution took too long (possible infinite loop)")
 		})
 		defer timer.Stop()
@@ -70,7 +72,7 @@ func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, s
 		// execute JS - Note: vm.RunString returns the value of the LAST evaluated expression automatically!
 		res, err := runtime.JS.RunString(code)
 		if err != nil {
-			// return error as JSON so LLM can see it
+			// Important: return error as JSON so LLM can see it
 			return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
 		}
 
@@ -91,7 +93,7 @@ func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, s
 	docsFragment := strings.Join(descriptions, "\n\n")
 
 	// create the final PTC tool
-	ptcTool := tools.NewTool("code_execution",
+	ptcTool := tools.NewTool(CodeExecutionToolName,
 		tools.WithDescription(`Execute top-level JavaScript in a persistent Goja runtime to call available Tool Functions.
 
 Use this tool ONLY when external Tool Functions are required to fetch or interact with data.
@@ -355,12 +357,12 @@ func GuardRailJS(code string) (string, error) { // TODO: add more/update guardra
 }
 
 func getSystemFragmentJS() string {
-	return `Your are an LLM-based AI Agent enhanced with Programmatic Tool-Calling (PTC).
-The PTC tool at your disposal is the 'code_execution' tool, use it to interact with data!
+	return strings.ReplaceAll(`Your are an LLM-based AI Agent enhanced with Programmatic Tool-Calling (PTC).
+The PTC tool at your disposal is the '{ptc_tool_name}' tool, use it to interact with data!
 
 Tool calls can be costly, use only when necessary to fetch or interact with data, and write compact code.
 
-# JavaScript Runtime (Goja) - Accessible through 'code_execution' Tool
+# JavaScript Runtime (Goja) - Accessible through '{ptc_tool_name}' Tool
 
 - Write standard top-level JS. No async/await, no logging.
 - Variables persist across turns. Use 'var' (do not redeclare let/const).
@@ -369,7 +371,7 @@ Tool calls can be costly, use only when necessary to fetch or interact with data
 - Tool Functions are deterministic. NEVER call a Function twice with identical arguments. Read your history.
 
 ## When To Use This Tool
-Use 'code_execution' ONLY if external Tool Functions are required.
+Use '{ptc_tool_name}' ONLY if external Tool Functions are required.
 If the request can be answered with reasoning or general knowledge → respond user directly in plain text (do NOT call the tool).
 
 ## Default Execution Strategy — SINGLE BATCH (Required)
@@ -391,12 +393,12 @@ Execute Function A, put its result on the last line, and STOP. DO NOT guess prop
 
 ## Finishing the Task (CRITICAL)
 This tool ONLY fetches and interacts with data. The user CANNOT see the output of this tool. 
-When you have the final answer, you MUST STOP using 'code_execution'. 
+When you have the final answer, you MUST STOP using '{ptc_tool_name}'. 
 To finish, YOU MUST write a normal, plain-text conversational response to the user.
 
 Do NOT call the tool again unless new information is required.
 
 # Respond the User
 When you have completed the task, you MUST respond the users request directly in text!
-`
+`, "{ptc_tool_name}", CodeExecutionToolName)
 }

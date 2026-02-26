@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/joho/godotenv"
+	"github.com/modfin/bellman/tools/ptc/bench/replay"
 	"github.com/modfin/bellman/tools/ptc/bfcl"
 	"github.com/modfin/bellman/tools/ptc/cfb"
 	"github.com/modfin/bellman/tools/ptc/nestful"
@@ -18,9 +19,13 @@ func main() {
 		panic(err)
 	}
 
+	// Create persistent cache and inject into handlers
+	bfclReplay := &bfcl.Replay{ReplayCache: replay.NewCache()}
+	cfbReplay := &cfb.Replay{ReplayCache: replay.NewCache()}
+
 	// Register API Endpoint
-	http.HandleFunc("/bfcl", MiddlewareDebugLogger("BFCL", bfcl.HandleGenerateBFCL))
-	http.HandleFunc("/cfb", MiddlewareDebugLogger("CFB", cfb.HandleGenerateCFB))
+	http.HandleFunc("/bfcl", MiddlewareDebugLogger("BFCL", bfclReplay.HandleGenerateBFCL))
+	http.HandleFunc("/cfb", MiddlewareDebugLogger("CFB", cfbReplay.HandleGenerateCFB))
 	http.HandleFunc("/nestful", nestful.NesfulHandlerFromEnv())
 
 	// Register Debug UI Endpoints
@@ -33,7 +38,7 @@ func main() {
 	fmt.Println(" BFCL API Endpoint:   		http://localhost:8080/bfcl")
 	fmt.Println(" CFB API Endpoint:    		http://localhost:8080/cfb")
 	fmt.Println(" NESTFUL API Endpoint:    	http://localhost:8080/nestful")
-	fmt.Println(" BFCL Debug UI:       		http://localhost:8080/debug")
+	fmt.Println(" Debug UI:       			http://localhost:8080/debug")
 	fmt.Println("---------------------------------------------------------")
 
 	fmt.Println("Toolman Benchmark Server running on :8080")

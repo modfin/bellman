@@ -14,6 +14,10 @@ type Runtime struct {
 	// Python *python.Environment <-- other code exec vm envs.
 }
 
+const (
+	CodeExecutionToolName string = "code_execution"
+)
+
 // ExtractPTCTools separates regular tools from PTC tools and returns both slices
 func ExtractPTCTools(inputTools []tools.Tool) ([]tools.Tool, []tools.Tool) {
 	var regularTools []tools.Tool
