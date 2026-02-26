@@ -18,13 +18,9 @@ func main() {
 		panic(err)
 	}
 
-	// Create a persistent cache
-
-	// Create persistent cache and Inject it into handler
-	bfclCache := replay.NewCache()
-	bfclReplay := &bfcl.Replay{ReplayCache: bfclCache}
-	cfbCache := replay.NewCache()
-	cfbReplay := &cfb.Replay{Cache: cfbCache}
+	// Create persistent cache and inject into handlers
+	bfclReplay := &bfcl.Replay{ReplayCache: replay.NewCache()}
+	cfbReplay := &cfb.Replay{ReplayCache: replay.NewCache()}
 
 	// Register API Endpoint
 	http.HandleFunc("/bfcl", MiddlewareDebugLogger("BFCL", bfclReplay.HandleGenerateBFCL))
@@ -37,9 +33,9 @@ func main() {
 
 	fmt.Println("---------------------------------------------------------")
 	fmt.Println(" Toolman Bench Server Running")
-	fmt.Println(" BFCL API Endpoint:   http://localhost:8080/bfcl")
-	fmt.Println(" CFB API Endpoint:    http://localhost:8080/cfb")
-	fmt.Println(" BFCL Debug UI:       http://localhost:8080/debug")
+	fmt.Println(" BFCL API Endpoint:	http://localhost:8080/bfcl")
+	fmt.Println(" CFB API Endpoint:		http://localhost:8080/cfb")
+	fmt.Println(" Debug UI:				http://localhost:8080/debug")
 	fmt.Println("---------------------------------------------------------")
 
 	fmt.Println("Toolman Benchmark Server running on :8080")

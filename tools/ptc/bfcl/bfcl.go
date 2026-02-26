@@ -74,11 +74,11 @@ func (replayCache *Replay) HandleGenerateBFCL(w http.ResponseWriter, r *http.Req
 		replayCache.ensureCache(req)
 	}
 
-	replayCache.replayGenerateBFCL(w, req)
+	replayCache.replayGenerateBFCL(w, req, nil)
 }
 
 // replayGenerateBFCL is the replay and generate loop for benchmarking
-func (replayCache *Replay) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkRequest) {
+func (replayCache *Replay) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkRequest, previousGen *gen.Response) {
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 	client := bellman.New(bellmanUrl, bellman.Key{Name: "bfcl", Token: bellmanToken})
@@ -107,7 +107,7 @@ func (replayCache *Replay) replayGenerateBFCL(w http.ResponseWriter, req Benchma
 		}
 		// while there are scripts to run, replay them
 		for replayCache.IsPending() {
-			resp, toolResponse := replayCache.executionReplay(bellmanTools, toolmanConversation, nil)
+			resp, toolResponse := replayCache.executionReplay(bellmanTools, toolmanConversation, previousGen)
 			if resp != nil {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(resp)
@@ -159,11 +159,11 @@ func (replayCache *Replay) replayGenerateBFCL(w http.ResponseWriter, req Benchma
 	if req.EnablePTC && !res.IsText() {
 		req.NewToolResponses = nil
 		req.ToolmanHistory = toolmanConversation
-		replayCache.replayGenerateBFCL(w, req)
+		replayCache.replayGenerateBFCL(w, req, res)
 		return
 	}
 
-	// return regular tool calls to bfcl
+	// return assistant regular tool calls to bfcl (non-ptc)
 	resp := BenchmarkResponse{
 		ToolCalls:      bfclCalls,
 		ToolCallIDs:    bfclToolIDs,
@@ -241,11 +241,11 @@ func (replayCache *Replay) executionReplay(bellmanTools []tools.Tool, toolmanCon
 		call := recordToBFCLCall(result.Record)
 
 		inputTokens := 0
-		OutputTokens := 0
+		outputTokens := 0
 		// set token count if llm response was generated
 		if genResponse != nil {
 			inputTokens = genResponse.Metadata.InputTokens
-			OutputTokens = genResponse.Metadata.OutputTokens
+			outputTokens = genResponse.Metadata.OutputTokens
 		}
 
 		// return call, only 1 at a time
@@ -254,7 +254,7 @@ func (replayCache *Replay) executionReplay(bellmanTools []tools.Tool, toolmanCon
 			ToolCallIDs:    []string{result.ToolID},
 			ToolmanHistory: toolmanConversation,
 			InputTokens:    inputTokens,
-			OutputTokens:   OutputTokens,
+			OutputTokens:   outputTokens,
 		}
 
 		return &resp, nil
@@ -301,6 +301,7 @@ func (replayCache *Replay) ensureCache(req BenchmarkRequest) {
 	}
 }
 
+// addTrailingUserConversation adds incoming user messages to toolman conversation
 func addTrailingUserConversation(req BenchmarkRequest) []prompt.Prompt {
 	toolmanHistory := req.ToolmanHistory
 	// count toolman user messages
