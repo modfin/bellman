@@ -18,6 +18,16 @@ const (
 	CodeExecutionToolName string = "code_execution"
 )
 
+// IsPTCEnabled checks if there is a tool with PTC enabled (as PTC is set per tool)
+func IsPTCEnabled(inputTools []tools.Tool) bool {
+	for _, t := range inputTools {
+		if t.UsePTC {
+			return true
+		}
+	}
+	return false
+}
+
 // ExtractPTCTools separates regular tools from PTC tools and returns both slices
 func ExtractPTCTools(inputTools []tools.Tool) ([]tools.Tool, []tools.Tool) {
 	var regularTools []tools.Tool

@@ -135,10 +135,12 @@ func (b *Generator) Tools() []tools.Tool {
 func (b *Generator) SetTools(tool ...tools.Tool) *Generator {
 	bb := b.clone()
 
-	// adapt PTC tools
-	bellmanTools := bb.adaptPTCTools(tool...)
+	// if a tool has PTC enabled --> adapt PTC tools
+	if ptc.IsPTCEnabled(tool) {
+		tool = bb.adaptPTCTools(tool...)
+	}
 
-	bb.Request.Tools = append([]tools.Tool{}, bellmanTools...)
+	bb.Request.Tools = append([]tools.Tool{}, tool...)
 	return bb
 }
 func (b *Generator) AddTools(tool ...tools.Tool) *Generator {
