@@ -1,4 +1,4 @@
-package bellman
+package test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/joho/godotenv"
+	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/agent"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/services/openai"
@@ -31,7 +32,7 @@ func TestAgent(t *testing.T) {
 
 	// define go func for JS use
 	askBellman := func(url, token, userMessage string) string {
-		client := New(url, Key{Name: "test", Token: token})
+		client := bellman.New(url, bellman.Key{Name: "test", Token: token})
 		llm := client.Generator()
 		res, _ := llm.Model(vllm.GenModel_gpt_oss_20b).
 			Prompt(
@@ -88,7 +89,7 @@ func TestAgent(t *testing.T) {
 		tools.WithFunction(fun),
 	)
 
-	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 
 	//llm := client.Generator().Model(vertexai.GenModel_gemini_2_5_flash_latest).
 	llm := client.Generator().Model(openai.GenModel_gpt4o_mini).
@@ -133,7 +134,7 @@ func TestTool(t *testing.T) {
 
 	// define go func for JS use
 	askBellman := func(url, token, userMessage string) string {
-		client := New(url, Key{Name: "test", Token: token})
+		client := bellman.New(url, bellman.Key{Name: "test", Token: token})
 		llm := client.Generator()
 		res, _ := llm.Model(vllm.GenModel_gpt_oss_20b).
 			Prompt(
@@ -190,7 +191,7 @@ func TestTool(t *testing.T) {
 		tools.WithFunction(fun),
 	)
 
-	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 	llm := client.Generator().ThinkingBudget(0)
 	res, err := llm.Model(vertexai.GenModel_gemini_2_5_flash_lite_latest).
 		System("You are a financial assistant. You can get company earnings by name using the get_earnings() tool.").
@@ -229,7 +230,7 @@ func TestBellman(t *testing.T) {
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
-	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 	llm := client.Generator().ThinkingBudget(0)
 	res, err := llm.Model(vllm.GenModel_gpt_oss_20b).
 		Prompt(
@@ -255,7 +256,7 @@ func TestJSLLM(t *testing.T) {
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
 	askBellman := func(url, token, userMessage string) string {
-		client := New(url, Key{Name: "test", Token: token})
+		client := bellman.New(url, bellman.Key{Name: "test", Token: token})
 		llm := client.Generator()
 		res, _ := llm.Model(vllm.GenModel_gpt_oss_20b).
 			Prompt(

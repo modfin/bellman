@@ -1,4 +1,4 @@
-package bellman
+package test
 
 import (
 	"context"
@@ -7,9 +7,11 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/joho/godotenv"
+	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/agent"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
@@ -24,28 +26,31 @@ import (
 
 func TestToolman(t *testing.T) {
 	// get env vars
-	err := godotenv.Load()
+	err := godotenv.Load("../../../.env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
-	allTools := ptc.GetMockBellmanTools(true)
+	allTools := GetMockBellmanTools(true)
 	models := []gen.Model{openai.GenModel_gpt4o_mini, vertexai.GenModel_gemini_2_5_flash_latest, anthropic.GenModel_3_haiku_20240307}
-	//models = []gen.Model{openai.GenModel_gpt4o_mini}
+	models = []gen.Model{openai.GenModel_gpt5_mini_latest}
 
 	// create Bellman llm and run agent
-	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 	llm := client.Generator().System("# Role\nYou are a helpful LLM assistant.").
-		SetTools(allTools...).SetPTCLanguage(tools.JavaScript).Temperature(0)
+		SetTools(allTools...).SetPTCLanguage(tools.JavaScript).ThinkingBudget(100) //.Temperature(0)
 
 	userPrompt := "1. Do you know what PTC is (programmatic tool calling), and how LLMs call tools? If yes; answer me which tool at your disposal is PTC. If no; why not?"
 	userPrompt += "2. Predict the future, 3. convert 69 usd to sek, and then 4. generate a secret password. "
 	//userPrompt += "Also, solve this problem: " + "Find the integer between 1 and 1,000 that produces the longest Collatz sequence. " +
 	//	"Rules:\n 1. Start with any number n.\n 2. If n is even, divide by 2.\n 3. If n is odd, multiply by 3 and add 1.\n 4. Repeat until n becomes 1." +
 	//	"\nReturn the starting number and the length of its sequence."
-	userPrompt += "also, 5. get me the stock info for saab, ericsson."
+	userPrompt += "also, 5. get me the stock info (price/details) for saab, ericsson, and telia."
+
+	// stopwatch
+	start := time.Now()
 
 	// run all models
 	for _, m := range models {
@@ -72,6 +77,8 @@ func TestToolman(t *testing.T) {
 			}
 			// pretty print
 			prettyPrint(res)
+			elapsed := time.Since(start)
+			fmt.Printf("Prompt took %s", elapsed)
 		}
 	}
 }
@@ -85,10 +92,10 @@ func TestVectorSearch(t *testing.T) {
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
-	allTools := ptc.GetMockBellmanTools(true)
+	allTools := GetMockBellmanTools(true)
 
 	// create Bellman client
-	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 
 	// embed all tool descr and index
 	log.Printf("embedding tool descriptions")
@@ -160,7 +167,7 @@ func TestAutoPTC(t *testing.T) {
 	})
 
 	// define bellman tools
-	mockTools := ptc.GetMockBellmanTools(true)
+	mockTools := GetMockBellmanTools(true)
 	//regularTools, PTCTools := ptc.AdaptToolsToPTC(vm, mockTools, gen.JavaScript)
 	//allTools := append(regularTools, PTCTools...)
 
@@ -172,7 +179,7 @@ You are a Financial Assistant. Today is 2026-02-03.
 You solve complex logic by writing JavaScript code for the code_execution tool.`
 
 	// create Bellman llm and run agent
-	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 	llm := client.Generator().Model(openai.GenModel_gpt4o_mini).
 		System(systemPrompt).
 		SetTools(mockTools...).Temperature(0)
@@ -216,7 +223,9 @@ func prettyPrint(res *agent.Result[Result]) {
 	fmt.Printf("==== Used %d tokens ====\n", res.Metadata.TotalTokens)
 	costLow := (float64(res.Metadata.InputTokens)*0.15 + float64(res.Metadata.OutputTokens)*0.60) / 1_000_000.0
 	costHigh := (float64(res.Metadata.InputTokens)*0.30 + float64(res.Metadata.OutputTokens)*2.50) / 1_000_000.0
+	fmt.Printf("Input/output tokens: %d / %d\n", res.Metadata.InputTokens, res.Metadata.OutputTokens)
 	fmt.Printf("approx. $%.4f - $%.4f\n", costLow, costHigh)
+	fmt.Printf("Thinking tokens: %d\n", res.Metadata.ThinkingTokens)
 	fmt.Printf("==== Conversation ====\n")
 
 	for _, p := range res.Prompts {
@@ -252,7 +261,7 @@ func TestMockPTC(t *testing.T) {
 
 	// define go func "tools" for JS use
 	askBellman := func(url, token, userMessage string) string {
-		client := New(url, Key{Name: "test", Token: token})
+		client := bellman.New(url, bellman.Key{Name: "test", Token: token})
 		llm := client.Generator()
 		res, _ := llm.Model(openai.GenModel_gpt4o_mini).Temperature(1).
 			Prompt(
@@ -300,7 +309,7 @@ func TestMockPTC(t *testing.T) {
 		return string(jsonBytes), nil
 	}
 
-	codeExecution := tools.NewTool("code_execution",
+	codeExecution := tools.NewTool(ptc.CodeExecutionToolName,
 		tools.WithDescription(
 			"MANDATORY: You must write executable JavaScript code. "+
 				"Executes JS code. Environment has: Sum(a,b), askBellman(url,token,prompt), and CONFIG object. "+
@@ -332,7 +341,7 @@ You solve complex logic by writing JavaScript code for the code_execution tool.
 })`
 
 	// create Bellman llm and run agent
-	client := New(bellmanUrl, Key{Name: "test", Token: bellmanToken})
+	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 	llm := client.Generator().Model(openai.GenModel_gpt4o_mini).
 		System(systemPrompt).
 		SetTools(codeExecution).Temperature(0)

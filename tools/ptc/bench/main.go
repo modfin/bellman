@@ -5,20 +5,13 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/joho/godotenv"
+	"github.com/modfin/bellman/tools/ptc/bench/bfcl"
+	"github.com/modfin/bellman/tools/ptc/bench/cfb"
+	"github.com/modfin/bellman/tools/ptc/bench/nestful"
 	"github.com/modfin/bellman/tools/ptc/bench/replay"
-	"github.com/modfin/bellman/tools/ptc/bfcl"
-	"github.com/modfin/bellman/tools/ptc/cfb"
-	"github.com/modfin/bellman/tools/ptc/nestful"
 )
 
 func main() {
-	// godotenv.Load() ...
-	err := godotenv.Load()
-	if err != nil {
-		panic(err)
-	}
-
 	// Create persistent cache and inject into handlers
 	bfclReplay := &bfcl.Replay{ReplayCache: replay.NewCache()}
 	cfbReplay := &cfb.Replay{ReplayCache: replay.NewCache()}
