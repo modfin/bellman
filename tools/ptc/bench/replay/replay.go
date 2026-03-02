@@ -58,7 +58,7 @@ func (r *ReplayCache) AddResponse(record CallRecord) {
 func (r *ReplayCache) AddScript(script Script) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if script.Code == "" { // TODO handle/prevent with guardrail
+	if script.Code == "" { // TODO handle/prevent with guardrail?
 		log.Printf("empty code script!")
 	}
 	r.Scripts = append(r.Scripts, script)

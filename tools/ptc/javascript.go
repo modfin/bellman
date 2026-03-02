@@ -41,7 +41,7 @@ func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, s
 			return "", err
 		}
 
-		code, err := GuardRailJS(arg.Code) // TODO keep or remove
+		code, err := GuardRailJS(arg.Code) // TODO: remove this/guarded tool call or let llm decide?
 		if err != nil {
 			return err.Error(), nil
 		}
@@ -52,7 +52,7 @@ func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, s
 				fmt.Printf("Critical Panic in Goja: %v\n", r)
 				// Return error to the LLM so it can attempt a fix
 				resString = fmt.Sprintf(`{"error": "critical JS panic: %v"}`, r)
-				err = nil // TODO: return error or string to llm?
+				err = nil
 			}
 		}()
 
@@ -62,8 +62,6 @@ func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, s
 			runtime.JS.Interrupt("timeout: script execution took too long (possible infinite loop)")
 		})
 		defer timer.Stop()
-
-		//fmt.Printf("________ js code:\n%s\n", code)
 
 		// lock access to VM
 		runtime.Mutex.Lock()

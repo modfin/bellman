@@ -190,7 +190,7 @@ func (b *Generator) SetPTCLanguage(language tools.ProgramLanguage) *Generator {
 	bb.Request.PTCLanguage = language
 
 	// update PTC tools
-	b.SetTools(bb.Request.Tools...)
+	bb.SetTools(bb.Request.Tools...)
 
 	return bb
 }
