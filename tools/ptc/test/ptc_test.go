@@ -43,6 +43,8 @@ func TestOpenTelemetry(t *testing.T) {
 
 	ctx := context.Background()
 
+	system := "# Role\nYou are a helpful LLM assistant."
+
 	// init tracer
 	tp := setupHttpLangfuse(ctx, t)
 	// Ensure traces are flushed to Docker container before test ends!
@@ -60,14 +62,17 @@ func TestOpenTelemetry(t *testing.T) {
 	defer parentSpan.End()
 	// Optionally, tag the parent trace with a Langfuse Session ID
 	// to group multiple disjointed traces together in their UI!
-	parentSpan.SetAttributes(attribute.String("langfuse.session.id", "session-12345"))
+	parentSpan.SetAttributes(
+		attribute.String("langfuse.session.id", "session-12345"),
+		attribute.String("gen_ai.system_instructions", system),
+	)
 
 	allTools := GetMockBellmanTools(true)
 	model := openai.GenModel_gpt5_mini_latest
 
 	// create Bellman llm and run agent
 	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
-	llm := client.Generator().System("# Role\nYou are a helpful LLM assistant.").Model(model).
+	llm := client.Generator().System(system).Model(model).
 		SetTools(allTools...).SetPTCLanguage(tools.JavaScript).ThinkingBudget(100) //.Temperature(0)
 
 	userPrompt := "1. Do you know what PTC is (programmatic tool calling), and how LLMs call tools? If yes; answer me which tool at your disposal is PTC. If no; why not?"
@@ -100,9 +105,9 @@ func TestOpenTelemetry(t *testing.T) {
 			// add spans to trace
 			switch m.Role {
 			case prompt.UserRole:
-				spanName := fmt.Sprintf("LLM_Turn_%d", i)
-				_, activeLLMSpan = tracer.Start(ctx, spanName, trace.WithTimestamp(cursorTime))
+				_, activeLLMSpan = tracer.Start(ctx, fmt.Sprintf("chat %s", model.Name), trace.WithTimestamp(cursorTime))
 				activeLLMSpan.SetAttributes(
+					attribute.String("gen_ai.operation.name", "chat"),
 					attribute.String("gen_ai.provider.name", model.Provider),
 					attribute.String("gen_ai.request.model", model.Name),
 					attribute.String("gen_ai.prompt", m.Text),
@@ -111,41 +116,40 @@ func TestOpenTelemetry(t *testing.T) {
 			case prompt.AssistantRole:
 				activeLLMSpan.SetAttributes(
 					attribute.String("gen_ai.completion", m.Text),
-					//attribute.Int("gen_ai.usage.input_tokens", res.Metadata.InputTokens),
-					//attribute.Int("gen_ai.usage.output_tokens", res.Metadata.OutputTokens),
 				)
 				activeLLMSpan.End(trace.WithTimestamp(cursorTime)) // Close the LLM span
 				cursorTime = cursorTime.Add(100 * time.Millisecond)
 			case prompt.ToolCallRole:
 				activeLLMSpan.SetAttributes(
-					attribute.String("gen_ai.completion", fmt.Sprintf("Called Tool: %v", m.ToolCall.Name)),
+					attribute.String("gen_ai.completion", fmt.Sprintf("Tool Call Requested: %v", m.ToolCall.Name)),
 				)
 				activeLLMSpan.End(trace.WithTimestamp(cursorTime)) // Close the LLM span
 
 				// Immediately open a Tool Span!
-				_, activeToolSpan = tracer.Start(ctx, fmt.Sprintf("Execute_Tool_%d", i), trace.WithTimestamp(cursorTime))
+				_, activeToolSpan = tracer.Start(ctx, fmt.Sprintf("execute_tool %s", m.ToolCall.Name), trace.WithTimestamp(cursorTime))
 				activeToolSpan.SetAttributes(
-					attribute.String("gen_ai.provider.name", model.Provider),
-					attribute.String("gen_ai.request.model", model.Name),
-					// This tells Langfuse to show the Tool badge
-					attribute.String("langfuse.observation.type", "tool"), // this custom decorator sets span to langfuse tool
-					attribute.String("input.value", fmt.Sprintf("%v", string(m.ToolCall.Arguments))),
+					attribute.String("gen_ai.operation.name", "execute_tool"),
+					attribute.String("gen_ai.tool.name", m.ToolCall.Name),
+					attribute.String("gen_ai.tool.call.arguments", string(m.ToolCall.Arguments)),
+					attribute.String("gen_ai.tool.call.id", m.ToolCall.ToolCallID),
 				)
 				cursorTime = cursorTime.Add(100 * time.Millisecond)
 			case prompt.ToolResponseRole:
 				if activeToolSpan != nil {
 					// The tool finished executing! Log the result and close the span.
 					activeToolSpan.SetAttributes(
-						attribute.String("output.value", fmt.Sprintf("%v", m.ToolResponse.Response)),
+						//attribute.String("gen_ai.tool.name", m.ToolResponse.Name),
+						attribute.String("gen_ai.tool.call.result", m.ToolResponse.Response),
+						//attribute.String("gen_ai.tool.call.id", m.ToolResponse.ToolCallID),
+						//attribute.String("output.value", m.ToolResponse.Response),
 					)
 					activeToolSpan.End(trace.WithTimestamp(cursorTime))
-					cursorTime = cursorTime.Add(100 * time.Millisecond)
 				}
-				// Typically, after a tool returns, the LLM evaluates the result.
-				// So we start a new LLM span to capture the LLM digesting the tool output!
-				spanName := fmt.Sprintf("LLM_Eval_%d", i)
-				_, activeLLMSpan = tracer.Start(ctx, spanName, trace.WithTimestamp(cursorTime))
+				cursorTime = cursorTime.Add(100 * time.Millisecond)
+				// Start the next LLM span to capture the LLM digesting the tool output!
+				_, activeLLMSpan = tracer.Start(ctx, fmt.Sprintf("chat %s", model.Name), trace.WithTimestamp(cursorTime))
 				activeLLMSpan.SetAttributes(
+					attribute.String("gen_ai.operation.name", "chat"),
 					attribute.String("gen_ai.prompt", fmt.Sprintf("Tool Result: %v", m.ToolResponse.Response)),
 					attribute.String("gen_ai.provider.name", model.Provider),
 					attribute.String("gen_ai.request.model", model.Name),
