@@ -83,7 +83,7 @@ type Usage struct {
 type ExtractedCall map[string]map[string]interface{}
 
 type Replay struct {
-	*replay.ReplayCache
+	*replay.Replay
 }
 
 var (
