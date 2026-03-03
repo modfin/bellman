@@ -1,15 +1,15 @@
 # Bellman
 
-It tries to be unified interface to interact with LLMs and embedding models.
+It tries to be a unified interface to interact with LLMs and embedding models.
 In particular, it seeks to make it easier to switch between models and vendors
-along woth lowering tha barrier to get started.
-Bellman supports  `VertexAI/Gemini`, `OpenAI`, `Anthropic`, `VoyageAI` and `Ollama`
+while lowering the barrier to get started.
+Bellman supports `VertexAI/Gemini`, `OpenAI`, `Anthropic`, `VoyageAI`, `Ollama`, and `vLLM`.
 
 Bellman consists of two parts. The library and the service.
 The go library enables you to interact with the different LLM vendors directly while the service,
 `bellmand` creates a proxy service that lets you connect to all providers with one api key.
 
-Bellman supports the common things that we expect in modern llm models.
+Bellman supports the common things that we expect in modern LLM models.
 Chat, Structured, Tools and binary input.
 
 ## Why
@@ -33,6 +33,7 @@ The easiest way to get started is to simply run it as a docker service.
 - Docker being installed
 - API Keys to Anthropic, OpenAI, VertexAI(Google Gemini) and/or VoyageAI
 - Installing Ollama, https://ollama.com/ (very cool project imho)
+- (Optional) Running vLLM, if you want to proxy self-hosted OpenAI-compatible models
 
 ### Run
 
@@ -40,10 +41,12 @@ The easiest way to get started is to simply run it as a docker service.
 ## Help / Man
 docker run --rm -it modfin/bellman --help  
 
-## Example 
+## Example
 docker run --rm -d modfin/bellman \
-  --prometheus-metrics-basic-auth="user:pass"
+  --prometheus-metrics-basic-auth="user:pass" \
   --ollama-url=http://localhost:11434 \
+  --vllm-url=http://localhost:8000 \
+  --vllm-model="*" \
   --openai-key="$(cat ./credentials/openai-api-key.txt)" \
   --anthropic-key="$(cat ./credentials/anthropic-api-key.txt)" \
   --voyageai-key="$(cat ./credentials/voyageai-api-key.txt)" \
@@ -65,18 +68,45 @@ go get github.com/modfin/bellman
 
 ## Usage
 
-The library provides clients for Anthropic, Ollama, OpenAI, VertexAI, VoyageAI and Bellmand itself.
+The library provides clients for Anthropic, Ollama, OpenAI, VertexAI, VoyageAI, vLLM and Bellman itself.
 
-All the clients implement the same interfaces, `gen.Generator` and `embed.Embeder`,
-and can there for be used interchangeably.
+All provider clients implement `gen.Gen` and/or `embed.Embeder`,
+and can therefore be used interchangeably.
 
-```go 
-client, err := anthropic.New(...)
-client, err := ollama.New(...)
-client, err := openai.New(...)
-client, err := vertexai.New(...)
-client, err := voyageai.New(...)
-client, err := bellman.New(...)
+```go
+anthropicClient := anthropic.New("ANTHROPIC_API_KEY")
+ollamaClient := ollama.New("http://localhost:11434")
+openaiClient := openai.New("OPENAI_API_KEY")
+vertexClient, err := vertexai.New(vertexai.GoogleConfig{
+    Project: "my-project",
+    Region:  "europe-north1",
+})
+if err != nil {
+    panic(err)
+}
+voyageClient := voyageai.New("VOYAGEAI_API_KEY")
+vllmClient := vllm.New([]string{"http://localhost:8000"}, []string{"*"})
+bellmanClient := bellman.New("http://localhost:8080", bellman.Key{Name: "test", Token: "BELLMAN_TOKEN"})
+
+```
+
+Model examples in this README are intentionally short. Source of truth for model constants:
+
+- `services/openai/models.go`
+- `services/anthropic/models.go`
+- `services/vertexai/models.go`
+- `services/ollama/models.go`
+- `services/vllm/models.go`
+- `services/voyageai/models.go`
+
+You can always define your own model as well.
+
+```go
+gen.Model{
+		Provider: vertexai.Provider,
+		Name:     "gemini-3-flash-preview",
+		Config:   map[string]interface{}{"region": "global"},
+}
 ```
 
 ## bellman.New()
@@ -85,7 +115,7 @@ The benefit of using the bellman client, when you are running `bellmand`,
 is that we can interchangeably use any model that we wish to interact with.
 
 ```go
-client, err := bellman.New("BELLMAN_URL", bellman.Key{Name: "test", Token: "BELLMAN_TOKEN"})
+client := bellman.New("BELLMAN_URL", bellman.Key{Name: "test", Token: "BELLMAN_TOKEN"})
 llm := client.Generator()
 res, err := llm.Model(openai.GenModel_gpt4o_mini).
     Prompt(
@@ -94,7 +124,7 @@ res, err := llm.Model(openai.GenModel_gpt4o_mini).
 fmt.Println(res, err)
 // OpenAI
 
-res, err := llm.Model(vertexai.GenModel_gemini_2_0_flash).
+res, err := llm.Model(vertexai.GenModel_gemini_2_5_flash_latest).
     Prompt(
         prompt.AsUser("What company made you?"),
     )
@@ -105,7 +135,7 @@ fmt.Println(res, err)
 // or a new model that is not in the library yet
 model := gen.Model{
     Provider: vertexai.Provider,
-    Name:     "gemini-2.0-flash-exp",
+    Name:     "gemini-2.5-flash",
     Config:   map[string]interface{}{"region": "us-central1"},
 }
 res, err := llm.Model(model).
@@ -124,7 +154,7 @@ Just normal conversation mode
 
 ```go
 res, err := openai.New(apiKey).Generator().
-    Model(openai.GenModel_gpt4o_mini).
+    Model(openai.GenModel_gpt5_mini_latest).
     Prompt(
         prompt.AsUser("What is the distance to the moon?"),
     )
@@ -147,7 +177,7 @@ Just normal conversation mode
 
 ```go
 res, err := openai.New(apiKey).Generator().
-    Model(openai.GenModel_gpt4o_mini).
+    Model(openai.GenModel_gpt5_mini_latest).
     System("You are a expert movie quoter and lite fo finish peoples sentences with a movie reference").
     Prompt(
         prompt.AsUser("Who are you going to call?"),
@@ -168,7 +198,7 @@ Setting things like temperature, max tokens, top p, and stop sequences
 
 ```go
 res, err := openai.New(apiKey).Generator().
-    Model(openai.GenModel_gpt4o_mini).
+    Model(openai.GenModel_gpt5_mini_latest).
     Temperature(0.5).
     MaxTokens(100).
     TopP(0.9). // should really not be used with temperature
@@ -217,15 +247,20 @@ type Quote struct {
    Character string `json:"character"`
    Quote     string `json:"quote"`
 }
-type Responese struct {
+type Response struct {
    Quotes []Quote `json:"quotes"`
 }
 
 
-llm := vertexai.New(googleConfig).Generator()
+vertex, err := vertexai.New(googleConfig)
+if err != nil {
+   log.Fatalf("vertexai.New() error = %v", err)
+}
+
+llm := vertex.Generator()
 res, err := llm.
-    Model(vertexai.GenModel_gemini_1_5_pro).
-    Output(schema.From(Responese{})).
+    Model(vertexai.GenModel_gemini_2_5_pro_latest).
+    Output(schema.From(Response{})).
     Prompt(
         prompt.AsUser("give me 3 quotes from different characters in Hamlet"),
     )
@@ -252,7 +287,7 @@ fmt.Println(answer, err)
 //  ]
 //}  <nil>
 
-var result Result
+var result Response
 err := res.Unmarshal(&result) // Just a shorthand to marshal it into your struct
 fmt.Println(result, err)
 // {[
@@ -278,25 +313,25 @@ Here is an example of how to define and use a tool:
             "a function to get a quote from a person or character in Hamlet",
        ),
        tools.WithArgSchema(Args{}),
-       tools.WithCallback(func(jsondata string) (string, error) {
-           var arg Args
-           err := json.Unmarshal([]byte(jsondata), &arg)
-           if err != nil {
-               return "",err
-           }
-           return dao.GetQuoateFrom(arg.Name)
-       }),
+	       tools.WithFunction(func(ctx context.Context, call tools.Call) (string, error) {
+	           var arg Args
+	           err := json.Unmarshal(call.Argument, &arg)
+	           if err != nil {
+	               return "",err
+	           }
+	           return dao.GetQuoateFrom(arg.Name)
+	       }),
    )
    ```
 
 2. Use the tool in a prompt:
    ```go
-   res, err := anthopic.New(apiKey).Generator().
-       Model(anthropic.GenModel_3_5_haiku_latest)).
+   res, err := anthropic.New(apiKey).Generator().
+       Model(anthropic.GenModel_4_5_haiku_latest).
        System("You are a Shakespeare quote generator").
-       Tools(getQuote).
-       // Configure a specific too to be used, or the setting for it
-       Tool(tools.RequiredTool). 
+       SetTools(getQuote).
+       // Configure if any specific tool must be used
+       SetToolConfig(tools.RequiredTool).
        Prompt(
            prompt.AsUser("Give me 3 quotes from different characters"),
        )
@@ -306,7 +341,7 @@ Here is an example of how to define and use a tool:
    }
 
    // Evaluate with callback function
-   err = res.Eval()
+   err = res.Eval(context.Background())
    if err != nil {
        log.Fatalf("Eval() error = %v", err)
    }
@@ -314,14 +349,14 @@ Here is an example of how to define and use a tool:
    
    // or Evaluate your self
    
-   tools, err := res.Tools()
+   calls, err := res.AsTools()
    if err != nil {
-         log.Fatalf("Tools() error = %v", err)
+         log.Fatalf("AsTools() error = %v", err)
    }
    
-   for _, tool := range tools {
-       log.Printf("Tool: %s", tool.Name)
-       switch tool.Name {
+   for _, call := range calls {
+       log.Printf("Tool: %s", call.Name)
+       switch call.Name {
           // ....
        }
    }
@@ -366,7 +401,7 @@ if err != nil {
     t.Fatalf("could open file, %v", err)
 }
 
-res, err := anthopic.New(apiKey).Generator().
+res, err := anthropic.New(apiKey).Generator().
     Prompt(
         prompt.AsUserWithData(prompt.MimeApplicationPDF, pdf),
         prompt.AsUser("Describe to me what is in the PDF"),
@@ -389,7 +424,7 @@ The default thinking/reasoning behaviour is different depending on the model you
 
 ```go
 res, err := anthropic.New(apiKey).Generator().
-    Model(anthropic.GenModel_4_0_sonnet_20250514).
+    Model(anthropic.GenModel_4_5_sonnet_latest).
     MaxTokens(3000).
     ThinkingBudget(2000). // the budget for reasoning tokens, set to 0 to disable reasoning if supported by the selected model
     IncludeThinkingParts(true). // if available, includes the reasoning parts in the response (will be summaries for some models)
@@ -437,9 +472,9 @@ type Search struct {
 getQuote := tools.NewTool("get_quote",
     tools.WithDescription("a function get a stock quote based on stock id"),
     tools.WithArgSchema(GetQuoteArg{}),
-    tools.WithCallback(func (jsondata string) (string, error) {
+    tools.WithFunction(func (ctx context.Context, call tools.Call) (string, error) {
         var arg GetQuoteArg
-        err := json.Unmarshal([]byte(jsondata), &arg)
+        err := json.Unmarshal(call.Argument, &arg)
         if err != nil {
             return "", err
         }
@@ -450,9 +485,9 @@ getQuote := tools.NewTool("get_quote",
 getStock := tools.NewTool("get_stock",
     tools.WithDescription("a function a stock based on name"),
     tools.WithArgSchema(Search{}),
-    tools.WithCallback(func (jsondata string) (string, error) {
-        var arg GetQuoteArg
-        err := json.Unmarshal([]byte(jsondata), &arg)
+    tools.WithFunction(func (ctx context.Context, call tools.Call) (string, error) {
+        var arg Search
+        err := json.Unmarshal(call.Argument, &arg)
         if err != nil {
             return "", err
         }
@@ -466,10 +501,10 @@ type Result struct {
     Price   float64 `json:"price"`
 }
 
-llm := anthopic.New(apiKey).Generator()
+llm := anthropic.New(apiKey).Generator()
 llm = llm.SetTools(getQuote, getStock)
 
-res, err := agent.Run[Result](5, llm, prompt.AsUser("Get me the price of Volvo B"))
+res, err := agent.Run[Result](5, 1, llm, prompt.AsUser("Get me the price of Volvo B"))
 if err != nil {
     t.Fatalf("Prompt() error = %v", err)
 }
@@ -478,7 +513,7 @@ fmt.Printf("==== Result after %d calls ====\n", res.Depth)
 fmt.Printf("%+v\n", res.Result)
 fmt.Printf("==== Conversation ====\n")
 
-for _, p := range res.Promps {
+for _, p := range res.Prompts {
     fmt.Printf("%s: %s\n", p.Role, p.Text)
 }
 
@@ -499,7 +534,7 @@ Bellman integrates with most the embedding models as well as the LLMs that is pr
 providers. There is also a VoyageAI, voyageai.com, that only really deals with embeddings.
 
 ```go
-client := bellman_client := bellman.New(...)
+client := bellman.New(...)
 
 res, err := client.Embed(embed.NewSingleRequest(
     context.Background(),
@@ -513,7 +548,7 @@ fmt.Println(res.SingleAsFloat32())
 
 Or using the query type.
 ```go
-client := bellman_client := bellman.New(...)
+client := bellman.New(...)
 
 res, err := client.Embed(embed.NewSingleRequest(
     context.Background(),
@@ -529,7 +564,7 @@ fmt.Println(res.SingleAsFloat32())
 Bellman also supports context aware embeddings. As of now, only with VoyageAI models.
 
 ```go
-res, err := client.Embed(embed.NewDocumentRequest(
+res, err := client.EmbedDocument(embed.NewDocumentRequest(
     context.Background(),
     voyageai.EmbedModel_voyage_context_3.WithType(embed.TypeDocument),
     []string{"document_chunk_1", "document_chunk_2", "document_chunk_3", ...},
