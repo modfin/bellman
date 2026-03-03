@@ -11,7 +11,7 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-type ReplayCache struct {
+type Replay struct {
 	mu      sync.RWMutex
 	record  []CallRecord
 	Cursor  int
@@ -33,7 +33,7 @@ type Script struct {
 	ToolID string
 }
 
-type ReplayResult struct {
+type Result struct {
 	Record *CallRecord
 	Output string
 	ToolID string
@@ -41,21 +41,21 @@ type ReplayResult struct {
 }
 
 // NewCache creates a new cache
-func NewCache() *ReplayCache {
-	return &ReplayCache{
+func NewCache() *Replay {
+	return &Replay{
 		record: []CallRecord{},
 	}
 }
 
 // AddResponse adds a tool response to the cache
-func (r *ReplayCache) AddResponse(record CallRecord) {
+func (r *Replay) AddResponse(record CallRecord) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.record = append(r.record, record)
 }
 
 // AddScript adds a script to the cache
-func (r *ReplayCache) AddScript(script Script) {
+func (r *Replay) AddScript(script Script) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if script.Code == "" { // TODO handle/prevent with guardrail
@@ -65,7 +65,7 @@ func (r *ReplayCache) AddScript(script Script) {
 }
 
 // Clear wipes the cache on demand
-func (r *ReplayCache) Clear() {
+func (r *Replay) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.record = []CallRecord{}
@@ -74,12 +74,12 @@ func (r *ReplayCache) Clear() {
 }
 
 // Replay resets the cursor index (to replay execution)
-func (r *ReplayCache) Replay() {
+func (r *Replay) Replay() {
 	r.Cursor = 0
 }
 
 // IsPending returns true if there is a pending script to run
-func (r *ReplayCache) IsPending() bool {
+func (r *Replay) IsPending() bool {
 	for _, s := range r.Scripts {
 		if !s.Done {
 			return true
@@ -90,7 +90,7 @@ func (r *ReplayCache) IsPending() bool {
 
 // ExecutionReplay reruns code script until finish or error --> let llm decide next step (return response or fix error)
 // Returns a recorded (tool) call, code execution result, or error
-func (r *ReplayCache) ExecutionReplay(tools []tools.Tool) ReplayResult {
+func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 
 	// Destroy state! Create a new VM for every single replay (prevent unexpected errors)
 	vm := goja.New()
@@ -106,7 +106,7 @@ func (r *ReplayCache) ExecutionReplay(tools []tools.Tool) ReplayResult {
 	for _, t := range tools {
 		err := interceptCall(vm, r, t)
 		if err != nil {
-			return ReplayResult{Error: err}
+			return Result{Error: err}
 		}
 	}
 
@@ -122,11 +122,14 @@ func (r *ReplayCache) ExecutionReplay(tools []tools.Tool) ReplayResult {
 					// new tool call!
 					fmt.Printf("Yielding to Benchmark for: %s...\n", record.ToolName)
 
-					return ReplayResult{Record: record, ToolID: s.ToolID}
+					return Result{Record: record, ToolID: s.ToolID}
 				}
 			}
-			// Important: return JS error as JSON so LLM can see it
-			return ReplayResult{Output: fmt.Sprintf("error: %q", err.Error())}
+			// Important: return JS error as JSON so LLM can see it AND set as done since we got a result! only once/script
+			if !s.Done {
+				r.Scripts[i].Done = true // use index to access actual object
+				return Result{Output: fmt.Sprintf("error: %q", err.Error()), ToolID: s.ToolID}
+			}
 		}
 
 		// If we reach here, the script finished successfully without yielding!
@@ -141,18 +144,18 @@ func (r *ReplayCache) ExecutionReplay(tools []tools.Tool) ReplayResult {
 			} else {
 				jsonBytes, err = json.Marshal(val.Export())
 				if err != nil {
-					return ReplayResult{Error: err}
+					return Result{Error: err}
 				}
 			}
 			fmt.Printf("=== script output: %s\n", string(jsonBytes))
-			return ReplayResult{Output: string(jsonBytes), ToolID: s.ToolID}
+			return Result{Output: string(jsonBytes), ToolID: s.ToolID}
 		}
 	}
 	log.Printf("already replayed scripts") // TODO should this be allowed?
-	return ReplayResult{}
+	return Result{}
 }
 
-func interceptCall(vm *goja.Runtime, cache *ReplayCache, tool tools.Tool) error {
+func interceptCall(vm *goja.Runtime, cache *Replay, tool tools.Tool) error {
 	interceptor := func(call goja.FunctionCall) goja.Value {
 		// Cache hit: replaying script and already know the answer
 		if cache.Cursor < len(cache.record) {
