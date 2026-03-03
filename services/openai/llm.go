@@ -117,12 +117,17 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			}
 
 			if ss.Usage != nil {
+				thinkingTokens := ss.Usage.CompletionTokensDetails.ReasoningTokens
+				outputTokens := ss.Usage.CompletionTokens - thinkingTokens
+				if outputTokens < 0 {
+					outputTokens = 0
+				}
 				m := &models.Metadata{
 					Model:          ss.Model,
 					InputTokens:    ss.Usage.PromptTokens,
-					OutputTokens:   ss.Usage.CompletionTokens,
-					ThinkingTokens: ss.Usage.CompletionTokensDetails.ReasoningTokens,
-					TotalTokens:    ss.Usage.TotalTokens,
+					OutputTokens:   outputTokens,
+					ThinkingTokens: thinkingTokens,
+					TotalTokens:    ss.Usage.PromptTokens + outputTokens + thinkingTokens,
 				}
 				if ss.ServiceTier != nil {
 					m.Other = map[string]any{"service_tier": *ss.ServiceTier}
@@ -246,13 +251,18 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:          g.request.Model.FQN(),
-			InputTokens:    respModel.Usage.PromptTokens,
-			OutputTokens:   respModel.Usage.CompletionTokens,
-			ThinkingTokens: respModel.Usage.CompletionTokensDetails.ReasoningTokens,
-			TotalTokens:    respModel.Usage.TotalTokens,
+			Model: g.request.Model.FQN(),
 		},
 	}
+	thinkingTokens := respModel.Usage.CompletionTokensDetails.ReasoningTokens
+	outputTokens := respModel.Usage.CompletionTokens - thinkingTokens
+	if outputTokens < 0 {
+		outputTokens = 0
+	}
+	res.Metadata.InputTokens = respModel.Usage.PromptTokens
+	res.Metadata.OutputTokens = outputTokens
+	res.Metadata.ThinkingTokens = thinkingTokens
+	res.Metadata.TotalTokens = respModel.Usage.PromptTokens + outputTokens + thinkingTokens
 	if respModel.ServiceTier != nil {
 		g.openai.log("[gen] prompt resp, service tier", "service_tier", *respModel.ServiceTier)
 		if res.Metadata.Other == nil {

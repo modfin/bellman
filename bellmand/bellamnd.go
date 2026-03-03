@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lmittmann/tint"
 	"github.com/modfin/bellman"
+	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/services/anthropic"
@@ -596,6 +597,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"key", keyName,
 				"model", req.Model.FQN(),
 				"token-input", response.Metadata.InputTokens,
+				"token-thinking", response.Metadata.ThinkingTokens,
 				"token-output", response.Metadata.OutputTokens,
 				"token-total", response.Metadata.TotalTokens,
 			)
@@ -604,6 +606,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "total").Add(float64(response.Metadata.TotalTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "input").Add(float64(response.Metadata.InputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "thinking").Add(float64(response.Metadata.ThinkingTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "output").Add(float64(response.Metadata.OutputTokens))
 
 			w.Header().Set("Content-Type", "application/json")
@@ -680,9 +683,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				flusher.Flush()
 			}
 
-			// Track metrics
-			var totalInputTokens, totalOutputTokens int
-			var modelName string
+			// Track metrics from final metadata frame
+			tokenMetadata := models.Metadata{Model: req.Model.FQN()}
 
 			// Process streaming responses
 			for streamResp := range stream {
@@ -695,10 +697,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				}
 
 				// Update metrics
-				if streamResp.Metadata != nil {
-					totalInputTokens = streamResp.Metadata.InputTokens
-					totalOutputTokens = streamResp.Metadata.OutputTokens
-					modelName = streamResp.Metadata.Model
+				if streamResp.Type == gen.TYPE_METADATA && streamResp.Metadata != nil {
+					tokenMetadata = *streamResp.Metadata
 				}
 
 				// Convert to SSE format
@@ -726,7 +726,14 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				}
 			}
 
-			totalTokens := totalInputTokens + totalOutputTokens
+			totalTokens := tokenMetadata.TotalTokens
+			if totalTokens == 0 {
+				totalTokens = tokenMetadata.InputTokens + tokenMetadata.ThinkingTokens + tokenMetadata.OutputTokens
+			}
+			modelName := tokenMetadata.Model
+			if modelName == "" {
+				modelName = req.Model.FQN()
+			}
 
 			// Consume actual tokens used (using API key for rate limiting)
 			rateLimiter.Consume(apiKeyId, totalTokens)
@@ -736,16 +743,18 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"apiKeyId", apiKeyId,
 				"key", keyName,
 				"model", req.Model.FQN(),
-				"token-input", totalInputTokens,
-				"token-output", totalOutputTokens,
+				"token-input", tokenMetadata.InputTokens,
+				"token-thinking", tokenMetadata.ThinkingTokens,
+				"token-output", tokenMetadata.OutputTokens,
 				"token-total", totalTokens,
 			)
 
 			// Update metrics
 			streamReqCounter.WithLabelValues(modelName, apiKeyId, keyName).Inc()
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "total").Add(float64(totalTokens))
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "input").Add(float64(totalInputTokens))
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "output").Add(float64(totalOutputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "input").Add(float64(tokenMetadata.InputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "thinking").Add(float64(tokenMetadata.ThinkingTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "output").Add(float64(tokenMetadata.OutputTokens))
 		})
 	}
 }

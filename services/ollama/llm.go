@@ -172,10 +172,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:        g.request.Model.FQN(),
-			InputTokens:  respModel.PromptEvalCount,
-			OutputTokens: respModel.EvalCount,
-			TotalTokens:  respModel.PromptEvalCount + respModel.EvalCount,
+			Model:          g.request.Model.FQN(),
+			InputTokens:    respModel.PromptEvalCount,
+			OutputTokens:   respModel.EvalCount,
+			ThinkingTokens: 0,
+			TotalTokens:    respModel.PromptEvalCount + respModel.EvalCount,
 		},
 	}
 	if len(respModel.Message.Content) > 0 {

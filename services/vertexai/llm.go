@@ -7,15 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/tools"
 	"io"
 	"log"
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/gen"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 )
 
 var requestNo int64
@@ -158,14 +159,16 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 
 			}
 			if ss.UsageMetadata.TotalTokenCount > 0 {
+				thinkingTokens := ss.UsageMetadata.ThoughtsTokenCount
+				outputTokens := ss.UsageMetadata.CandidatesTokenCount
 				stream <- &gen.StreamResponse{
 					Type: gen.TYPE_METADATA,
 					Metadata: &models.Metadata{
 						Model:          ss.ModelVersion,
 						InputTokens:    ss.UsageMetadata.PromptTokenCount,
-						OutputTokens:   ss.UsageMetadata.CandidatesTokenCount,
-						ThinkingTokens: ss.UsageMetadata.ThoughtsTokenCount,
-						TotalTokens:    ss.UsageMetadata.TotalTokenCount,
+						OutputTokens:   outputTokens,
+						ThinkingTokens: thinkingTokens,
+						TotalTokens:    ss.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens,
 					},
 				}
 			}
@@ -224,13 +227,15 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:          g.request.Model.FQN(),
-			InputTokens:    respModel.UsageMetadata.PromptTokenCount,
-			OutputTokens:   respModel.UsageMetadata.CandidatesTokenCount,
-			ThinkingTokens: respModel.UsageMetadata.ThoughtsTokenCount,
-			TotalTokens:    respModel.UsageMetadata.TotalTokenCount,
+			Model: g.request.Model.FQN(),
 		},
 	}
+	thinkingTokens := respModel.UsageMetadata.ThoughtsTokenCount
+	outputTokens := respModel.UsageMetadata.CandidatesTokenCount
+	res.Metadata.InputTokens = respModel.UsageMetadata.PromptTokenCount
+	res.Metadata.OutputTokens = outputTokens
+	res.Metadata.ThinkingTokens = thinkingTokens
+	res.Metadata.TotalTokens = respModel.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens
 	for _, c := range respModel.Candidates {
 		for _, p := range c.Content.Parts {
 			if p.Thought != nil && *p.Thought {
