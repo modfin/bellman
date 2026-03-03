@@ -9,6 +9,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/modfin/bellman/tools"
+	"github.com/modfin/bellman/tools/ptc"
 )
 
 type Replay struct {
@@ -113,7 +114,17 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 	// Run the next code script
 	for i, s := range r.Scripts {
 		fmt.Printf("____ running script: %s\n", s.Code)
-		val, err := vm.RunString(s.Code) // TODO: guardrail against empty code?
+
+		_, err := ptc.GuardRailJS(s.Code)
+		if err != nil {
+			// Important: return JS error as JSON so LLM can see it AND set as done since we got a result! only once/script
+			if !s.Done {
+				r.Scripts[i].Done = true // use index to access actual object
+				return Result{Output: fmt.Sprintf("error: %q", err.Error()), ToolID: s.ToolID}
+			}
+		}
+
+		val, err := vm.RunString(s.Code)
 		if err != nil {
 			// script crash, or intentional interrupt?
 			var jsErr *goja.InterruptedError
