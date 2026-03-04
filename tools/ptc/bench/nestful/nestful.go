@@ -123,8 +123,8 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.Bool("ptc_enadbled", req.EnablePTC),
-		attribute.String("tool_choice", choice),
+		attribute.Bool("ptc.enabled", req.EnablePTC),
+		attribute.String("tool.choice", choice),
 	)
 
 	if strings.TrimSpace(defaultModelFQN) == "" {
@@ -191,7 +191,7 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 
 	var res *gen.Response
 
-	_, llmSpan := tracer.Start(ctx, "llm.prompt")
+	llmCtx, llmSpan := tracer.Start(ctx, "llm.prompt")
 	llmSpan.SetAttributes(
 		attribute.String("gen_ai.operation.name", "chat"),
 		attribute.String("gen_ai.request.model", fmt.Sprintf("%v/%v", model.Provider, model.Name)),
@@ -219,7 +219,7 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	}
 
 	//tracer := otel.Tracer("toolman/nestful")
-	generated, content := nestfulGeneratedText(ctx, tracer, res, parsedTools, nameMap, outKeysByTool, req.JSExtractTimeoutMs)
+	generated, content := nestfulGeneratedText(llmCtx, tracer, res, parsedTools, nameMap, outKeysByTool, req.JSExtractTimeoutMs)
 	llmSpan.End()
 	writeJSON(w, http.StatusOK, NestfulBenchmarkResponse{
 		GeneratedText: generated,
@@ -312,7 +312,7 @@ func nestfulGeneratedText(ctx context.Context, tracer trace.Tracer, res *gen.Res
 	}
 	out := make([]map[string]any, 0)
 	errMsgs := make([]string, 0, 1)
-	for _, tc := range res.Tools {
+	for i, tc := range res.Tools {
 		if tc.Name == "code_execution" {
 			var codeArgs struct {
 				Code string `json:"code"`
@@ -338,6 +338,14 @@ func nestfulGeneratedText(ctx context.Context, tracer trace.Tracer, res *gen.Res
 
 		args := map[string]any{}
 		_ = json.Unmarshal(tc.Argument, &args)
+		_, toolSpan := tracer.Start(ctx, fmt.Sprintf("tool.call %s", tc.Name),
+			trace.WithAttributes(
+				attribute.String("gen_ai.tool.name", tc.Name),
+				attribute.String("gen_ai.tool.call.arguments", string(mustJSON(args))),
+				attribute.Int("index", i+1),
+			),
+		)
+		toolSpan.End()
 		name := tc.Name
 		if orig, ok := nameMap[name]; ok {
 			name = orig
@@ -371,7 +379,7 @@ func executeAndExtractNestful(
 	})
 	defer timer.Stop()
 
-	_, execSpan := tracer.Start(ctx, "exec.goja")
+	execCtx, execSpan := tracer.Start(ctx, "exec.goja")
 	execSpan.SetAttributes(
 		attribute.String("exec.language", "javascript"),
 		attribute.Int("exec.script_len", len(guarded)),
@@ -417,7 +425,7 @@ func executeAndExtractNestful(
 				"arguments": argsMap,
 			})
 
-			_, toolSpan := tracer.Start(ctx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
+			_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
 				attribute.String("gen_ai.tool.name", tName),
 				attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
 				attribute.Int("index", len(captured)),
