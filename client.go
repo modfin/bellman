@@ -322,6 +322,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"token-input", response.Metadata.InputTokens,
+		"token-thinking", response.Metadata.ThinkingTokens,
 		"token-output", response.Metadata.OutputTokens,
 		"token-total", response.Metadata.TotalTokens,
 	)
@@ -616,6 +617,7 @@ func (g *generator) processStreamingResponse(streamResp *gen.StreamResponse, too
 			"request", reqc,
 			"model", g.request.Model.FQN(),
 			"token-input", streamResp.Metadata.InputTokens,
+			"token-thinking", streamResp.Metadata.ThinkingTokens,
 			"token-output", streamResp.Metadata.OutputTokens,
 			"token-total", streamResp.Metadata.TotalTokens,
 		)
