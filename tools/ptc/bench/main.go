@@ -9,29 +9,24 @@ import (
 	"github.com/modfin/bellman/tools/ptc/bench/cfb"
 	"github.com/modfin/bellman/tools/ptc/bench/nestful"
 	"github.com/modfin/bellman/tools/ptc/bench/replay"
+	"github.com/modfin/bellman/tools/ptc/bench/tracer"
 )
 
 func main() {
 	// Create persistent cache and inject into handlers
-	bfclReplay := &bfcl.Replay{ReplayCache: replay.NewCache()}
-	cfbReplay := &cfb.Replay{ReplayCache: replay.NewCache()}
+	bfclCache := &bfcl.Cache{Replay: replay.NewReplay(), Tracer: tracer.NewTracer("BFCL")}
+	cfbCache := &cfb.Cache{Replay: replay.NewReplay(), Tracer: tracer.NewTracer("ComplexFuncBench")}
 
 	// Register API Endpoint
-	http.HandleFunc("/bfcl", MiddlewareDebugLogger("BFCL", bfclReplay.HandleGenerateBFCL))
-	http.HandleFunc("/cfb", MiddlewareDebugLogger("CFB", cfbReplay.HandleGenerateCFB))
+	http.HandleFunc("/bfcl", bfclCache.HandleGenerateBFCL)
+	http.HandleFunc("/cfb", cfbCache.HandleGenerateCFB)
 	http.HandleFunc("/nestful", nestful.NesfulHandlerFromEnv())
-
-	// Register Debug UI Endpoints
-	http.HandleFunc("/debug", HandleDebugUI)
-	http.HandleFunc("/debug/api/data", HandleDebugData)
-	http.HandleFunc("/debug/api/clear", HandleDebugClear)
 
 	fmt.Println("---------------------------------------------------------")
 	fmt.Println(" Toolman Bench Server Running")
 	fmt.Println(" BFCL API Endpoint:   		http://localhost:8080/bfcl")
 	fmt.Println(" CFB API Endpoint:    		http://localhost:8080/cfb")
 	fmt.Println(" NESTFUL API Endpoint:    	http://localhost:8080/nestful")
-	fmt.Println(" Debug UI:       			http://localhost:8080/debug")
 	fmt.Println("---------------------------------------------------------")
 
 	fmt.Println("Toolman Benchmark Server running on :8080")

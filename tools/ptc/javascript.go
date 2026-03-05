@@ -327,10 +327,10 @@ func SchemaToTS(s *schema.JSON) string {
 	}
 }
 
-// guardRailJS guardrails code before exec; important since LLMs trained for diff. coding objectives
+// GuardRailJS guardrails code before exec; important since LLMs trained for diff. coding objectives
 func GuardRailJS(code string) (string, error) { // TODO: add more/update guardrails
 	if code == "" {
-		errMsg := "RuntimeError: No code script provided. Rewrite the code immediately."
+		errMsg := "no javascript code provided. validate tool input arguments, required format: '{\"code\": string}'." // TODO: string format
 		fmt.Printf("[PTC] Blocked empty code attempt\n")
 		return code, fmt.Errorf("error: %s", errMsg)
 	}
