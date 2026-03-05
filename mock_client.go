@@ -172,10 +172,11 @@ func (g *mockGenerator) Prompt(conversation ...prompt.Prompt) (*gen.Response, er
 	response := &gen.Response{
 		Texts: []string{responseText.String()},
 		Metadata: models.Metadata{
-			Model:        g.request.Model.FQN(),
-			InputTokens:  inputTokens,
-			OutputTokens: outputTokens,
-			TotalTokens:  inputTokens + outputTokens,
+			Model:          g.request.Model.FQN(),
+			InputTokens:    inputTokens,
+			OutputTokens:   outputTokens,
+			ThinkingTokens: 0,
+			TotalTokens:    inputTokens + outputTokens,
 		},
 		Tools: []tools.Call{},
 	}
@@ -258,10 +259,11 @@ func (g *mockGenerator) Stream(conversation ...prompt.Prompt) (<-chan *gen.Strea
 		stream <- &gen.StreamResponse{
 			Type: gen.TYPE_METADATA,
 			Metadata: &models.Metadata{
-				Model:        g.request.Model.FQN(),
-				InputTokens:  inputTokens,
-				OutputTokens: outputTokens,
-				TotalTokens:  inputTokens + outputTokens,
+				Model:          g.request.Model.FQN(),
+				InputTokens:    inputTokens,
+				OutputTokens:   outputTokens,
+				ThinkingTokens: 0,
+				TotalTokens:    inputTokens + outputTokens,
 			},
 		}
 
