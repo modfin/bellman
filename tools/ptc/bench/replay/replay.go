@@ -41,8 +41,8 @@ type Result struct {
 	Error  error
 }
 
-// NewCache creates a new cache
-func NewCache() *Replay {
+// NewReplay creates a new cache
+func NewReplay() *Replay {
 	return &Replay{
 		record: []CallRecord{},
 	}
