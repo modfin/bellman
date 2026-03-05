@@ -2,7 +2,9 @@ package nestful
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -58,6 +60,12 @@ type nestfulToolDef struct {
 	Description      string         `json:"description"`
 	Parameters       map[string]any `json:"parameters"`
 	OutputParameters map[string]any `json:"output_parameters"`
+}
+
+type extractMeta struct {
+	GuardrailOK       bool
+	CapturedCount     int
+	CapturedJSONTrunc string
 }
 
 // Regex to find invalid tool-name characters.
@@ -119,12 +127,15 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	tracer := otel.Tracer("toolman/nestful")
 	ctx := r.Context()
 
-	ctx, span := tracer.Start(ctx, "nestful")
-	defer span.End()
+	sampleID := benchSampleID(r)
+	ctx, root := tracer.Start(ctx, "nestful.request")
+	defer root.End()
 
-	span.SetAttributes(
-		attribute.Bool("ptc_enadbled", req.EnablePTC),
-		attribute.String("tool_choice", choice),
+	root.SetAttributes(
+		attribute.String("benchmark.name", "nestful"),
+		attribute.String("benchmark.sample_id", sampleID),
+		attribute.Bool("ptc.enabled", req.EnablePTC),
+		attribute.String("tool.choice", choice),
 	)
 
 	if strings.TrimSpace(defaultModelFQN) == "" {
@@ -132,14 +143,35 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	}
 	model, err := parseModelFQN(defaultModelFQN)
 	if err != nil {
+		root.RecordError(err)
+		root.SetStatus(codes.Error, err.Error())
 		httpErr(w, fmt.Errorf("invalid model: %w", err), http.StatusBadRequest)
 		return
 	}
 
+	root.SetAttributes(
+		attribute.String("gen_ai.request.model", fmt.Sprintf("%v/%v", model.Provider, model.Name)),
+	)
+
 	parsedTools, nameMap, outKeysByTool, err := parseNestfulTools(req.Tools)
 	if err != nil {
+		root.RecordError(err)
+		root.SetStatus(codes.Error, err.Error())
 		httpErr(w, fmt.Errorf("invalid tools: %w", err), http.StatusBadRequest)
 		return
+	}
+
+	root.SetAttributes(
+		attribute.Int("gen_ai.tools.count", len(parsedTools)),
+		attribute.String("gen_ai.tools.digest", toolsDigest(req.Tools)),
+	)
+
+	if len(parsedTools) <= 50 {
+		names := make([]string, 0, len(parsedTools))
+		for _, t := range parsedTools {
+			names = append(names, t.Name)
+		}
+		root.SetAttributes(attribute.String("gen_ai.tools.names", strings.Join(names, ",")))
 	}
 	var callIdx uint64
 	for i := range parsedTools {
@@ -186,17 +218,20 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 		llm = llm.SetToolConfig(tools.NoTool)
 	default:
 		httpErr(w, fmt.Errorf("invalid tool_choice: %q", req.ToolChoice), http.StatusBadRequest)
+		root.RecordError(err)
+		root.SetStatus(codes.Error, err.Error())
+		httpErr(w, err, http.StatusBadRequest)
 		return
 	}
 
 	var res *gen.Response
 
-	_, llmSpan := tracer.Start(ctx, "llm.prompt")
+	llmCtx, llmSpan := tracer.Start(ctx, "llm.prompt")
 	llmSpan.SetAttributes(
 		attribute.String("gen_ai.operation.name", "chat"),
 		attribute.String("gen_ai.request.model", fmt.Sprintf("%v/%v", model.Provider, model.Name)),
-		attribute.String("gen_ai.system_instructions", req.SystemPrompt),
-		attribute.String("gen_ai.prompt", req.Query),
+		attribute.String("gen_ai.system_instructions", truncate(req.SystemPrompt, 4000)),
+		attribute.String("gen_ai.prompt", truncate(req.Query, 8000)),
 	)
 
 	res, err = llm.Prompt(prompt.AsUser(req.Query))
@@ -205,6 +240,7 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	if err != nil {
 		llmSpan.RecordError(err)
 		llmSpan.SetStatus(codes.Error, err.Error())
+		llmSpan.End()
 	} else {
 		llmSpan.SetAttributes(
 			attribute.Int("gen_ai.usage.input_tokens", res.Metadata.InputTokens),
@@ -219,7 +255,7 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	}
 
 	//tracer := otel.Tracer("toolman/nestful")
-	generated, content := nestfulGeneratedText(ctx, tracer, res, parsedTools, nameMap, outKeysByTool, req.JSExtractTimeoutMs)
+	generated, content := nestfulGeneratedText(llmCtx, tracer, res, parsedTools, nameMap, outKeysByTool, req.JSExtractTimeoutMs)
 	llmSpan.End()
 	writeJSON(w, http.StatusOK, NestfulBenchmarkResponse{
 		GeneratedText: generated,
@@ -312,7 +348,7 @@ func nestfulGeneratedText(ctx context.Context, tracer trace.Tracer, res *gen.Res
 	}
 	out := make([]map[string]any, 0)
 	errMsgs := make([]string, 0, 1)
-	for _, tc := range res.Tools {
+	for i, tc := range res.Tools {
 		if tc.Name == "code_execution" {
 			var codeArgs struct {
 				Code string `json:"code"`
@@ -338,6 +374,14 @@ func nestfulGeneratedText(ctx context.Context, tracer trace.Tracer, res *gen.Res
 
 		args := map[string]any{}
 		_ = json.Unmarshal(tc.Argument, &args)
+		_, toolSpan := tracer.Start(ctx, fmt.Sprintf("tool.call %s", tc.Name),
+			trace.WithAttributes(
+				attribute.String("gen_ai.tool.name", tc.Name),
+				attribute.String("gen_ai.tool.call.arguments", string(mustJSON(args))),
+				attribute.Int("index", i+1),
+			),
+		)
+		toolSpan.End()
 		name := tc.Name
 		if orig, ok := nameMap[name]; ok {
 			name = orig
@@ -358,6 +402,7 @@ func executeAndExtractNestful(
 	outKeysByTool map[string][]string,
 	timeoutMs int,
 ) ([]map[string]any, string) {
+	meta := extractMeta{GuardrailOK: false, CapturedCount: 0, CapturedJSONTrunc: ""}
 	vm := goja.New()
 	captured := make([]map[string]any, 0)
 
@@ -366,17 +411,20 @@ func executeAndExtractNestful(
 		return captured, fmt.Sprintf("code_execution guardrail error: %v", guardErr)
 	}
 
+	meta.GuardrailOK = true
+
 	timer := time.AfterFunc(time.Duration(timeoutMs)*time.Millisecond, func() {
 		vm.Interrupt("timeout")
 	})
 	defer timer.Stop()
 
-	_, execSpan := tracer.Start(ctx, "exec.goja")
+	execCtx, execSpan := tracer.Start(ctx, "exec.goja")
 	execSpan.SetAttributes(
 		attribute.String("exec.language", "javascript"),
 		attribute.Int("exec.script_len", len(guarded)),
-		attribute.String("input.value", guarded),
+		//attribute.String("input.value", guarded),
 		attribute.Int("exec.timeout_ms", timeoutMs),
+		attribute.String("exec.script.trunc", truncate(guarded, 4000)),
 	)
 
 	defer execSpan.End()
@@ -417,7 +465,8 @@ func executeAndExtractNestful(
 				"arguments": argsMap,
 			})
 
-			_, toolSpan := tracer.Start(ctx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
+			_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
+				attribute.String("gen_ai.operation.name", "execute_tool"),
 				attribute.String("gen_ai.tool.name", tName),
 				attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
 				attribute.Int("index", len(captured)),
@@ -652,4 +701,24 @@ func setupHttpLangfuse(ctx context.Context) (*sdktrace.TracerProvider, error) {
 	)
 	otel.SetTracerProvider(tp)
 	return tp, nil
+}
+
+func benchSampleID(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Test-Id")); v != "" {
+		return v
+	}
+	return fmt.Sprintf("%d-%s", time.Now().UnixMilli(), strings.ReplaceAll(r.RemoteAddr, ":", "_"))
+}
+
+func truncate(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return s[:max] + "...(truncated)"
+}
+
+func toolsDigest(rawTools []any) string {
+	b, _ := json.Marshal(rawTools)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
 }
