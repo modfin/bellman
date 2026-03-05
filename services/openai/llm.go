@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 )
 
@@ -116,12 +117,17 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			}
 
 			if ss.Usage != nil {
+				thinkingTokens := ss.Usage.CompletionTokensDetails.ReasoningTokens
+				outputTokens := ss.Usage.CompletionTokens - thinkingTokens
+				if outputTokens < 0 {
+					outputTokens = 0
+				}
 				m := &models.Metadata{
 					Model:          ss.Model,
 					InputTokens:    ss.Usage.PromptTokens,
-					OutputTokens:   ss.Usage.CompletionTokens,
-					ThinkingTokens: ss.Usage.CompletionTokensDetails.ReasoningTokens,
-					TotalTokens:    ss.Usage.TotalTokens,
+					OutputTokens:   outputTokens,
+					ThinkingTokens: thinkingTokens,
+					TotalTokens:    ss.Usage.PromptTokens + outputTokens + thinkingTokens,
 				}
 				if ss.ServiceTier != nil {
 					m.Other = map[string]any{"service_tier": *ss.ServiceTier}
@@ -245,13 +251,18 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:          g.request.Model.FQN(),
-			InputTokens:    respModel.Usage.PromptTokens,
-			OutputTokens:   respModel.Usage.CompletionTokens,
-			ThinkingTokens: respModel.Usage.CompletionTokensDetails.ReasoningTokens,
-			TotalTokens:    respModel.Usage.TotalTokens,
+			Model: g.request.Model.FQN(),
 		},
 	}
+	thinkingTokens := respModel.Usage.CompletionTokensDetails.ReasoningTokens
+	outputTokens := respModel.Usage.CompletionTokens - thinkingTokens
+	if outputTokens < 0 {
+		outputTokens = 0
+	}
+	res.Metadata.InputTokens = respModel.Usage.PromptTokens
+	res.Metadata.OutputTokens = outputTokens
+	res.Metadata.ThinkingTokens = thinkingTokens
+	res.Metadata.TotalTokens = respModel.Usage.PromptTokens + outputTokens + thinkingTokens
 	if respModel.ServiceTier != nil {
 		g.openai.log("[gen] prompt resp, service tier", "service_tier", *respModel.ServiceTier)
 		if res.Metadata.Other == nil {
@@ -412,6 +423,10 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 			if c.ToolCall == nil {
 				return nil, reqModel, fmt.Errorf("ToolCall is required for role tool call")
 			}
+			var jsonArguments map[string]any
+			if err := json.Unmarshal(c.ToolCall.Arguments, &jsonArguments); err != nil {
+				return nil, reqModel, fmt.Errorf("ToolCall.Arguments is not valid JSON object: %w", err)
+			}
 			messages = append(messages, genRequestMessageToolCalls{
 				Role: "assistant",
 				ToolCalls: []genRequestMessageToolCall{
@@ -420,7 +435,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 						Type: "function",
 						Function: genRequestMessageToolCallFunction{
 							Name:      c.ToolCall.Name,
-							Arguments: c.ToolCall.Arguments,
+							Arguments: jsonArguments,
 						},
 					},
 				},
@@ -454,7 +469,10 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		return nil, reqModel, fmt.Errorf("could not marshal open ai request, %w", err)
 	}
 
-	u := `https://api.openai.com/v1/chat/completions`
+	u, err := url.JoinPath(g.openai.getBaseURL(), "/v1/chat/completions")
+	if err != nil {
+		return nil, reqModel, fmt.Errorf("could not construct chat completions URL, %w", err)
+	}
 
 	ctx := g.request.Context
 	if ctx == nil {

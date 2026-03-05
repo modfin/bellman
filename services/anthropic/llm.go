@@ -124,23 +124,29 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			}
 
 			if ss.Usage != nil {
+				totalTokens := ss.Usage.InputTokens + ss.Usage.OutputTokens
 				stream <- &gen.StreamResponse{
 					Type: gen.TYPE_METADATA,
 					Metadata: &models.Metadata{
-						Model:        g.request.Model.Name,
-						InputTokens:  ss.Usage.InputTokens,
-						OutputTokens: ss.Usage.OutputTokens,
+						Model:          g.request.Model.Name,
+						InputTokens:    ss.Usage.InputTokens,
+						OutputTokens:   ss.Usage.OutputTokens,
+						ThinkingTokens: 0,
+						TotalTokens:    totalTokens,
 					},
 				}
 
 			}
 			if ss.Message != nil && (ss.Message.Usage.InputTokens != 0 || ss.Message.Usage.OutputTokens != 0) {
+				totalTokens := ss.Message.Usage.InputTokens + ss.Message.Usage.OutputTokens
 				stream <- &gen.StreamResponse{
 					Type: gen.TYPE_METADATA,
 					Metadata: &models.Metadata{
-						Model:        ss.Message.Model,
-						InputTokens:  ss.Message.Usage.InputTokens,
-						OutputTokens: ss.Message.Usage.OutputTokens,
+						Model:          ss.Message.Model,
+						InputTokens:    ss.Message.Usage.InputTokens,
+						OutputTokens:   ss.Message.Usage.OutputTokens,
+						ThinkingTokens: 0,
+						TotalTokens:    totalTokens,
 					},
 				}
 			}
@@ -271,10 +277,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:        g.request.Model.FQN(),
-			InputTokens:  respModel.Usage.InputTokens,
-			OutputTokens: respModel.Usage.OutputTokens,
-			TotalTokens:  respModel.Usage.InputTokens + respModel.Usage.OutputTokens,
+			Model:          g.request.Model.FQN(),
+			InputTokens:    respModel.Usage.InputTokens,
+			OutputTokens:   respModel.Usage.OutputTokens,
+			ThinkingTokens: 0,
+			TotalTokens:    respModel.Usage.InputTokens + respModel.Usage.OutputTokens,
 		},
 	}
 	for _, c := range respModel.Content {
