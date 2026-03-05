@@ -14,7 +14,7 @@ import (
 func main() {
 	// Create persistent cache and inject into handlers
 	bfclReplay := &bfcl.Cache{Replay: replay.NewCache()}
-	cfbReplay := &cfb.Replay{Replay: replay.NewCache()}
+	cfbReplay := &cfb.Cache{Replay: replay.NewCache()}
 
 	// Register API Endpoint
 	http.HandleFunc("/bfcl", MiddlewareDebugLogger("BFCL", bfclReplay.HandleGenerateBFCL))

@@ -254,8 +254,8 @@ func (c *Cache) getToolCalls(res *gen.Response, history []prompt.Prompt) ([]prom
 			log.Fatalf("error: %e", err)
 		}
 		assistant := prompt.AsAssistant(text)
-		c.trace(assistant, history, model)
 		// trace new assistant prompt
+		c.trace(assistant, history, model)
 		return []prompt.Prompt{assistant}, nil, nil, nil
 	}
 
@@ -400,7 +400,7 @@ func (c *Cache) addNewUserConversation(req BenchmarkRequest) []prompt.Prompt {
 				if err != nil {
 					log.Fatalf("error: %e", err)
 				}
-				// update turn index
+				// update turn index & trace
 				c.newTurn()
 				userPrompt := prompt.AsUser(m.Content)
 				c.trace(userPrompt, toolmanHistory, model)
@@ -447,8 +447,8 @@ func (c *Cache) appendResponseConversation(toolmanHistory []prompt.Prompt, req B
 						if err != nil {
 							log.Fatalf("error: %e", err)
 						}
-						responsePrompt := prompt.AsToolResponse(m.ToolID, m.ToolName, m.Content)
 						// trace tool response
+						responsePrompt := prompt.AsToolResponse(m.ToolID, m.ToolName, m.Content)
 						c.trace(responsePrompt, nil, model)
 						rebuiltConversation = append(rebuiltConversation, responsePrompt)
 						break
