@@ -73,7 +73,12 @@ func TestOpenTelemetry(t *testing.T) {
 	// create Bellman llm and run agent
 	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 	llm := client.Generator().System(system).Model(model).
-		SetTools(allTools...).SetPTCLanguage(tools.JavaScript).ThinkingBudget(100) //.Temperature(0)
+		SetTools(allTools...).ThinkingBudget(100) //.Temperature(0)
+
+	llm, err = llm.ActivatePTC(ptc.JavaScript)
+	if err != nil {
+		log.Fatalf("ptc conversion failed or not available: %e", err)
+	}
 
 	userPrompt := "1. Do you know what PTC is (programmatic tool calling), and how LLMs call tools? If yes; answer me which tool at your disposal is PTC. If no; why not?"
 	userPrompt += "2. Predict the future, 3. convert 69 usd to sek, and then 4. generate a secret password. "
@@ -231,7 +236,12 @@ func TestToolman(t *testing.T) {
 	// create Bellman llm and run agent
 	client := bellman.New(bellmanUrl, bellman.Key{Name: "test", Token: bellmanToken})
 	llm := client.Generator().System("# Role\nYou are a helpful LLM assistant.").
-		SetTools(allTools...).SetPTCLanguage(tools.JavaScript).ThinkingBudget(100) //.Temperature(0)
+		SetTools(allTools...).ThinkingBudget(100) //.Temperature(0)
+
+	llm, err = llm.ActivatePTC(ptc.JavaScript)
+	if err != nil {
+		log.Fatalf("ptc conversion failed or not available: %e", err)
+	}
 
 	userPrompt := "1. Do you know what PTC is (programmatic tool calling), and how LLMs call tools? If yes; answer me which tool at your disposal is PTC. If no; why not?"
 	userPrompt += "2. Predict the future, 3. convert 69 usd to sek, and then 4. generate a secret password. "

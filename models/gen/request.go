@@ -19,10 +19,10 @@ type Request struct {
 	OutputSchema *schema.JSON `json:"output_schema,omitempty"`
 	StrictOutput bool         `json:"output_strict,omitempty"`
 
-	Tools             []tools.Tool          `json:"tools,omitempty"`
-	ToolConfig        *tools.Tool           `json:"tool,omitempty"`
-	PTCLanguage       tools.ProgramLanguage `json:"ptc_language,omitempty"`
-	PTCSystemFragment string                `json:"ptc_system_fragment,omitempty"`
+	Tools             []tools.Tool `json:"tools,omitempty"`
+	PTCTools          []tools.Tool `json:"ptc_tools,omitempty"`
+	ToolConfig        *tools.Tool  `json:"tool,omitempty"`
+	PTCSystemFragment string       `json:"ptc_system_fragment,omitempty"`
 
 	ThinkingBudget *int  `json:"thinking_budget,omitempty"`
 	ThinkingParts  *bool `json:"thinking_parts,omitempty"`

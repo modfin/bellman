@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -206,7 +207,7 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 		MaxTokens(req.MaxTokens)
 
 	if req.EnablePTC {
-		llm = llm.SetPTCLanguage(tools.JavaScript)
+		llm, _ = llm.ActivatePTC(ptc.JavaScript)
 	}
 
 	switch choice {
@@ -406,7 +407,12 @@ func executeAndExtractNestful(
 	vm := goja.New()
 	captured := make([]map[string]any, 0)
 
-	guarded, guardErr := ptc.GuardRailJS(jsCode)
+	runtime, err := ptc.NewRuntime(ptc.JavaScript)
+	if err != nil {
+		log.Fatalf("error: %e", err)
+	}
+
+	guarded, guardErr := runtime.Guardrail(jsCode)
 	if guardErr != nil {
 		return captured, fmt.Sprintf("code_execution guardrail error: %v", guardErr)
 	}

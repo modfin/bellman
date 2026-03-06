@@ -172,8 +172,12 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 
 	llm := client.Generator().Model(model).
 		System(req.SystemPrompt).
-		SetTools(bellmanTools...).
-		SetPTCLanguage(tools.JavaScript) //.Temperature(req.Temperature)
+		SetTools(bellmanTools...) //.Temperature(req.Temperature)
+
+	llm, err = llm.ActivatePTC(ptc.JavaScript)
+	if err != nil {
+		log.Fatalf("error: %e", err)
+	}
 
 	res, err := llm.Prompt(toolmanConversation...)
 	if err != nil {

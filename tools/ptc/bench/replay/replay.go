@@ -13,7 +13,7 @@ import (
 )
 
 type Replay struct {
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	record  []CallRecord
 	Cursor  int
 	Scripts []Script
@@ -115,7 +115,11 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 	for i, s := range r.Scripts {
 		fmt.Printf("____ running script: %s\n", s.Code)
 
-		_, err := ptc.GuardRailJS(s.Code)
+		runtime, err := ptc.NewRuntime(ptc.JavaScript) // TODO use actual runtime for guardrails?
+		if err != nil {
+			log.Fatalf("error: %e", err)
+		}
+		code, err := runtime.Guardrail(s.Code)
 		if err != nil {
 			// Important: return JS error as JSON so LLM can see it AND set as done since we got a result! only once/script
 			if !s.Done {
@@ -124,7 +128,7 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 			}
 		}
 
-		val, err := vm.RunString(s.Code)
+		val, err := vm.RunString(code)
 		if err != nil {
 			// script crash, or intentional interrupt?
 			var jsErr *goja.InterruptedError

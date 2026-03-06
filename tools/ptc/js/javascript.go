@@ -1,4 +1,4 @@
-package ptc
+package js
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dop251/goja"
@@ -14,84 +15,59 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-// adaptToolsToJSPTC converts a list of Bellman tools into a single PTC tool with JS execution environment
-func adaptToolsToJSPTC(runtime *Runtime, inputTools []tools.Tool) (tools.Tool, string, error) {
-	var descriptions []string
+type JavaScript struct {
+	runtime  *goja.Runtime
+	mu       sync.Mutex
+	toolName string
+}
 
-	// register each tool in the VM and build docs
-	for _, t := range inputTools {
-		err := bindToolToJSVM(runtime, t)
+func NewRuntime(toolName string) *JavaScript {
+	return &JavaScript{
+		runtime:  goja.New(),
+		mu:       sync.Mutex{},
+		toolName: toolName,
+	}
+}
+
+func (j *JavaScript) Lock() {
+	j.mu.Lock()
+}
+
+func (j *JavaScript) Unlock() {
+	j.mu.Unlock()
+}
+
+// AdaptTools converts a list of Bellman tools into a single PTC tool with runtime execution environment
+func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
+	for _, t := range tool {
+		err := j.bindToolFunction(t)
 		if err != nil {
-			return tools.Tool{}, "", fmt.Errorf("error occurred: %w", err)
+			return tools.Tool{}, fmt.Errorf("error adapting tools to ptc: %w", err)
 		}
-		// create tool/function signature description
-		signature := formatToolSignature(t)
-		descriptions = append(descriptions, signature)
 	}
 
-	// define the schema for the PTC tool itself
 	type CodeArgs struct {
 		Code string `json:"code" json-description:"The executable top-level JavaScript code string."`
 	}
-
-	// create the execution function
-	executor := func(ctx context.Context, call tools.Call) (resString string, err error) {
+	executor := func(ctx context.Context, call tools.Call) (string, error) {
 		var arg CodeArgs
 		if err := json.Unmarshal(call.Argument, &arg); err != nil {
 			return "", err
 		}
 
-		code, err := GuardRailJS(arg.Code) // TODO: remove this/guarded tool call or let llm decide?
+		code, err := j.Guardrail(arg.Code)
 		if err != nil {
 			return err.Error(), nil
 		}
 
-		// panic recovery
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("Critical Panic in Goja: %v\n", r)
-				// Return error to the LLM so it can attempt a fix
-				resString = fmt.Sprintf(`{"error": "critical JS panic: %v"}`, r)
-				err = nil
-			}
-		}()
-
-		// timeout interrupt
-		timer := time.AfterFunc(5*time.Second, func() {
-			log.Printf("error: JS timeout interrupt!")
-			runtime.JS.Interrupt("timeout: script execution took too long (possible infinite loop)")
-		})
-		defer timer.Stop()
-
-		// lock access to VM
-		runtime.Mutex.Lock()
-		defer runtime.Mutex.Unlock()
-
-		// execute JS - Note: vm.RunString returns the value of the LAST evaluated expression automatically!
-		res, err := runtime.JS.RunString(code)
-		if err != nil {
-			// Important: return error as JSON so LLM can see it
-			return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
-		}
-
-		// Export result and marshal - If the LLM returned nothing, res is undefined, which marshals to null
-		var jsonBytes []byte
-		if res == nil || goja.IsUndefined(res) {
-			jsonBytes = []byte("null")
-		} else {
-			jsonBytes, err = json.Marshal(res.Export())
-			if err != nil {
-				return "", err
-			}
-		}
-		return string(jsonBytes), nil
+		return j.Execute(code)
 	}
 
 	// tool documentation fragment
-	docsFragment := strings.Join(descriptions, "\n\n")
+	fragment := docsFragment(tool...)
 
 	// create the final PTC tool
-	ptcTool := tools.NewTool(CodeExecutionToolName,
+	ptcTool := tools.NewTool(j.toolName,
 		tools.WithDescription(`Execute top-level JavaScript in a persistent Goja runtime to call available Tool Functions.
 
 Use this tool ONLY when external Tool Functions are required to fetch or interact with data.
@@ -114,73 +90,114 @@ RULES:
 
 Available JavaScript Tool Functions inside the runtime:`+
 			"\n\n"+
-			docsFragment,
+			fragment,
 		),
 		tools.WithArgSchema(CodeArgs{}),
 		tools.WithFunction(executor),
 	)
 
-	// create PTC system prompt fragment with tools
-	systemFragment := "\n\n" + getSystemFragmentJS() +
-		"\n## Available JavaScript Tool Functions inside the runtime:\n\n" +
-		docsFragment
-
-	return ptcTool, systemFragment, nil
+	return ptcTool, nil
 }
 
-// bindToolToVM wraps a Bellman tool as a JS function: toolName({ args... })
-func bindToolToJSVM(runtime *Runtime, t tools.Tool) error {
-	vm := runtime.JS
+// bindToolFunction wraps a Bellman tool as a runtime function: toolName({ args... })
+func (j *JavaScript) bindToolFunction(tool tools.Tool) error {
 	wrapper := func(call goja.FunctionCall) goja.Value {
 		// check if LLM passed multiple arguments (common mistake)
 		if len(call.Arguments) > 1 {
 			errMsg := fmt.Sprintf("Error: %s expects a single configuration object argument, but received %d arguments. Usage: %s({ key: val })",
-				t.Name, len(call.Arguments), t.Name)
-			return vm.ToValue(map[string]string{"error": errMsg})
+				tool.Name, len(call.Arguments), tool.Name)
+			return j.runtime.ToValue(map[string]string{"error": errMsg})
 		}
 
-		// extract JS argument (expecting a single object)
+		// extract runtime argument (expecting a single object)
 		if len(call.Arguments) == 0 {
-			return vm.NewGoError(fmt.Errorf("tool %s requires arguments", t.Name))
+			return j.runtime.NewGoError(fmt.Errorf("tool %s requires arguments", tool.Name))
 		}
 		jsArgs := call.Argument(0).Export()
 
 		// marshal args to JSON for the Bellman tool
 		jsonArgs, err := json.Marshal(jsArgs)
 		if err != nil {
-			return vm.NewGoError(err)
+			return j.runtime.NewGoError(err)
 		}
 
 		// execute the actual go tool
 		// TODO: pass real context if available
-		res, err := t.Function(context.Background(), tools.Call{
+		res, err := tool.Function(context.Background(), tools.Call{
 			Argument: jsonArgs,
 		})
 		if err != nil {
 			// return error string directly so the LLM can self-correct, e.g., "json: cannot unmarshal number..."
-			return vm.ToValue(map[string]any{"ok": false, "error": err.Error()})
+			return j.runtime.ToValue(map[string]any{"ok": false, "error": err.Error()})
 		}
 
-		// unmarshal result back to JS object if possible
+		// unmarshal result back to runtime object if possible
 		var parsed interface{}
 		if err := json.Unmarshal([]byte(res), &parsed); err == nil {
-			return vm.ToValue(parsed)
+			return j.runtime.ToValue(parsed)
 		}
 
 		// otherwise return raw string
-		return vm.ToValue(res)
+		return j.runtime.ToValue(res)
 	}
 
-	// lock access to VM
-	runtime.Mutex.Lock()
-	defer runtime.Mutex.Unlock()
+	j.Lock()
+	defer j.Unlock()
 
-	err := vm.Set(t.Name, wrapper)
+	err := j.runtime.Set(tool.Name, wrapper)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// Execute runs a code script in the runtime, uses same error handling as LLM (runtime errors return string!)
+func (j *JavaScript) Execute(code string) (resString string, err error) {
+	j.Lock()
+	defer j.Unlock()
+
+	// panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("error: runtime panic! recovering.")
+			resString = fmt.Sprintf(`{"error": "critical runtime panic: %v"}`, r)
+			err = nil
+		}
+	}()
+
+	// timeout interrupt
+	timer := time.AfterFunc(10*time.Second, func() {
+		log.Printf("error: runtime timeout interrupt!")
+		j.runtime.Interrupt("timeout: script execution took too long (possible infinite loop)")
+	})
+	defer timer.Stop()
+
+	res, err := j.runtime.RunString(code)
+	if err != nil {
+		return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
+	}
+
+	var jsonBytes []byte
+	if res == nil || goja.IsUndefined(res) {
+		return "null", nil
+	}
+
+	jsonBytes, err = json.Marshal(res.Export())
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonBytes), nil
+}
+
+func docsFragment(tool ...tools.Tool) string {
+	var descriptions []string
+	for _, t := range tool {
+		signature := formatToolSignature(t)
+		descriptions = append(descriptions, signature)
+	}
+	return strings.Join(descriptions, "\n\n")
 }
 
 type ArgField struct {
@@ -327,42 +344,38 @@ func SchemaToTS(s *schema.JSON) string {
 	}
 }
 
-// GuardRailJS guardrails code before exec; important since LLMs trained for diff. coding objectives
-func GuardRailJS(code string) (string, error) { // TODO: add more/update guardrails
+// Guardrail guardrails code before exec; important since LLMs trained for diff. coding objectives
+func (j *JavaScript) Guardrail(code string) (string, error) { // TODO: add more/update guardrails
 	if code == "" {
+		log.Printf("[PTC] Blocked empty code attempt\n")
 		errMsg := "no javascript code provided. validate tool input arguments, required format: '{\"code\": string}'." // TODO: string format
-		fmt.Printf("[PTC] Blocked empty code attempt\n")
 		return code, fmt.Errorf("error: %s", errMsg)
 	}
 
-	// no longer relevant for stateful vm!
-	//if strings.Contains(code, "return") && !strings.HasPrefix(strings.TrimSpace(code), "(function") {
-	//	code = fmt.Sprintf("(function() { %s })()", code)
-	//}
-
 	if strings.Contains(code, "print( ") || strings.Contains(code, "console.log(") {
+		log.Printf("[PTC] Blocked log attempt\n")
 		errMsg := "RuntimeError: Log functions (e.g., 'console.log' or 'print') are strictly FORBIDDEN in this environment. You must use return data via the function return only. Rewrite the code immediately."
-		fmt.Printf("[PTC] Blocked log attempt\n")
 		return code, fmt.Errorf("error: %s", errMsg)
 	}
 
 	if strings.Contains(code, "async ") || strings.Contains(code, "await") || strings.Contains(code, "async(") {
+		log.Printf("[PTC] Blocked async code attempt\n")
 		errMsg := "RuntimeError: Async functions are strictly FORBIDDEN in this environment. You must use synchronous, blocking calls (e.g., 'const x = tool()', NOT 'await tool()'). Rewrite the code immediately."
-		fmt.Printf("[PTC] Blocked async code attempt\n")
 		return code, fmt.Errorf("error: %s", errMsg)
 	}
 	return code, nil
 }
 
-func getSystemFragmentJS() string {
-	return strings.ReplaceAll(`Your are an LLM-based AI Agent enhanced with Programmatic Tool-Calling (PTC).
+// TODO replace with template
+func (j *JavaScript) SystemFragment(tool ...tools.Tool) string {
+	system := strings.ReplaceAll(`Your are an LLM-based AI Agent enhanced with Programmatic Tool-Calling (PTC).
 The PTC tool at your disposal is the '{ptc_tool_name}' tool, use it to interact with data!
 
 Tool calls can be costly, use only when necessary to fetch or interact with data, and write compact code.
 
-# JavaScript Runtime (Goja) - Accessible through '{ptc_tool_name}' Tool
+# JavaScript runtime (Goja) - Accessible through '{ptc_tool_name}' Tool
 
-- Write standard top-level JS. No async/await, no logging.
+- Write standard top-level runtime. No async/await, no logging.
 - Variables persist across turns. Use 'var' (do not redeclare let/const).
 - The LAST evaluated expression is returned automatically. NEVER use 'return;' or var assignment on last line.
 - Final line: Variable assignments evaluate to null. Your script MUST end with an object (e.g., '({a, b});') to successfully return data.
@@ -398,5 +411,8 @@ Do NOT call the tool again unless new information is required.
 
 # Respond the User
 When you have completed the task, you MUST respond the users request directly in text!
-`, "{ptc_tool_name}", CodeExecutionToolName)
+`, "{ptc_tool_name}", j.toolName)
+
+	// create PTC system prompt fragment with tools
+	return "\n" + system + "\n## Available JavaScript Tool Functions inside the runtime:\n\n" + docsFragment(tool...)
 }
