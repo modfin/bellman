@@ -13,7 +13,7 @@ type Runtime interface {
 	SystemFragment(tool ...tools.Tool) string
 	Lock()
 	Unlock()
-	Execute(code string) (string, error)
+	Execute(code string) (string, error, error)
 }
 
 type ProgramLanguage string
@@ -25,13 +25,13 @@ const (
 )
 
 const (
-	CodeExecutionToolName string = "code_execution"
+	PTCToolName string = "code_execution"
 )
 
 func NewRuntime(lang ProgramLanguage) (Runtime, error) {
 	switch lang {
 	case JavaScript:
-		return js.NewRuntime(CodeExecutionToolName), nil
+		return js.NewRuntime(PTCToolName), nil
 	}
 	return nil, fmt.Errorf("language unsupported: %s", lang)
 }

@@ -156,8 +156,8 @@ func (b *Generator) ActivatePTC(lang ptc.ProgramLanguage) (*Generator, error) {
 	if err != nil {
 		return nil, err
 	}
+	bb.Request.PTCSystemFragment = bb.Runtime.SystemFragment(bb.Tools()...) // add system prompt before PTC tool!
 	bb = bb.AddTools(tool)
-	bb.Request.PTCSystemFragment = bb.Runtime.SystemFragment(bb.Tools()...)
 	return bb, err
 }
 

@@ -67,7 +67,8 @@ func TestOpenTelemetry(t *testing.T) {
 		attribute.String("gen_ai.system_instructions", system),
 	)
 
-	allTools := GetMockBellmanTools(true)
+	enablePTC := true
+	allTools := GetMockBellmanTools(enablePTC)
 	model := openai.GenModel_gpt5_mini_latest
 
 	// create Bellman llm and run agent
@@ -75,9 +76,8 @@ func TestOpenTelemetry(t *testing.T) {
 	llm := client.Generator().System(system).Model(model).
 		SetTools(allTools...).ThinkingBudget(100) //.Temperature(0)
 
-	llm, err = llm.ActivatePTC(ptc.JavaScript)
-	if err != nil {
-		log.Fatalf("ptc conversion failed or not available: %e", err)
+	if enablePTC {
+		llm, _ = llm.ActivatePTC(ptc.JavaScript)
 	}
 
 	userPrompt := "1. Do you know what PTC is (programmatic tool calling), and how LLMs call tools? If yes; answer me which tool at your disposal is PTC. If no; why not?"
@@ -229,7 +229,8 @@ func TestToolman(t *testing.T) {
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
-	allTools := GetMockBellmanTools(true)
+	enablePTC := true
+	allTools := GetMockBellmanTools(enablePTC)
 	models := []gen.Model{openai.GenModel_gpt4o_mini, vertexai.GenModel_gemini_2_5_flash_latest, anthropic.GenModel_3_haiku_20240307}
 	models = []gen.Model{openai.GenModel_gpt5_mini_latest}
 
@@ -238,9 +239,8 @@ func TestToolman(t *testing.T) {
 	llm := client.Generator().System("# Role\nYou are a helpful LLM assistant.").
 		SetTools(allTools...).ThinkingBudget(100) //.Temperature(0)
 
-	llm, err = llm.ActivatePTC(ptc.JavaScript)
-	if err != nil {
-		log.Fatalf("ptc conversion failed or not available: %e", err)
+	if enablePTC {
+		llm, _ = llm.ActivatePTC(ptc.JavaScript)
 	}
 
 	userPrompt := "1. Do you know what PTC is (programmatic tool calling), and how LLMs call tools? If yes; answer me which tool at your disposal is PTC. If no; why not?"
@@ -510,7 +510,7 @@ func TestMockPTC(t *testing.T) {
 		return string(jsonBytes), nil
 	}
 
-	codeExecution := tools.NewTool(ptc.CodeExecutionToolName,
+	codeExecution := tools.NewTool(ptc.PTCToolName,
 		tools.WithDescription(
 			"MANDATORY: You must write executable JavaScript code. "+
 				"Executes JS code. Environment has: Sum(a,b), askBellman(url,token,prompt), and CONFIG object. "+

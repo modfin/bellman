@@ -10,6 +10,7 @@ import (
 	"github.com/dop251/goja"
 	"github.com/modfin/bellman/tools"
 	"github.com/modfin/bellman/tools/ptc"
+	"github.com/modfin/bellman/tools/ptc/js"
 )
 
 type Replay struct {
@@ -91,21 +92,16 @@ func (r *Replay) IsPending() bool {
 
 // ExecutionReplay reruns code script until finish or error --> let llm decide next step (return response or fix error)
 // Returns a recorded (tool) call, code execution result, or error
+// important: if JS errors, let LLM see it (return as string)
 func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 
 	// Destroy state! Create a new VM for every single replay (prevent unexpected errors)
-	vm := goja.New()
+	runtime := js.NewRuntime(ptc.PTCToolName)
 	r.Replay()
-
-	//// fix: Inject deterministic overrides to prevent the LLM from branching randomly TODO is this needed?!
-	//vm.RunString(`
-	//		Math.random = function() { return 0.42; };
-	//		Date.now = function() { return 1708682816000; };
-	//	`)
 
 	// Inject our cached tools into the VM, and add interrupt on new tool calls
 	for _, t := range tools {
-		err := interceptCall(vm, r, t)
+		err := interceptCall(runtime.Runtime(), r, t)
 		if err != nil {
 			return Result{Error: err}
 		}
@@ -115,35 +111,26 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 	for i, s := range r.Scripts {
 		fmt.Printf("____ running script: %s\n", s.Code)
 
-		runtime, err := ptc.NewRuntime(ptc.JavaScript) // TODO use actual runtime for guardrails?
+		res, resErr, err := runtime.Execute(s.Code)
 		if err != nil {
-			log.Fatalf("error: %e", err)
-		}
-		code, err := runtime.Guardrail(s.Code)
-		if err != nil {
-			// Important: return JS error as JSON so LLM can see it AND set as done since we got a result! only once/script
-			if !s.Done {
-				r.Scripts[i].Done = true // use index to access actual object
-				return Result{Output: fmt.Sprintf("error: %q", err.Error()), ToolID: s.ToolID}
-			}
+			return Result{Error: err}
 		}
 
-		val, err := vm.RunString(code)
-		if err != nil {
-			// script crash, or intentional interrupt?
+		// runtime error
+		if resErr != nil {
+			// intentional interrupt?
 			var jsErr *goja.InterruptedError
-			if errors.As(err, &jsErr) {
+			if errors.As(resErr, &jsErr) {
 				if record, isYield := jsErr.Value().(*CallRecord); isYield {
 					// new tool call!
 					fmt.Printf("Yielding to Benchmark for: %s...\n", record.ToolName)
-
 					return Result{Record: record, ToolID: s.ToolID}
 				}
 			}
-			// Important: return JS error as JSON so LLM can see it AND set as done since we got a result! only once/script
+			// script crash
 			if !s.Done {
-				r.Scripts[i].Done = true // use index to access actual object
-				return Result{Output: fmt.Sprintf("error: %q", err.Error()), ToolID: s.ToolID}
+				r.Scripts[i].Done = true // index to access actual object
+				return Result{Output: fmt.Sprintf("error: %q", resErr.Error()), ToolID: s.ToolID}
 			}
 		}
 
@@ -152,18 +139,8 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 		// return response if first script completion, and set done
 		if !s.Done {
 			r.Scripts[i].Done = true // use index to access actual object
-			// Safely convert final Goja value to JSON string!
-			var jsonBytes []byte
-			if val == nil || goja.IsUndefined(val) {
-				jsonBytes = []byte("null")
-			} else {
-				jsonBytes, err = json.Marshal(val.Export())
-				if err != nil {
-					return Result{Error: err}
-				}
-			}
-			fmt.Printf("=== script output: %s\n", string(jsonBytes))
-			return Result{Output: string(jsonBytes), ToolID: s.ToolID}
+			fmt.Printf("=== script output: %s\n", res)
+			return Result{Output: res, ToolID: s.ToolID}
 		}
 	}
 	log.Printf("already replayed scripts") // TODO should this be allowed?

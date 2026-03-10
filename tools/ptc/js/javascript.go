@@ -3,8 +3,9 @@ package js
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -19,14 +20,17 @@ type JavaScript struct {
 	runtime  *goja.Runtime
 	mu       sync.Mutex
 	toolName string
+	console  *ConsoleOutput
+	Log      *slog.Logger `json:"-"`
 }
 
 func NewRuntime(toolName string) *JavaScript {
-	return &JavaScript{
+	javaScript := &JavaScript{
 		runtime:  goja.New(),
 		mu:       sync.Mutex{},
 		toolName: toolName,
 	}
+	return javaScript.registerConsole()
 }
 
 func (j *JavaScript) Lock() {
@@ -36,6 +40,19 @@ func (j *JavaScript) Lock() {
 func (j *JavaScript) Unlock() {
 	j.mu.Unlock()
 }
+
+func (j *JavaScript) Runtime() *goja.Runtime {
+	return j.runtime
+}
+
+func (j *JavaScript) log(msg string, args ...any) {
+	if j.Log == nil {
+		return
+	}
+	j.Log.Debug("[bellman/javascript] "+msg, args...)
+}
+
+const nilValue string = "null" // nil in JS
 
 // AdaptTools converts a list of Bellman tools into a single PTC tool with runtime execution environment
 func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
@@ -55,12 +72,17 @@ func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
 			return "", err
 		}
 
-		code, err := j.Guardrail(arg.Code)
+		res, resErr, err := j.Execute(arg.Code)
 		if err != nil {
-			return err.Error(), nil
+			return res, err
 		}
 
-		return j.Execute(code)
+		// return error string to LLM
+		if resErr != nil {
+			return fmt.Sprintf(`{"error": %q}`, resErr.Error()), err
+		}
+
+		return res, err
 	}
 
 	// tool documentation fragment
@@ -68,29 +90,27 @@ func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
 
 	// create the final PTC tool
 	ptcTool := tools.NewTool(j.toolName,
-		tools.WithDescription(`Execute top-level JavaScript in a persistent Goja runtime to call available Tool Functions.
+		tools.WithDescription(
+			strings.ReplaceAll(`Execute top-level JavaScript in a persistent Goja runtime to call available Tool Functions.
 
-Use this tool ONLY when external Tool Functions are required to fetch or interact with data.
-The user CANNOT see this tool's output — you must respond to them in normal text output.
-
-DEFAULT USAGE (REQUIRED): Write ONE complete batch script that performs all needed Function calls. Do NOT call Tool Functions one-by-one across turns.
-
-REPL is allowed ONLY if:
-- A Function returns /* Unknown Schema */
-AND
-- Another Function strictly requires a specific field from that result.
+RETURN: Always end with an explicit 'return' statement.
+  return { a, b };          ✓
+  return result;            ✓
+  var x = result;           ✗  (returns nothing)
 
 RULES:
-- At most ONE script per turn.
+- Synchronous only. No async/await.
+- Variables persist. Use 'var', do not redeclare let/const.
+- ONE script per turn. Batch all independent calls.
 - Never call the same Function twice with identical arguments.
-- Variables persist. Use 'var' or reassign (do not redeclare let/const).
-- The LAST evaluated expression is returned automatically. NEVER use 'return;' or var assignment on last line.
-- Final line: Variable assignments evaluate to null. Your script MUST end with an object (e.g., '({a, b});') to successfully return data.
-- Synchronous only. No async/await or external APIs.
 
-Available JavaScript Tool Functions inside the runtime:`+
-			"\n\n"+
-			fragment,
+REPL exception: only yield if a Function returns /* Unknown Schema */
+AND the next Function strictly requires a field from that result.
+
+Available Tool Functions:
+
+{fragment}
+`, "{fragment}", fragment),
 		),
 		tools.WithArgSchema(CodeArgs{}),
 		tools.WithFunction(executor),
@@ -153,42 +173,86 @@ func (j *JavaScript) bindToolFunction(tool tools.Tool) error {
 }
 
 // Execute runs a code script in the runtime, uses same error handling as LLM (runtime errors return string!)
-func (j *JavaScript) Execute(code string) (resString string, err error) {
+func (j *JavaScript) Execute(code string) (resString string, resErr error, err error) {
+	code, resErr = j.Guardrail(code)
+	if resErr != nil {
+		return "", resErr, nil
+	}
+	j.console.Last = "" // reset console output each execution
+
 	j.Lock()
 	defer j.Unlock()
 
 	// panic recovery
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("error: runtime panic! recovering.")
-			resString = fmt.Sprintf(`{"error": "critical runtime panic: %v"}`, r)
+			j.log("error: runtime panic! recovering.")
+			resErr = fmt.Errorf("critical runtime panic: %v", r)
 			err = nil
 		}
 	}()
 
 	// timeout interrupt
 	timer := time.AfterFunc(10*time.Second, func() {
-		log.Printf("error: runtime timeout interrupt!")
+		j.log("error: runtime timeout interrupt!")
 		j.runtime.Interrupt("timeout: script execution took too long (possible infinite loop)")
 	})
 	defer timer.Stop()
 
-	res, err := j.runtime.RunString(code)
-	if err != nil {
-		return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
+	res, resErr := j.runtime.RunString(code)
+	if resErr != nil {
+		return "", resErr, nil
 	}
 
 	var jsonBytes []byte
 	if res == nil || goja.IsUndefined(res) {
-		return "null", nil
+		return nilValue, nil, nil
 	}
 
 	jsonBytes, err = json.Marshal(res.Export())
 	if err != nil {
-		return "", err
+		return "", nil, err
+	}
+	result := string(jsonBytes)
+
+	if j.console.Last != "" && result == nilValue { // if no return expression; fallback to last console.log
+		return j.console.Last, nil, nil
 	}
 
-	return string(jsonBytes), nil
+	return string(jsonBytes), nil, nil
+}
+
+type ConsoleOutput struct {
+	Last string
+}
+
+func (j *JavaScript) registerConsole() *JavaScript {
+	out := &ConsoleOutput{}
+
+	makeLogger := func(level string) func(goja.FunctionCall) goja.Value {
+		return func(call goja.FunctionCall) goja.Value {
+			parts := make([]string, len(call.Arguments))
+			for i, arg := range call.Arguments {
+				parts[i] = fmt.Sprintf("%v", arg.Export())
+			}
+			msg := strings.Join(parts, " ")
+			j.log(msg, "level", level)
+			out.Last = msg
+			return goja.Undefined()
+		}
+	}
+
+	console := j.runtime.NewObject()
+	console.Set("log", j.runtime.ToValue(makeLogger("log")))
+	console.Set("info", j.runtime.ToValue(makeLogger("info")))
+	console.Set("warn", j.runtime.ToValue(makeLogger("warn")))
+	console.Set("error", j.runtime.ToValue(makeLogger("error")))
+
+	j.runtime.Set("console", console)
+	j.runtime.Set("print", j.runtime.ToValue(makeLogger("print")))
+
+	j.console = out
+	return j
 }
 
 func docsFragment(tool ...tools.Tool) string {
@@ -345,74 +409,74 @@ func SchemaToTS(s *schema.JSON) string {
 }
 
 // Guardrail guardrails code before exec; important since LLMs trained for diff. coding objectives
-func (j *JavaScript) Guardrail(code string) (string, error) { // TODO: add more/update guardrails
+func (j *JavaScript) Guardrail(code string) (string, error) {
 	if code == "" {
-		log.Printf("[PTC] Blocked empty code attempt\n")
-		errMsg := "no javascript code provided. validate tool input arguments, required format: '{\"code\": string}'." // TODO: string format
-		return code, fmt.Errorf("error: %s", errMsg)
-	}
-
-	if strings.Contains(code, "print( ") || strings.Contains(code, "console.log(") {
-		log.Printf("[PTC] Blocked log attempt\n")
-		errMsg := "RuntimeError: Log functions (e.g., 'console.log' or 'print') are strictly FORBIDDEN in this environment. You must use return data via the function return only. Rewrite the code immediately."
-		return code, fmt.Errorf("error: %s", errMsg)
+		j.log("guardrail empty code")
+		return code, errors.New("no javascript code provided. validate tool input arguments, required format: '{\"code\": string}'")
 	}
 
 	if strings.Contains(code, "async ") || strings.Contains(code, "await") || strings.Contains(code, "async(") {
-		log.Printf("[PTC] Blocked async code attempt\n")
-		errMsg := "RuntimeError: Async functions are strictly FORBIDDEN in this environment. You must use synchronous, blocking calls (e.g., 'const x = tool()', NOT 'await tool()'). Rewrite the code immediately."
-		return code, fmt.Errorf("error: %s", errMsg)
+		j.log("guardrail async code")
+		return code, errors.New("runtime error: async functions are unavailable in this runtime. must use synchronous, blocking calls (e.g., 'var x = tool()')")
 	}
-	return code, nil
+
+	if !strings.Contains(code, "return ") {
+		j.log("guardrail no return expression")
+		return code, errors.New("runtime error: script must end with an explicit 'return <expression>' statement. variable assignments and bare expressions do not return data")
+	}
+
+	// ensure IIFE to enable return expression
+	return "(function() {\n" + code + "\n})()", nil
 }
 
 // TODO replace with template
 func (j *JavaScript) SystemFragment(tool ...tools.Tool) string {
-	system := strings.ReplaceAll(`Your are an LLM-based AI Agent enhanced with Programmatic Tool-Calling (PTC).
-The PTC tool at your disposal is the '{ptc_tool_name}' tool, use it to interact with data!
+	system := strings.ReplaceAll(`You have access to Programmatic Tool-Calling (PTC).
+Use the '{ptc_tool_name}' tool to interact with external data and functions.
+Tool calls can be costly — use only when necessary, write compact code.
 
-Tool calls can be costly, use only when necessary to fetch or interact with data, and write compact code.
+# JavaScript Runtime (Goja)
 
-# JavaScript runtime (Goja) - Accessible through '{ptc_tool_name}' Tool
+Your code runs inside a function body — use 'return' to return the final result.
 
-- Write standard top-level runtime. No async/await, no logging.
+- Synchronous only. No async/await.
 - Variables persist across turns. Use 'var' (do not redeclare let/const).
-- The LAST evaluated expression is returned automatically. NEVER use 'return;' or var assignment on last line.
-- Final line: Variable assignments evaluate to null. Your script MUST end with an object (e.g., '({a, b});') to successfully return data.
-- Tool Functions are deterministic. NEVER call a Function twice with identical arguments. Read your history.
+- You MUST return data explicitly: 'return { a, b };'
+- Tool Functions are deterministic. Never call the same Function with identical arguments twice.
 
 ## When To Use This Tool
-Use '{ptc_tool_name}' ONLY if external Tool Functions are required.
-If the request can be answered with reasoning or general knowledge → respond user directly in plain text (do NOT call the tool).
 
-## Default Execution Strategy — SINGLE BATCH (Required)
-Before writing code, determine if intermediate outputs are strictly required. 
-Your default behavior MUST be to write the entire solution in a SINGLE script. Batch all independent Function calls together.
+Use '{ptc_tool_name}' ONLY when external Tool Functions are required.
+If the request can be answered with reasoning or general knowledge, respond directly.
 
-Example (Correct Default Strategy):
-var user = searchUsers({ query: "john" }); // returns 'unknown'
-var emailSent = sendEmail({ body: "Hello, let's meet." }); // returns 'boolean'
-({user, emailSent}); // Returns both results in a single object. No need to yield/pause.
+## Execution Strategy
 
-### The ONLY Exception: REPL Yielding
-Use REPL IF AND ONLY IF:
-1) Function A returns /* Unknown Schema */, AND
-2) Another Function B strictly requires a specific field from A’s result.
+Default: write ONE complete batch script. Call all independent Functions together.
+`+"```javascript"+`
+var user = searchUsers({ query: "john" });
+var weather = getWeather({ city: "Stockholm" });
+return { user, weather };
+`+"```"+`
 
-Yield control (STOP) IF AND ONLY IF Function A has an /* Unknown Schema */ AND Function B strictly requires a property from Function A's output.
-Execute Function A, put its result on the last line, and STOP. DO NOT guess property names.
+### Exception: REPL Yielding
 
-## Finishing the Task (CRITICAL)
-This tool ONLY fetches and interacts with data. The user CANNOT see the output of this tool. 
-When you have the final answer, you MUST STOP using '{ptc_tool_name}'. 
-To finish, YOU MUST write a normal, plain-text conversational response to the user.
+ONLY yield across turns if:
+1. Function A returns /* Unknown Schema */, AND
+2. Function B strictly requires a specific field from A's result.
 
-Do NOT call the tool again unless new information is required.
+In that case: execute A, return its result, and STOP. Do not guess field names. Wait for the result.
 
-# Respond the User
-When you have completed the task, you MUST respond the users request directly in text!
+# Finishing
+
+This tool's output is NOT visible to the user.
+Once you have the data you need, STOP calling the tool and respond to the user in plain text.
 `, "{ptc_tool_name}", j.toolName)
 
 	// create PTC system prompt fragment with tools
 	return "\n" + system + "\n## Available JavaScript Tool Functions inside the runtime:\n\n" + docsFragment(tool...)
+}
+
+func (j *JavaScript) SetLogger(logger *slog.Logger) *JavaScript {
+	j.Log = logger
+	return j
 }

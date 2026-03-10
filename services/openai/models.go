@@ -37,6 +37,12 @@ var GenModel_gpt5_mini_latest = gen.Model{
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
 }
+var GenModel_gpt5_mini_250807 = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5-mini-2025-08-07",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
 var GenModel_gpt5_nano_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5-nano",
