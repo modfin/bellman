@@ -2,60 +2,51 @@ package ptc
 
 import (
 	"fmt"
-	"sync"
 
-	"github.com/dop251/goja"
 	"github.com/modfin/bellman/tools"
+	"github.com/modfin/bellman/tools/ptc/js"
 )
 
-type Runtime struct {
-	Mutex sync.Mutex // Only one operator at a time --> prevent unexpected concurrency runtime errors
-	JS    *goja.Runtime
-	// Python *python.Environment <-- other code exec vm envs.
+type Runtime interface {
+	AdaptTools(tools []tools.Tool) (tools.Tool, error)
+	Guardrail(code string) (string, error)
+	SystemFragment(tool ...tools.Tool) string
+	Lock()
+	Unlock()
+	Execute(code string) (string, error, error)
 }
+
+type ProgramLanguage string
 
 const (
-	CodeExecutionToolName string = "code_execution"
+	JavaScript ProgramLanguage = "javascript"
+	Python     ProgramLanguage = "python"
+	Lua        ProgramLanguage = "lua"
 )
 
-// IsPTCEnabled checks if there is a tool with PTC enabled (as PTC is set per tool)
-func IsPTCEnabled(inputTools []tools.Tool) bool {
-	for _, t := range inputTools {
-		if t.UsePTC {
-			return true
-		}
+const (
+	PTCToolName string = "code_execution"
+)
+
+func NewRuntime(lang ProgramLanguage) (Runtime, error) {
+	switch lang {
+	case JavaScript:
+		return js.NewRuntime(PTCToolName), nil
 	}
-	return false
+	return nil, fmt.Errorf("language unsupported: %s", lang)
 }
 
-// ExtractPTCTools separates regular tools from PTC tools and returns both slices
-func ExtractPTCTools(inputTools []tools.Tool) ([]tools.Tool, []tools.Tool) {
+// SplitTools separates regular tools from PTC tools and returns both slices
+func SplitTools(inputTools []tools.Tool) ([]tools.Tool, []tools.Tool) {
 	var regularTools []tools.Tool
 	var ptcTools []tools.Tool
 
-	// get PTC enabled tools
 	for _, t := range inputTools {
 		if t.UsePTC {
 			ptcTools = append(ptcTools, t)
-		} else {
-			regularTools = append(regularTools, t)
+			continue
 		}
+		regularTools = append(regularTools, t)
 	}
 	return regularTools, ptcTools
-}
-
-// AdaptToolsToPTC converts a list of Bellman tools into a single PTC tool with code execution environment
-func AdaptToolsToPTC(runtime *Runtime, ptcTools []tools.Tool, language tools.ProgramLanguage) (tools.Tool, string, error) {
-	switch language {
-	case tools.JavaScript:
-		return adaptToolsToJSPTC(runtime, ptcTools)
-	case tools.Python:
-		return tools.Tool{}, "", fmt.Errorf("ptc python not implemented")
-	case tools.Go:
-		return tools.Tool{}, "", fmt.Errorf("ptc go not implemented")
-	case tools.Lua:
-		return tools.Tool{}, "", fmt.Errorf("ptc lua not implemented")
-	default: // default to JS
-		return adaptToolsToJSPTC(runtime, ptcTools)
-	}
 }

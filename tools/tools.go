@@ -29,15 +29,6 @@ var ControlTools = []Tool{
 	RequiredTool,
 }
 
-type ProgramLanguage string
-
-const (
-	JavaScript ProgramLanguage = "js"
-	Python     ProgramLanguage = "python"
-	Go         ProgramLanguage = "go"
-	Lua        ProgramLanguage = "lua"
-)
-
 type ToolOption func(tool Tool) Tool
 
 type Function func(ctx context.Context, call Call) (response string, err error)

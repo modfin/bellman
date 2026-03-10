@@ -13,19 +13,23 @@ ptcTool := tools.NewTool("get_quote", ...
 	...
 )
 
-// Add tool to tool list (other tools can be both PTC and non-PTC)
-allTools = append(allTools, ptcTool)
+// Append to tool list (other tools can be both PTC and non-PTC)
+tools = append(tools, ptcTool)
 
-// Initialize llm and set PTC language (or default to JavaScript)
+// Initialize llm
 llm := client.Generator().
     Model(openai.GenModel_gpt4o).
-    SetTools(allTools). // <-- set tools as usual (PTC will enable inside here)
-    SetPTCLanguage(tools.JavaScript) // <-- set PTC language to javaScript 
+    SetTools(tools). // set tools as usual
+	
+llm, err := llm.ActivatePTC(ptc.JavaScript) // <-- Activate PTC (on enabled tools) and select language
+if err != nil {
+    log.Fatalf("ActivatePTC() error = %v", err)
+}
 
 res, err := llm.Prompt(prompt.AsUser("Give me 3 quotes from different characters"))
 
 if err != nil {
-log.Fatalf("Prompt() error = %v", err)
+    log.Fatalf("Prompt() error = %v", err)
 }
 
 // Evaluate with callback function

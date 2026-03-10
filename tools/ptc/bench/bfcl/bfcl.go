@@ -130,11 +130,6 @@ func (c *Cache) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkRequest, 
 		}
 	}
 
-	// remove bfcl system prompt for PTC - misleading!
-	if req.EnablePTC {
-		req.SystemPrompt = ""
-	}
-
 	// trace llm call start (if not recording already)
 	if c.Tracer.ChatSpan.Span == nil || !c.Tracer.ChatSpan.IsRecording() {
 		c.Tracer.Trace(prompt.AsUser(""), toolmanConversation)
@@ -142,8 +137,11 @@ func (c *Cache) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkRequest, 
 
 	llm := client.Generator().Model(model).
 		System(req.SystemPrompt).
-		SetTools(bellmanTools...).
-		SetPTCLanguage(tools.JavaScript) //.Temperature(req.Temperature)
+		SetTools(bellmanTools...) //.Temperature(req.Temperature)
+
+	if req.EnablePTC {
+		llm, _ = llm.ActivatePTC(ptc.JavaScript)
+	}
 
 	res, err := llm.Prompt(toolmanConversation...)
 	if err != nil {
@@ -215,7 +213,7 @@ func (c *Cache) getToolCalls(res *gen.Response) ([]prompt.Prompt, []ExtractedCal
 	var toolmanCalls []prompt.Prompt
 	for _, tool := range res.Tools {
 		// PTC Tool Call
-		if tool.Name == ptc.CodeExecutionToolName {
+		if tool.Name == ptc.PTCToolName {
 			// Unmarshal the 'argument' string/bytes to get the JS code
 			var codeArgs struct {
 				Code string `json:"code"`
@@ -289,7 +287,7 @@ func (c *Cache) executionReplay(bellmanTools []tools.Tool, toolmanConversation [
 	}
 
 	// execution result --> toolman response
-	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.CodeExecutionToolName, result.Output)
+	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.PTCToolName, result.Output)
 	return nil, &toolResponse
 }
 
