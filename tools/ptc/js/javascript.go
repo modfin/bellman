@@ -91,26 +91,24 @@ func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
 	// create the final PTC tool
 	ptcTool := tools.NewTool(j.toolName,
 		tools.WithDescription(
-			strings.ReplaceAll(`Execute top-level JavaScript in a persistent Goja runtime to call available Tool Functions.
+			strings.ReplaceAll(`Execute top-level JavaScript in a persistent Goja runtime to call available Functions.
+
+Your code runs inside a function body — use 'return' to return the final result.
 
 RETURN: Always end with an explicit 'return' statement.
-  return { a, b };          ✓
-  return result;            ✓
-  var x = result;           ✗  (returns nothing)
+	return { a, b };          ✓
+	return result;            ✓
+	var x = result;           ✗  (returns nothing)
 
-RULES:
-- Synchronous only. No async/await.
-- Variables persist. Use 'var', do not redeclare let/const.
-- ONE script per turn. Batch all independent calls.
-- Never call the same Function twice with identical arguments.
+RUNTIME RULES:
+	- Synchronous only. No async/await.
+	- Variables persist across turns. Use 'var' (do not redeclare let/const).
+	- Functions are deterministic. Never call the same Function with identical arguments twice.
 
-REPL exception: only yield if a Function returns /* Unknown Schema */
-AND the next Function strictly requires a field from that result.
+Available Functions:
 
-Available Tool Functions:
-
-{fragment}
-`, "{fragment}", fragment),
+{function_fragment}
+`, "{function_fragment}", fragment),
 		),
 		tools.WithArgSchema(CodeArgs{}),
 		tools.WithFunction(executor),
@@ -420,10 +418,10 @@ func (j *JavaScript) Guardrail(code string) (string, error) {
 		return code, errors.New("runtime error: async functions are unavailable in this runtime. must use synchronous, blocking calls (e.g., 'var x = tool()')")
 	}
 
-	if !strings.Contains(code, "return ") {
-		j.log("guardrail no return expression")
-		return code, errors.New("runtime error: script must end with an explicit 'return <expression>' statement. variable assignments and bare expressions do not return data")
-	}
+	//if !strings.Contains(code, "return ") { // TODO keep or not?
+	//	j.log("guardrail no return expression")
+	//	return code, errors.New("runtime error: script must end with an explicit 'return <expression>' statement. variable assignments and bare expressions do not return data")
+	//}
 
 	// ensure IIFE to enable return expression
 	return "(function() {\n" + code + "\n})()", nil
@@ -431,27 +429,26 @@ func (j *JavaScript) Guardrail(code string) (string, error) {
 
 // TODO replace with template
 func (j *JavaScript) SystemFragment(tool ...tools.Tool) string {
-	system := strings.ReplaceAll(`You have access to Programmatic Tool-Calling (PTC).
-Use the '{ptc_tool_name}' tool to interact with external data and functions.
-Tool calls can be costly — use only when necessary, write compact code.
+	return strings.ReplaceAll(`You have access to Programmatic Tool-Calling (PTC).
 
-# JavaScript Runtime (Goja)
+# Programmatic Tool-Calling
 
-Your code runs inside a function body — use 'return' to return the final result.
-
-- Synchronous only. No async/await.
-- Variables persist across turns. Use 'var' (do not redeclare let/const).
-- You MUST return data explicitly: 'return { a, b };'
-- Tool Functions are deterministic. Never call the same Function with identical arguments twice.
+To use PTC, call the '{ptc_tool_name}' tool at most ONCE per turn.
 
 ## When To Use This Tool
 
-Use '{ptc_tool_name}' ONLY when external Tool Functions are required.
-If the request can be answered with reasoning or general knowledge, respond directly.
+Use '{ptc_tool_name}' ONLY when external Tool Functions are required, to interact with external data and functions.
 
 ## Execution Strategy
 
-Default: write ONE complete batch script. Call all independent Functions together.
+Your primary goal is to minimize tool invocations. You must write ONE comprehensive batch script per turn.
+
+Default Workflow:
+	1. Plan all the data you need.
+	2. Call '{ptc_tool_name}' EXACTLY ONCE, writing a script that batches all independent function calls together.
+	3. Receive the output, then answer the user.
+
+Example of expected batching:
 `+"```javascript"+`
 var user = searchUsers({ query: "john" });
 var weather = getWeather({ city: "Stockholm" });
@@ -461,19 +458,14 @@ return { user, weather };
 ### Exception: REPL Yielding
 
 ONLY yield across turns if:
-1. Function A returns /* Unknown Schema */, AND
-2. Function B strictly requires a specific field from A's result.
+	1. Function A returns /* Unknown Schema */, AND
+	2. Function B strictly requires a specific field from A's result.
+In this case: execute A, return its result, and STOP. Do not guess field names. Wait for the result.
 
-In that case: execute A, return its result, and STOP. Do not guess field names. Wait for the result.
+## Finishing
 
-# Finishing
-
-This tool's output is NOT visible to the user.
-Once you have the data you need, STOP calling the tool and respond to the user in plain text.
+Once you have the data you need, STOP calling tools and respond to the user in plain text.
 `, "{ptc_tool_name}", j.toolName)
-
-	// create PTC system prompt fragment with tools
-	return "\n" + system + "\n## Available JavaScript Tool Functions inside the runtime:\n\n" + docsFragment(tool...)
 }
 
 func (j *JavaScript) SetLogger(logger *slog.Logger) *JavaScript {
