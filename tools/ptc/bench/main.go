@@ -14,7 +14,7 @@ import (
 
 func main() {
 	// Create persistent cache and inject into handlers
-	bfclCache := &bfcl.Cache{Replay: replay.NewReplay(), Tracer: tracer.NewTracer("BFCL")}
+	bfclCache := bfcl.NewCache()
 	cfbCache := &cfb.Cache{Replay: replay.NewReplay(), Tracer: tracer.NewTracer("ComplexFuncBench")}
 
 	// Register API Endpoint

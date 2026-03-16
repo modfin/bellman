@@ -109,8 +109,6 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 
 	// Run the next code script
 	for i, s := range r.Scripts {
-		fmt.Printf("____ running script: %s\n", s.Code)
-
 		res, resErr, err := runtime.Execute(s.Code)
 		if err != nil {
 			return Result{Error: err}
@@ -123,7 +121,6 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 			if errors.As(resErr, &jsErr) {
 				if record, isYield := jsErr.Value().(*CallRecord); isYield {
 					// new tool call!
-					fmt.Printf("Yielding to Benchmark for: %s...\n", record.ToolName)
 					return Result{Record: record, ToolID: s.ToolID}
 				}
 			}
@@ -139,7 +136,6 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 		// return response if first script completion, and set done
 		if !s.Done {
 			r.Scripts[i].Done = true // use index to access actual object
-			fmt.Printf("=== script output: %s\n", res)
 			return Result{Output: res, ToolID: s.ToolID}
 		}
 	}
