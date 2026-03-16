@@ -207,7 +207,10 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 		MaxTokens(req.MaxTokens)
 
 	if req.EnablePTC {
-		llm, _ = llm.ActivatePTC(ptc.JavaScript)
+		llm, err = llm.ActivatePTC(ptc.JavaScript)
+		if err != nil {
+			log.Fatalf("failed to activate ptc: %v", err)
+		}
 	}
 
 	switch choice {
@@ -257,6 +260,9 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 
 	//tracer := otel.Tracer("toolman/nestful")
 	generated, content := nestfulGeneratedText(llmCtx, tracer, res, parsedTools, nameMap, outKeysByTool, req.JSExtractTimeoutMs)
+	if strings.TrimSpace(generated) == "" {
+		generated = "[]"
+	}
 	llmSpan.End()
 	writeJSON(w, http.StatusOK, NestfulBenchmarkResponse{
 		GeneratedText: generated,
@@ -333,10 +339,36 @@ func parseNestfulTools(raw []any) ([]tools.Tool, map[string]string, map[string][
 			s.Required = required
 		}
 
+		respSchema := &schema.JSON{
+			Type:       schema.Object,
+			Properties: map[string]*schema.JSON{},
+		}
+
+		var respRequired []string
+		for k, v := range def.OutputParameters {
+			if strings.TrimSpace(k) == "" {
+				continue
+			}
+
+			ps := schemaFromAny(v)
+			if ps == nil {
+				ps = &schema.JSON{}
+			}
+
+			respSchema.Properties[k] = ps
+			respRequired = append(respRequired, k)
+		}
+
+		if len(respRequired) > 0 {
+			sort.Strings(respRequired)
+			respSchema.Required = respRequired
+		}
+
 		parsed = append(parsed, tools.Tool{
 			Name:           sanitized,
 			Description:    strings.TrimSpace(def.Description + "\nOutput keys: " + strings.Join(outKeys, ", ")),
 			ArgumentSchema: s,
+			ResponseSchema: respSchema,
 		})
 	}
 	return parsed, nameMap, outKeysByTool, nil
@@ -412,6 +444,11 @@ func executeAndExtractNestful(
 		log.Fatalf("error: %e", err)
 	}
 
+	// Normalisera escaped radbrytningar/tabbar från modellen
+	jsCode = strings.ReplaceAll(jsCode, "\\n", "\n")
+	jsCode = strings.ReplaceAll(jsCode, "\\t", "\t")
+	jsCode = strings.TrimSpace(jsCode)
+
 	guarded, guardErr := runtime.Guardrail(jsCode)
 	if guardErr != nil {
 		return captured, fmt.Sprintf("code_execution guardrail error: %v", guardErr)
@@ -428,12 +465,12 @@ func executeAndExtractNestful(
 	execSpan.SetAttributes(
 		attribute.String("exec.language", "javascript"),
 		attribute.Int("exec.script_len", len(guarded)),
-		//attribute.String("input.value", guarded),
 		attribute.Int("exec.timeout_ms", timeoutMs),
 		attribute.String("exec.script.trunc", truncate(guarded, 4000)),
 	)
-
 	defer execSpan.End()
+
+	functionsObj := vm.NewObject()
 
 	for _, t := range availableTools {
 		tName := t.Name
@@ -442,58 +479,69 @@ func executeAndExtractNestful(
 			keys = []string{"result"}
 		}
 
-		interceptor := func(call goja.FunctionCall) goja.Value {
-			idx := len(captured) + 1
+		interceptor := func(tName string, keys []string) func(goja.FunctionCall) goja.Value {
+			return func(call goja.FunctionCall) goja.Value {
+				idx := len(captured) + 1
 
-			outObj := make(map[string]any, len(keys))
-			for _, k := range keys {
-				outObj[k] = fmt.Sprintf("$var_%d.%s$", idx, k)
-			}
+				outObj := make(map[string]any, len(keys))
+				for _, k := range keys {
+					outObj[k] = fmt.Sprintf("$var_%d.%s$", idx, k)
+				}
 
-			// Extract args from JS call.
-			argsMap := make(map[string]any)
-			if len(call.Arguments) > 0 {
-				first := call.Arguments[0].Export()
-				if obj, ok := first.(map[string]any); ok {
-					for k, v := range obj {
-						argsMap[k] = v
-					}
-				} else {
-					argsMap["arg_0"] = first
-					for i := 1; i < len(call.Arguments); i++ {
-						argsMap[fmt.Sprintf("arg_%d", i)] = call.Arguments[i].Export()
+				argsMap := make(map[string]any)
+				if len(call.Arguments) > 0 {
+					first := call.Arguments[0].Export()
+					if obj, ok := first.(map[string]any); ok {
+						for k, v := range obj {
+							argsMap[k] = v
+						}
+					} else {
+						argsMap["_error"] = "tool call used positional arguments; expected single object argument"
 					}
 				}
+
+				normalized := normalizeVarRefs(argsMap)
+				if m, ok := normalized.(map[string]any); ok {
+					argsMap = m
+				}
+
+				captured = append(captured, map[string]any{
+					"name":      tName,
+					"arguments": argsMap,
+				})
+
+				_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
+					attribute.String("gen_ai.operation.name", "execute_tool"),
+					attribute.String("gen_ai.tool.name", tName),
+					attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
+					attribute.Int("index", len(captured)),
+				))
+				toolSpan.End()
+
+				return vm.ToValue(outObj)
 			}
-			normalizeVarRefs(argsMap)
-			captured = append(captured, map[string]any{
-				"name":      tName,
-				"arguments": argsMap,
-			})
+		}(tName, keys)
 
-			_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
-				attribute.String("gen_ai.operation.name", "execute_tool"),
-				attribute.String("gen_ai.tool.name", tName),
-				attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
-				attribute.Int("index", len(captured)),
-			))
-			toolSpan.End()
-
-			return vm.ToValue(outObj)
+		if err := vm.Set(tName, interceptor); err != nil {
+			return captured, fmt.Sprintf("code_execution binding error: %v", err)
 		}
+		if err := functionsObj.Set(tName, interceptor); err != nil {
+			return captured, fmt.Sprintf("code_execution functions binding error: %v", err)
+		}
+	}
 
-		_ = vm.Set(tName, interceptor)
+	if err := vm.Set("functions", functionsObj); err != nil {
+		return captured, fmt.Sprintf("code_execution functions object error: %v", err)
 	}
 
 	if _, runErr := vm.RunString(guarded); runErr != nil {
 		execSpan.RecordError(runErr)
 		execSpan.SetStatus(codes.Error, runErr.Error())
-		//return fmt.Sprintf(`{"error": %q}`, runErr), "nil"
 		return captured, fmt.Sprintf("code_execution run error: %v", runErr)
 	}
 
 	execSpan.SetAttributes(
-		attribute.String("output.vlue", "ok"),
+		attribute.String("output.value", "ok"),
 		attribute.Int("captured.tool_calls", len(captured)),
 		attribute.String("captured.json", string(mustJSON(captured))),
 	)
