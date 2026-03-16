@@ -7,10 +7,37 @@ Toolman introduces Programmatic Tool-Calling (PTC), allowing LLMs to write and e
 To use PTC, you need to define your tools and set the PTC language on the generator.
 
 ```go
-// Define your Bellman tools as usual, and set PTC property to true
-ptcTool := tools.NewTool("get_quote", ...
-    tool.WithPTC(true), // <-- Enable PTC
-	...
+// Define your Bellman tools and schemas as usual, then set PTC property to true and (optional) add response schema 
+type Args struct {
+    Name string `json:"name"`
+}
+
+type Response struct {
+	Quotes []Quote `json:"quotes"`
+}
+
+type Quote struct {
+   Character string `json:"character"`
+   Quote string `json:"quote"`
+}
+
+ptcTool := tools.NewTool("get_quote",
+   tool.WithPTC(true), // <-- Enable PTC
+   tools.WithDescription(
+      "a function to get a quote from a person or character in Hamlet", 
+	  ),
+   tool.WithArgSchema(args{}),
+   tools.WithFunction(func(ctx context.Context, call tools.Call) (string, error) {
+         var arg Args
+         err := json.Unmarshal(call.Argument, &arg)
+         if err != nil {
+            return "",err
+         }
+         var res Response // tool response schema
+         res, err = dao.GetQuoateFrom(arg.Name)
+         return res, err
+      }),
+   tool.WithResponseSchema[Response](), // <-- set response schema type (same as tool response)
 )
 
 // Append to tool list (other tools can be both PTC and non-PTC)
@@ -18,25 +45,26 @@ tools = append(tools, ptcTool)
 
 // Initialize llm
 llm := client.Generator().
-    Model(openai.GenModel_gpt4o).
-    SetTools(tools). // set tools as usual
-	
+   Model(openai.GenModel_gpt4o).
+   SetTools(tools). // set tools as usual
+
 llm, err := llm.ActivatePTC(ptc.JavaScript) // <-- Activate PTC (on enabled tools) and select language
 if err != nil {
-    log.Fatalf("ActivatePTC() error = %v", err)
+   log.Fatalf("ActivatePTC() error = %v", err)
 }
 
 res, err := llm.Prompt(prompt.AsUser("Give me 3 quotes from different characters"))
 
 if err != nil {
-    log.Fatalf("Prompt() error = %v", err)
+   log.Fatalf("Prompt() error = %v", err)
 }
 
 // Evaluate with callback function
 err = res.Eval()
 if err != nil {
-    log.Fatalf("Eval() error = %v", err)
+   log.Fatalf("Eval() error = %v", err)
 }
+
 ```
 
 For documentation on how to use Bellman, please refer to the Bellman [README.md](../../README.md).
