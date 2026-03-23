@@ -22,6 +22,7 @@ import (
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
+	"github.com/modfin/bellman/services/openai"
 	"github.com/modfin/bellman/tools"
 	"github.com/modfin/bellman/tools/ptc"
 	"go.opentelemetry.io/otel"
@@ -42,6 +43,7 @@ type NestfulBenchmarkRequest struct {
 	Tools              []any   `json:"tools"`
 	Temperature        float64 `json:"temperature"`
 	MaxTokens          int     `json:"max_tokens"`
+	BatchSize          int     `json:"batch_size"`
 	SystemPrompt       string  `json:"system_prompt"`
 	EnablePTC          bool    `json:"enable_ptc"`
 	ToolChoice         string  `json:"tool_choice,omitempty"` // auto|required|none
@@ -78,8 +80,8 @@ func NesfulHandlerFromEnv() http.HandlerFunc {
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
 	client := bellman.New(bellmanURL, bellman.Key{Name: "nestful", Token: bellmanToken})
-	model := "OpenAI/gpt-4o"
-	defaultModelFQN := os.Getenv(model)
+	model := openai.GenModel_gpt5_mini_250807
+	//model := vertexai.GenModel_gemini_2_5_flash_latest
 
 	ctx := context.Background()
 	tp, err := setupHttpLangfuse(ctx)
@@ -90,7 +92,7 @@ func NesfulHandlerFromEnv() http.HandlerFunc {
 		_ = tp
 	}
 
-	return NestfulHandlerWrapper(client, defaultModelFQN)
+	return NestfulHandlerWrapper(client, model)
 }
 
 // NestfulHandler exposes a single-shot endpoint that returns predicted tool-call sequences in NESTFUL's format.
@@ -100,7 +102,7 @@ func NesfulHandlerFromEnv() http.HandlerFunc {
 //
 // Tools are never executed.
 
-func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bellman, defaultModelFQN string) {
+func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bellman, model gen.Model) {
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -138,17 +140,6 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 		attribute.Bool("ptc.enabled", req.EnablePTC),
 		attribute.String("tool.choice", choice),
 	)
-
-	if strings.TrimSpace(defaultModelFQN) == "" {
-		defaultModelFQN = "OpenAI/gpt-4o"
-	}
-	model, err := parseModelFQN(defaultModelFQN)
-	if err != nil {
-		root.RecordError(err)
-		root.SetStatus(codes.Error, err.Error())
-		httpErr(w, fmt.Errorf("invalid model: %w", err), http.StatusBadRequest)
-		return
-	}
 
 	root.SetAttributes(
 		attribute.String("gen_ai.request.model", fmt.Sprintf("%v/%v", model.Provider, model.Name)),
@@ -202,35 +193,22 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	llm := client.Generator().
 		Model(model).
 		System(req.SystemPrompt).
-		SetTools(parsedTools...).
-		Temperature(req.Temperature).
-		MaxTokens(req.MaxTokens)
+		SetTools(parsedTools...)
+	//Temperature(req.Temperature).
+	//MaxTokens(req.MaxTokens)
 
 	if req.EnablePTC {
 		llm, err = llm.ActivatePTC(ptc.JavaScript)
 		if err != nil {
-			log.Fatalf("failed to activate ptc: %v", err)
+			log.Printf("failed to activate ptc: %v", err)
 		}
-	}
-
-	switch choice {
-	case "required":
-		llm = llm.SetToolConfig(tools.RequiredTool)
-	case "auto":
-		llm = llm.SetToolConfig(tools.AutoTool)
-	case "none":
-		llm = llm.SetToolConfig(tools.NoTool)
-	default:
-		httpErr(w, fmt.Errorf("invalid tool_choice: %q", req.ToolChoice), http.StatusBadRequest)
-		root.RecordError(err)
-		root.SetStatus(codes.Error, err.Error())
-		httpErr(w, err, http.StatusBadRequest)
-		return
 	}
 
 	var res *gen.Response
 
 	llmCtx, llmSpan := tracer.Start(ctx, "llm.prompt")
+	defer llmSpan.End()
+
 	llmSpan.SetAttributes(
 		attribute.String("gen_ai.operation.name", "chat"),
 		attribute.String("gen_ai.request.model", fmt.Sprintf("%v/%v", model.Provider, model.Name)),
@@ -244,7 +222,19 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	if err != nil {
 		llmSpan.RecordError(err)
 		llmSpan.SetStatus(codes.Error, err.Error())
-		llmSpan.End()
+		//llmSpan.End()
+		root.RecordError(err)
+		root.SetStatus(codes.Error, "llm prompt failed")
+
+		writeJSON(w, http.StatusOK, NestfulBenchmarkResponse{
+			GeneratedText: "[]",
+			Content:       fmt.Sprintf("llm prompt error: %v", err),
+			InputTokens:   0,
+			OutputTokens:  0,
+			TotalTokens:   0,
+		})
+		return
+
 	} else {
 		llmSpan.SetAttributes(
 			attribute.Int("gen_ai.usage.input_tokens", res.Metadata.InputTokens),
@@ -253,17 +243,17 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 		)
 	}
 
-	if err != nil {
+	/*if err != nil {
 		httpErr(w, fmt.Errorf("upstream error: %w", err), http.StatusBadGateway)
 		return
-	}
+	}*/
 
 	//tracer := otel.Tracer("toolman/nestful")
 	generated, content := nestfulGeneratedText(llmCtx, tracer, res, parsedTools, nameMap, outKeysByTool, req.JSExtractTimeoutMs)
 	if strings.TrimSpace(generated) == "" {
 		generated = "[]"
 	}
-	llmSpan.End()
+	//llmSpan.End()
 	writeJSON(w, http.StatusOK, NestfulBenchmarkResponse{
 		GeneratedText: generated,
 		Content:       content,
@@ -273,9 +263,9 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	})
 }
 
-func NestfulHandlerWrapper(client *bellman.Bellman, defaultModelFQN string) http.HandlerFunc {
+func NestfulHandlerWrapper(client *bellman.Bellman, model gen.Model) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		NestfulHandler(w, r, client, defaultModelFQN)
+		NestfulHandler(w, r, client, model)
 	}
 }
 
@@ -344,29 +334,20 @@ func parseNestfulTools(raw []any) ([]tools.Tool, map[string]string, map[string][
 			Properties: map[string]*schema.JSON{},
 		}
 
-		var respRequired []string
 		for k, v := range def.OutputParameters {
-			if strings.TrimSpace(k) == "" {
-				continue
-			}
-
 			ps := schemaFromAny(v)
 			if ps == nil {
 				ps = &schema.JSON{}
 			}
-
 			respSchema.Properties[k] = ps
-			respRequired = append(respRequired, k)
 		}
 
-		if len(respRequired) > 0 {
-			sort.Strings(respRequired)
-			respSchema.Required = respRequired
-		}
+		safe := strings.ReplaceAll(def.Description, "<", "`")
+		safe = strings.ReplaceAll(safe, ">", "`")
 
 		parsed = append(parsed, tools.Tool{
 			Name:           sanitized,
-			Description:    strings.TrimSpace(def.Description + "\nOutput keys: " + strings.Join(outKeys, ", ")),
+			Description:    safe,
 			ArgumentSchema: s,
 			ResponseSchema: respSchema,
 		})
@@ -671,51 +652,6 @@ func httpErr(w http.ResponseWriter, err error, status int) {
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
-}
-
-func parseModelFQN(fqn string) (gen.Model, error) {
-	fqn = strings.TrimSpace(fqn)
-	provider, name, found := strings.Cut(fqn, "/")
-	if !found {
-		provider, name, found = strings.Cut(fqn, ".")
-	}
-	if !found {
-		return gen.Model{}, fmt.Errorf("expected provider/name (or provider.name), got %q", fqn)
-	}
-	provider = canonicalProvider(provider)
-	//name = canonicalModelName(name)
-	if provider == "" || name == "" {
-		return gen.Model{}, fmt.Errorf("expected provider/name (or provider.name), got %q", fqn)
-	}
-	return gen.Model{Provider: provider, Name: name}, nil
-}
-func canonicalProvider(p string) string {
-	pl := strings.ToLower(strings.TrimSpace(p))
-	switch pl {
-	case "openai":
-		return "OpenAI"
-	case "vertexai", "vertex":
-		return "VertexAI"
-	case "anthropic":
-		return "Anthropic"
-	case "ollama":
-		return "Ollama"
-	case "vllm":
-		return "vLLM"
-	case "voyageai", "voyage":
-		return "VoyageAI"
-	default:
-		return strings.TrimSpace(p)
-	}
-}
-
-func canonicalModelName(n string) string {
-	n = strings.TrimSpace(n)
-	n = strings.ReplaceAll(n, "_", "-")
-	if strings.HasPrefix(n, "gpt4o-") {
-		n = "gpt-4o-" + strings.TrimPrefix(n, "gpt4o-")
-	}
-	return n
 }
 
 // setupHttpLangfuse reads the .env and wires a direct HTTP connection to localhost:3000
