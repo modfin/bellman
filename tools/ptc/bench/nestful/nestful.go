@@ -416,16 +416,24 @@ func executeAndExtractNestful(
 	outKeysByTool map[string][]string,
 	timeoutMs int,
 ) ([]map[string]any, string) {
-	meta := extractMeta{GuardrailOK: false, CapturedCount: 0, CapturedJSONTrunc: ""}
+	const (
+		maxCapturedCalls = 15
+	)
+
+	meta := extractMeta{
+		GuardrailOK:       false,
+		CapturedCount:     0,
+		CapturedJSONTrunc: "",
+	}
+
 	vm := goja.New()
 	captured := make([]map[string]any, 0)
 
 	runtime, err := ptc.NewRuntime(ptc.JavaScript)
 	if err != nil {
-		log.Fatalf("error: %e", err)
+		return captured, fmt.Sprintf("failed to create ptc runtime: %v", err)
 	}
 
-	// Normalisera escaped radbrytningar/tabbar från modellen
 	jsCode = strings.ReplaceAll(jsCode, "\\n", "\n")
 	jsCode = strings.ReplaceAll(jsCode, "\\t", "\t")
 	jsCode = strings.TrimSpace(jsCode)
@@ -434,7 +442,6 @@ func executeAndExtractNestful(
 	if guardErr != nil {
 		return captured, fmt.Sprintf("code_execution guardrail error: %v", guardErr)
 	}
-
 	meta.GuardrailOK = true
 
 	timer := time.AfterFunc(time.Duration(timeoutMs)*time.Millisecond, func() {
@@ -447,9 +454,20 @@ func executeAndExtractNestful(
 		attribute.String("exec.language", "javascript"),
 		attribute.Int("exec.script_len", len(guarded)),
 		attribute.Int("exec.timeout_ms", timeoutMs),
+		attribute.Int("exec.max_captured_calls", maxCapturedCalls),
 		attribute.String("exec.script.trunc", truncate(guarded, 4000)),
 	)
-	defer execSpan.End()
+	defer func() {
+		meta.CapturedCount = len(captured)
+		meta.CapturedJSONTrunc = truncate(string(mustJSON(captured)), 4000)
+
+		execSpan.SetAttributes(
+			attribute.Bool("exec.guardrail_ok", meta.GuardrailOK),
+			attribute.Int("captured.tool_calls", meta.CapturedCount),
+			attribute.String("captured.json", meta.CapturedJSONTrunc),
+		)
+		execSpan.End()
+	}()
 
 	functionsObj := vm.NewObject()
 
@@ -462,11 +480,9 @@ func executeAndExtractNestful(
 
 		interceptor := func(tName string, keys []string) func(goja.FunctionCall) goja.Value {
 			return func(call goja.FunctionCall) goja.Value {
-				idx := len(captured) + 1
-
-				outObj := make(map[string]any, len(keys))
-				for _, k := range keys {
-					outObj[k] = fmt.Sprintf("$var_%d.%s$", idx, k)
+				if len(captured) >= maxCapturedCalls {
+					vm.Interrupt(fmt.Sprintf("too many tool calls (>%d)", maxCapturedCalls))
+					return goja.Undefined()
 				}
 
 				argsMap := make(map[string]any)
@@ -486,17 +502,26 @@ func executeAndExtractNestful(
 					argsMap = m
 				}
 
+				idx := len(captured) + 1
+
+				outObj := make(map[string]any, len(keys))
+				for _, k := range keys {
+					outObj[k] = fmt.Sprintf("$var_%d.%s$", idx, k)
+				}
+
 				captured = append(captured, map[string]any{
 					"name":      tName,
 					"arguments": argsMap,
 				})
 
-				_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
-					attribute.String("gen_ai.operation.name", "execute_tool"),
-					attribute.String("gen_ai.tool.name", tName),
-					attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
-					attribute.Int("index", len(captured)),
-				))
+				_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName),
+					trace.WithAttributes(
+						attribute.String("gen_ai.operation.name", "execute_tool"),
+						attribute.String("gen_ai.tool.name", tName),
+						attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
+						attribute.Int("index", len(captured)),
+					),
+				)
 				toolSpan.End()
 
 				return vm.ToValue(outObj)
@@ -524,8 +549,7 @@ func executeAndExtractNestful(
 	execSpan.SetAttributes(
 		attribute.String("output.value", "ok"),
 		attribute.Int("captured.tool_calls", len(captured)),
-		attribute.String("captured.json", string(mustJSON(captured))),
-	)
+		attribute.String("captured.json", string(mustJSON(captured))))
 
 	return captured, ""
 }
