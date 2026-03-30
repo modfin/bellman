@@ -157,7 +157,7 @@ func interceptCall(vm *goja.Runtime, cache *Replay, tool tools.Tool) error {
 			cache.Cursor++
 
 			// if None, null, or empty --> undefined
-			if record.Result == "None" || record.Result == "null" || record.Result == "{}" || record.Result == "" {
+			if record.Result == "None" || record.Result == "null" || record.Result == "{}" || record.Result == "" || record.Result == "NaN" {
 				// Return a native JavaScript 'undefined' (or goja.Null())
 				return goja.Undefined()
 			}

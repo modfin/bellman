@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -184,7 +185,7 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 	}
 
 	// prompt with retry (bfcl restarts on every test...)
-	maxRetries := 10
+	maxRetries := 5
 	var res *gen.Response
 	for retry := 0; retry <= maxRetries; retry++ {
 		start := time.Now()
@@ -202,6 +203,19 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		if strings.Contains(err.Error(), "unexpected status code 403") {
+			// return on 403 error (llm provider fire wall)
+			resp := BenchmarkResponse{
+				ToolCalls:      nil,
+				ToolCallIDs:    nil,
+				ToolmanHistory: toolmanConversation,
+				InputTokens:    0,
+				OutputTokens:   0,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
 		}
 
 		backoff := time.Duration(1<<retry) * time.Second
