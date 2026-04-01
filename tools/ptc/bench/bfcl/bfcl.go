@@ -99,7 +99,7 @@ func (c *Cache) HandleGenerateBFCL(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		i.mu.Lock()
-		i.timer.Reset(15 * time.Second)
+		i.timer.Reset(1 * time.Minute)
 		i.mu.Unlock()
 	}()
 
@@ -295,7 +295,7 @@ func (i *Instance) getToolCalls(res *gen.Response) ([]prompt.Prompt, []Extracted
 	var toolmanCalls []prompt.Prompt
 	for _, tool := range res.Tools {
 		// PTC Tool Call
-		if tool.Name == ptc.PTCToolName {
+		if tool.Name == ptc.ToolName {
 			// Unmarshal the 'argument' string/bytes to get the JS code
 			var codeArgs struct {
 				Code string `json:"code"`
@@ -370,7 +370,7 @@ func (i *Instance) executionReplay(bellmanTools []tools.Tool, toolmanConversatio
 	}
 
 	// execution result --> toolman response
-	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.PTCToolName, result.Output)
+	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.ToolName, result.Output)
 	return nil, &toolResponse
 }
 
@@ -405,12 +405,12 @@ func (c *Cache) ensureCache(req BenchmarkRequest) *Instance {
 			Replay: replay.NewReplay(),
 			Tracer: tracer.NewTracer("BFCL"),
 		}
-		i.timer = time.AfterFunc(15*time.Second, func() {
+		i.timer = time.AfterFunc(1*time.Minute, func() {
 			c.finish(req.TestID)
 		})
 		c.Instances[req.TestID] = i
 	} else {
-		i.timer.Reset(15 * time.Second)
+		i.timer.Reset(1 * time.Minute)
 	}
 	c.mu.Unlock()
 

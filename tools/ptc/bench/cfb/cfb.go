@@ -371,7 +371,7 @@ func (i *Instance) getToolCalls(res *gen.Response) ([]prompt.Prompt, []ToolCall,
 	var cfbCalls []ToolCall
 	for _, tool := range res.Tools {
 		// PTC Tool Call
-		if tool.Name == ptc.PTCToolName {
+		if tool.Name == ptc.ToolName {
 			// Unmarshal the 'argument' string/bytes to get the JS code
 			var codeArgs struct {
 				Code string `json:"code"`
@@ -470,7 +470,7 @@ func (i *Instance) executionReplay(bellmanTools []tools.Tool, toolmanConversatio
 	}
 
 	// execution result --> toolman response
-	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.PTCToolName, result.Output)
+	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.ToolName, result.Output)
 	return nil, &toolResponse
 }
 

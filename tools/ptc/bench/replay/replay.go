@@ -96,7 +96,10 @@ func (r *Replay) IsPending() bool {
 func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 
 	// Destroy state! Create a new VM for every single replay (prevent unexpected errors)
-	runtime := js.NewRuntime(ptc.PTCToolName)
+	runtime, err := js.NewRuntime(ptc.ToolName)
+	if err != nil {
+		return Result{Error: err}
+	}
 	r.Replay()
 
 	// Inject our cached tools into the VM, and add interrupt on new tool calls
@@ -159,7 +162,7 @@ func interceptCall(vm *goja.Runtime, cache *Replay, tool tools.Tool) error {
 			// if None, null, or empty --> undefined
 			if record.Result == "None" || record.Result == "null" || record.Result == "{}" || record.Result == "" || record.Result == "NaN" {
 				// Return a native JavaScript 'undefined' (or goja.Null())
-				return goja.Undefined()
+				return goja.Null()
 			}
 
 			// Parse the cached JSON string back into a native Goja object so the script can use it

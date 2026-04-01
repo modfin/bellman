@@ -157,8 +157,23 @@ func (b *Generator) ActivatePTC(lang ptc.ProgramLanguage) (*Generator, error) {
 		return b, err
 	}
 	bb = bb.AddTools(tool)
-	bb.Request.PTCSystemFragment = bb.Runtime.SystemFragment(bb.Request.PTCTools...)
+
+	if bb.Request.PTCSystemFragment == nil {
+		fragment, err := bb.Runtime.SystemFragment()
+		if err != nil {
+			return b, err
+		}
+		bb.Request.PTCSystemFragment = &fragment
+	}
+
 	return bb, err
+}
+
+func (b *Generator) SetPTCSystemFragment(fragment string) *Generator {
+	bb := b.clone()
+	bb.Request.PTCSystemFragment = &fragment
+
+	return bb
 }
 
 func (b *Generator) SetToolConfig(tool tools.Tool) *Generator {

@@ -1,7 +1,9 @@
 package js
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/dop251/goja"
@@ -20,17 +23,50 @@ type JavaScript struct {
 	runtime  *goja.Runtime
 	mu       sync.Mutex
 	toolName string
-	console  *ConsoleOutput
+	output   *resultOutput
 	Log      *slog.Logger `json:"-"`
 }
 
-func NewRuntime(toolName string) *JavaScript {
+type TemplateData struct {
+	PTCToolName string
+	Signatures  []FunctionSignatureData
+}
+
+type FunctionSignatureData struct {
+	Name          string
+	Description   string
+	Args          []ArgField
+	ReturnType    string
+	UnknownSchema bool
+}
+
+type ArgField struct {
+	Name        string
+	Type        string
+	Required    bool
+	Description string
+}
+
+//go:embed prompts.tmpl
+var templateFS embed.FS
+
+var parsedTemplates *template.Template
+
+func init() {
+	var err error
+	parsedTemplates, err = template.ParseFS(templateFS, "prompts.tmpl")
+	if err != nil {
+		panic(fmt.Errorf("failed to parse prompts.tmpl: %w", err))
+	}
+}
+
+func NewRuntime(toolName string) (*JavaScript, error) {
 	javaScript := &JavaScript{
 		runtime:  goja.New(),
 		mu:       sync.Mutex{},
 		toolName: toolName,
 	}
-	return javaScript.registerConsole()
+	return javaScript.registerResult()
 }
 
 func (j *JavaScript) Lock() {
@@ -85,31 +121,22 @@ func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
 		return res, err
 	}
 
-	// tool documentation fragment
-	fragment := docsFragment(tool...)
+	// create tool description
+	sigs := functionSignatures(tool...)
+
+	data := TemplateData{
+		PTCToolName: j.toolName,
+		Signatures:  sigs,
+	}
+	var buf bytes.Buffer
+	if err := parsedTemplates.ExecuteTemplate(&buf, "ptc_tool_description", data); err != nil {
+		return tools.Tool{}, fmt.Errorf("failed to execute tool description template: %w", err)
+	}
+	toolDescription := buf.String()
 
 	// create the final PTC tool
 	ptcTool := tools.NewTool(j.toolName,
-		tools.WithDescription(
-			strings.ReplaceAll(`Execute top-level JavaScript in a persistent Goja runtime to call available Functions.
-
-Your code runs inside a function body — use 'return' to return the final result.
-
-RETURN: Always end with an explicit 'return' statement.
-	return { a, b };          ✓
-	return result;            ✓
-	var x = result;           ✗  (returns nothing)
-
-RUNTIME RULES:
-	- Synchronous only. No async/await.
-	- Variables persist across turns. Use 'var' (do not redeclare let/const).
-	- Functions are deterministic. Never call the same Function with identical arguments twice.
-
-Available Functions:
-
-{function_fragment}
-`, "{function_fragment}", fragment),
-		),
+		tools.WithDescription(toolDescription),
 		tools.WithArgSchema(CodeArgs{}),
 		tools.WithFunction(executor),
 	)
@@ -140,7 +167,6 @@ func (j *JavaScript) bindToolFunction(tool tools.Tool) error {
 		}
 
 		// execute the actual go tool
-		// TODO: pass real context if available
 		res, err := tool.Function(context.Background(), tools.Call{
 			Argument: jsonArgs,
 		})
@@ -176,7 +202,7 @@ func (j *JavaScript) Execute(code string) (resString string, resErr error, err e
 	if resErr != nil {
 		return "", resErr, nil
 	}
-	j.console.Last = "" // reset console output each execution
+	j.output.set = false // reset output
 
 	j.Lock()
 	defer j.Unlock()
@@ -197,112 +223,110 @@ func (j *JavaScript) Execute(code string) (resString string, resErr error, err e
 	})
 	defer timer.Stop()
 
-	res, resErr := j.runtime.RunString(code)
+	// set non-fresh on execution!
+	j.fresh = false
+
+	_, resErr = j.runtime.RunString(code)
 	if resErr != nil {
 		return "", resErr, nil
 	}
 
-	var jsonBytes []byte
-	if res == nil || goja.IsUndefined(res) {
-		return nilValue, nil, nil
+	// if result(); used, return the value
+	if j.output.set {
+		return j.output.value, nil, nil
 	}
 
-	jsonBytes, err = json.Marshal(res.Export())
-	if err != nil {
-		return "", nil, err
-	}
-	result := string(jsonBytes)
-
-	if j.console.Last != "" && result == nilValue { // if no return expression; fallback to last console.log
-		return j.console.Last, nil, nil
-	}
-
-	return string(jsonBytes), nil, nil
+	return nilValue, nil, nil
 }
 
-type ConsoleOutput struct {
-	Last string
+type resultOutput struct {
+	value string
+	set   bool
 }
 
-func (j *JavaScript) registerConsole() *JavaScript {
-	out := &ConsoleOutput{}
+func (j *JavaScript) registerResult() (*JavaScript, error) {
+	out := &resultOutput{}
+	j.output = out
 
-	makeLogger := func(level string) func(goja.FunctionCall) goja.Value {
-		return func(call goja.FunctionCall) goja.Value {
-			parts := make([]string, len(call.Arguments))
-			for i, arg := range call.Arguments {
-				parts[i] = fmt.Sprintf("%v", arg.Export())
-			}
-			msg := strings.Join(parts, " ")
-			j.log(msg, "level", level)
-			out.Last = msg
+	err := j.runtime.Set("result", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
 			return goja.Undefined()
 		}
+		b, err := json.Marshal(call.Argument(0).Export())
+		if err != nil {
+			return goja.Undefined()
+		}
+		out.value = string(b)
+		out.set = true
+		return goja.Undefined()
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	console := j.runtime.NewObject()
-	console.Set("log", j.runtime.ToValue(makeLogger("log")))
-	console.Set("info", j.runtime.ToValue(makeLogger("info")))
-	console.Set("warn", j.runtime.ToValue(makeLogger("warn")))
-	console.Set("error", j.runtime.ToValue(makeLogger("error")))
+	return j, nil
+}
 
-	j.runtime.Set("console", console)
-	j.runtime.Set("print", j.runtime.ToValue(makeLogger("print")))
+// Guardrail guardrails code before exec; important since LLMs trained for diff. coding objectives
+func (j *JavaScript) Guardrail(code string) (string, error) {
+	if code == "" {
+		j.log("guardrail empty code")
+		return code, errors.New("no javascript code provided. validate tool input arguments, required format: '{\"code\": string}'")
+	}
+
+	if strings.Contains(code, "async ") || strings.Contains(code, "await") || strings.Contains(code, "async(") {
+		j.log("guardrail async code")
+		return code, errors.New("runtime error: async functions are unavailable in this runtime. must use synchronous, blocking calls (e.g., 'var x = tool()')")
+	}
+
+	if strings.Contains(code, "console.log(") || strings.Contains(code, "print(") {
+		j.log("guardrail console/print usage")
+		return code, errors.New("runtime error: console.log() and print() are not for returning data. use result(value) to return data")
+	}
+
+	if !strings.Contains(code, "result(") {
+		j.log("guardrail missing result()")
+		return code, errors.New("runtime error: script must call result(value) exactly once to return data. example: result({ a, b })")
+	}
+
+	return code, nil
+}
 
 	j.console = out
 	return j
 }
 
-func docsFragment(tool ...tools.Tool) string {
-	var descriptions []string
+	if err := parsedTemplates.ExecuteTemplate(&buf, "ptc_system_prompt", data); err != nil {
+		j.log("failed to execute system prompt template", "error", err)
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
+func functionSignatures(tool ...tools.Tool) []FunctionSignatureData {
+	var signatures []FunctionSignatureData
 	for _, t := range tool {
-		signature := formatToolSignature(t)
-		descriptions = append(descriptions, signature)
-	}
-	return strings.Join(descriptions, "\n\n")
-}
+		// Figure out return type and if schema is unknown
+		returnType := "unknown"
+		unknownSchema := true
 
-type ArgField struct {
-	Name     string
-	Type     string
-	Required bool
-}
-
-func formatToolSignature(t tools.Tool) string {
-	args := extractArgs(t.ArgumentSchema)
-
-	var fields []string
-	for _, a := range args {
-		name := a.Name
-		if !a.Required {
-			name += "?"
+		if t.ResponseSchema != nil && t.ResponseSchema.Type != "" {
+			if !(t.ResponseSchema.Type == "object" && len(t.ResponseSchema.Properties) == 0) {
+				returnType = SchemaToTS(t.ResponseSchema)
+				unknownSchema = false
+			}
 		}
-		fields = append(fields, fmt.Sprintf("  %s: %s", name, a.Type))
-	}
 
-	argBlock := "{}"
-	if len(fields) > 0 {
-		argBlock = "{\n" + strings.Join(fields, ",\n") + "\n}"
+		signatures = append(signatures, FunctionSignatureData{
+			Name:          t.Name,
+			Description:   t.Description,
+			Args:          extractArgs(t.ArgumentSchema),
+			ReturnType:    returnType,
+			UnknownSchema: unknownSchema,
+		})
 	}
-
-	// get return types - If schema is missing or empty, trigger the REPL warning
-	returnType := "unknown"
-	jsDocWarning := " /* Unknown Schema */"
-
-	isKnown := true
-	if t.ResponseSchema == nil || t.ResponseSchema.Type == "" {
-		isKnown = false
-	} else if t.ResponseSchema.Type == "object" && len(t.ResponseSchema.Properties) == 0 {
-		// Only objects with 0 properties are considered "Unknown"
-		isKnown = false
-	}
-	if isKnown {
-		returnType = SchemaToTS(t.ResponseSchema)
-		jsDocWarning = ""
-	}
-
-	return fmt.Sprintf("/**\n * %s\n * @returns {%s}%s\n */\ndeclare function %s(params: %s): %s;",
-		t.Description, returnType, jsDocWarning, t.Name, argBlock, returnType)
+	return signatures
 }
 
 func extractArgs(s *schema.JSON) []ArgField {
@@ -317,10 +341,14 @@ func extractArgs(s *schema.JSON) []ArgField {
 
 	var args []ArgField
 	for name, prop := range s.Properties {
+		cleanDesc := strings.ReplaceAll(prop.Description, "\n", " ")
+		cleanDesc = strings.TrimSpace(cleanDesc)
+
 		args = append(args, ArgField{
-			Name:     name,
-			Type:     mapJSONSchemaType(prop),
-			Required: required[name],
+			Name:        name,
+			Type:        mapJSONSchemaType(prop),
+			Required:    required[name],
+			Description: cleanDesc,
 		})
 	}
 
@@ -404,68 +432,6 @@ func SchemaToTS(s *schema.JSON) string {
 	default:
 		return "any"
 	}
-}
-
-// Guardrail guardrails code before exec; important since LLMs trained for diff. coding objectives
-func (j *JavaScript) Guardrail(code string) (string, error) {
-	if code == "" {
-		j.log("guardrail empty code")
-		return code, errors.New("no javascript code provided. validate tool input arguments, required format: '{\"code\": string}'")
-	}
-
-	if strings.Contains(code, "async ") || strings.Contains(code, "await") || strings.Contains(code, "async(") {
-		j.log("guardrail async code")
-		return code, errors.New("runtime error: async functions are unavailable in this runtime. must use synchronous, blocking calls (e.g., 'var x = tool()')")
-	}
-
-	//if !strings.Contains(code, "return ") { // TODO keep or not?
-	//	j.log("guardrail no return expression")
-	//	return code, errors.New("runtime error: script must end with an explicit 'return <expression>' statement. variable assignments and bare expressions do not return data")
-	//}
-
-	// ensure IIFE to enable return expression
-	return "(function() {\n" + code + "\n})()", nil
-}
-
-// TODO replace with template
-func (j *JavaScript) SystemFragment(tool ...tools.Tool) string {
-	return strings.ReplaceAll(`You have access to Programmatic Tool-Calling (PTC).
-
-# Programmatic Tool-Calling
-
-To use PTC, call the '{ptc_tool_name}' tool at most ONCE per turn.
-
-## When To Use This Tool
-
-Use '{ptc_tool_name}' ONLY when external Tool Functions are required, to interact with external data and functions.
-
-## Execution Strategy
-
-Your primary goal is to minimize tool invocations. You must write ONE comprehensive batch script per turn.
-
-Default Workflow:
-	1. Plan all the data you need.
-	2. Call '{ptc_tool_name}' EXACTLY ONCE, writing a script that batches all independent function calls together.
-	3. Receive the output, then answer the user.
-
-Example of expected batching:
-`+"```javascript"+`
-var user = searchUsers({ query: "john" });
-var weather = getWeather({ city: "Stockholm" });
-return { user, weather };
-`+"```"+`
-
-### Exception: REPL Yielding
-
-ONLY yield across turns if:
-	1. Function A returns /* Unknown Schema */, AND
-	2. Function B strictly requires a specific field from A's result.
-In this case: execute A, return its result, and STOP. Do not guess field names. Wait for the result.
-
-## Finishing
-
-Once you have the data you need, STOP calling tools and respond to the user in plain text.
-`, "{ptc_tool_name}", j.toolName)
 }
 
 func (j *JavaScript) SetLogger(logger *slog.Logger) *JavaScript {
