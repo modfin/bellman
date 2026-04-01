@@ -91,7 +91,7 @@ func (j *JavaScript) log(msg string, args ...any) {
 const nilValue string = "null" // nil in JS
 
 // AdaptTools converts a list of Bellman tools into a single PTC tool with runtime execution environment
-func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
+func (j *JavaScript) AdaptTools(tool ...tools.Tool) (tools.Tool, error) {
 	for _, t := range tool {
 		err := j.bindToolFunction(t)
 		if err != nil {
@@ -122,14 +122,8 @@ func (j *JavaScript) AdaptTools(tool []tools.Tool) (tools.Tool, error) {
 	}
 
 	// create tool description
-	sigs := functionSignatures(tool...)
-
-	data := TemplateData{
-		PTCToolName: j.toolName,
-		Signatures:  sigs,
-	}
 	var buf bytes.Buffer
-	if err := parsedTemplates.ExecuteTemplate(&buf, "ptc_tool_description", data); err != nil {
+	if err := parsedTemplates.ExecuteTemplate(&buf, "ptc_tool_description", TemplateData{}); err != nil {
 		return tools.Tool{}, fmt.Errorf("failed to execute tool description template: %w", err)
 	}
 	toolDescription := buf.String()
@@ -292,10 +286,14 @@ func (j *JavaScript) Guardrail(code string) (string, error) {
 	return code, nil
 }
 
-	j.console = out
-	return j
-}
+func (j *JavaScript) SystemFragment(tool ...tools.Tool) (string, error) {
+	sigs := functionSignatures(tool...)
 
+	data := TemplateData{
+		PTCToolName: j.toolName,
+		Signatures:  sigs,
+	}
+	var buf bytes.Buffer
 	if err := parsedTemplates.ExecuteTemplate(&buf, "ptc_system_prompt", data); err != nil {
 		j.log("failed to execute system prompt template", "error", err)
 		return "", err

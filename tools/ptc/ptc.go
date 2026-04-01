@@ -8,9 +8,9 @@ import (
 )
 
 type Runtime interface {
-	AdaptTools(tools []tools.Tool) (tools.Tool, error)
+	AdaptTools(tools ...tools.Tool) (tools.Tool, error)
 	Guardrail(code string) (string, error)
-	SystemFragment() (string, error)
+	SystemFragment(tool ...tools.Tool) (string, error)
 	Lock()
 	Unlock()
 	Execute(code string) (string, error, error)
