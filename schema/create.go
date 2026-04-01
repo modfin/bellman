@@ -37,34 +37,7 @@ func typeToSchema(t reflect.Type) *JSON {
 		schema.Properties = make(map[string]*JSON)
 		schema.Required = []string{}
 
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-
-			// Skip unexported fields
-			if !field.IsExported() {
-				continue
-			}
-
-			// Get the JSON field name from the json tag
-			jsonTag := field.Tag.Get("json")
-			name := strings.Split(jsonTag, ",")[0]
-			if name == "-" {
-				continue
-			}
-			if name == "" {
-				name = field.Name
-			}
-
-			// Check if this field is required
-			if !strings.Contains(jsonTag, "omitempty") {
-				schema.Required = append(schema.Required, name)
-			}
-
-			fieldSchema := fieldToSchema(field)
-			if fieldSchema != nil {
-				schema.Properties[name] = fieldSchema
-			}
-		}
+		collectStructFields(t, schema)
 
 		if len(schema.Required) == 0 {
 			schema.Required = nil
@@ -89,6 +62,49 @@ func typeToSchema(t reflect.Type) *JSON {
 	}
 
 	return schema
+}
+
+func collectStructFields(t reflect.Type, schema *JSON) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// Skip unexported fields
+		if !field.IsExported() {
+			continue
+		}
+
+		// Handle embedded/anonymous structs - promote their fields to the parent
+		if field.Anonymous {
+			ft := field.Type
+			if ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				collectStructFields(ft, schema)
+				continue
+			}
+		}
+
+		// Get the JSON field name from the json tag
+		jsonTag := field.Tag.Get("json")
+		name := strings.Split(jsonTag, ",")[0]
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = field.Name
+		}
+
+		// Check if this field is required
+		if !strings.Contains(jsonTag, "omitempty") {
+			schema.Required = append(schema.Required, name)
+		}
+
+		fieldSchema := fieldToSchema(field)
+		if fieldSchema != nil {
+			schema.Properties[name] = fieldSchema
+		}
+	}
 }
 
 func fieldToSchema(field reflect.StructField) *JSON {

@@ -467,6 +467,86 @@ func TestFrom_InvalidTags(t *testing.T) {
 	}
 }
 
+func TestFrom_EmbeddedStruct(t *testing.T) {
+	type Category struct {
+		Kind string `json:"kind" json-enum:"alpha,beta,gamma"`
+	}
+	type Item struct {
+		Category
+		Label string `json:"label"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"kind": {
+				Type: schema.String,
+				Enum: []interface{}{"alpha", "beta", "gamma"},
+			},
+			"label": {Type: schema.String},
+		},
+		Required: []string{"kind", "label"},
+	}
+
+	result := schema.From(Item{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
+func TestFrom_EmbeddedStructMultiLevel(t *testing.T) {
+	type Base struct {
+		ID int `json:"id" json-minimum:"1"`
+	}
+	type Middle struct {
+		Base
+		Name string `json:"name" json-max-length:"100"`
+	}
+	type Top struct {
+		Middle
+		Extra string `json:"extra"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"id":    {Type: schema.Integer, Minimum: ptr(1.)},
+			"name":  {Type: schema.String, MaxLength: ptr(100)},
+			"extra": {Type: schema.String},
+		},
+		Required: []string{"id", "name", "extra"},
+	}
+
+	result := schema.From(Top{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
+func TestFrom_EmbeddedPointerStruct(t *testing.T) {
+	type Embedded struct {
+		Value string `json:"value" json-enum:"A,B,C"`
+	}
+	type Outer struct {
+		*Embedded
+		Other int `json:"other"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"value": {Type: schema.String, Enum: []interface{}{"A", "B", "C"}},
+			"other": {Type: schema.Integer},
+		},
+		Required: []string{"value", "other"},
+	}
+
+	result := schema.From(Outer{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }
