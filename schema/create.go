@@ -73,7 +73,14 @@ func collectStructFields(t reflect.Type, schema *JSON) {
 			continue
 		}
 
-		// Handle embedded/anonymous structs - promote their fields to the parent
+		// In Go, an anonymous (embedded) struct field promotes its fields to the
+		// parent struct. encoding/json flattens these into the parent JSON object
+		// rather than nesting them. We mirror that behavior here: when we encounter
+		// an anonymous field whose underlying type is a struct, we recurse into it
+		// and collect its fields directly into the parent schema. This ensures that
+		// struct tags (json-enum, json-description, etc.) on the embedded struct's
+		// fields are preserved in the parent schema. Pointer-to-struct embeddings
+		// (e.g. *Embedded) are handled by dereferencing the pointer type first.
 		if field.Anonymous {
 			ft := field.Type
 			if ft.Kind() == reflect.Ptr {

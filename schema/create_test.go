@@ -547,6 +547,181 @@ func TestFrom_EmbeddedPointerStruct(t *testing.T) {
 	}
 }
 
+func TestFrom_EmbeddedStructWithDescription(t *testing.T) {
+	type Metadata struct {
+		Source string `json:"source" json-description:"Origin of the record" json-enum:"manual,import,api"`
+	}
+	type Record struct {
+		Metadata
+		Data string `json:"data"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"source": {
+				Type:        schema.String,
+				Description: "Origin of the record",
+				Enum:        []interface{}{"manual", "import", "api"},
+			},
+			"data": {Type: schema.String},
+		},
+		Required: []string{"source", "data"},
+	}
+
+	result := schema.From(Record{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
+func TestFrom_EmbeddedStructWithOmitempty(t *testing.T) {
+	type Optional struct {
+		Note string `json:"note,omitempty"`
+	}
+	type Parent struct {
+		Optional
+		Name string `json:"name"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"note": {Type: schema.String},
+			"name": {Type: schema.String},
+		},
+		Required: []string{"name"},
+	}
+
+	result := schema.From(Parent{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
+func TestFrom_EmbeddedStructMultipleEmbeds(t *testing.T) {
+	type Timestamps struct {
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at,omitempty"`
+	}
+	type Identifiers struct {
+		ID   int    `json:"id" json-minimum:"1"`
+		Code string `json:"code" json-enum:"X,Y,Z"`
+	}
+	type Entity struct {
+		Timestamps
+		Identifiers
+		Name string `json:"name"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"created_at": {Type: schema.String},
+			"updated_at": {Type: schema.String},
+			"id":         {Type: schema.Integer, Minimum: ptr(1.)},
+			"code":       {Type: schema.String, Enum: []interface{}{"X", "Y", "Z"}},
+			"name":       {Type: schema.String},
+		},
+		Required: []string{"created_at", "id", "code", "name"},
+	}
+
+	result := schema.From(Entity{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
+func TestFrom_EmbeddedStructWithNestedStruct(t *testing.T) {
+	// Verify that embedded structs are promoted while regular named struct fields stay nested
+	type Shared struct {
+		Tag string `json:"tag" json-enum:"a,b"`
+	}
+	type Inner struct {
+		X int `json:"x"`
+	}
+	type Combined struct {
+		Shared
+		Inner Inner `json:"inner"`
+		Y     int   `json:"y"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"tag": {Type: schema.String, Enum: []interface{}{"a", "b"}},
+			"inner": {
+				Type: schema.Object,
+				Properties: map[string]*schema.JSON{
+					"x": {Type: schema.Integer},
+				},
+				Required: []string{"x"},
+			},
+			"y": {Type: schema.Integer},
+		},
+		Required: []string{"tag", "inner", "y"},
+	}
+
+	result := schema.From(Combined{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
+func TestFrom_EmbeddedStructWithNumberValidation(t *testing.T) {
+	type Limits struct {
+		Score   float64 `json:"score" json-minimum:"0.0" json-maximum:"100.0"`
+		Count   int     `json:"count" json-exclusive-minimum:"0" json-exclusive-maximum:"1000"`
+	}
+	type Report struct {
+		Limits
+		Title string `json:"title"`
+	}
+
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"score": {Type: schema.Number, Minimum: ptr(0.0), Maximum: ptr(100.0)},
+			"count": {Type: schema.Integer, ExclusiveMinimum: ptr(0.0), ExclusiveMaximum: ptr(1000.0)},
+			"title": {Type: schema.String},
+		},
+		Required: []string{"score", "count", "title"},
+	}
+
+	result := schema.From(Report{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
+func TestFrom_EmbeddedStructWithStringValidation(t *testing.T) {
+	type Constraints struct {
+		Email string `json:"email" json-format:"email" json-min-length:"5" json-max-length:"254"`
+		Slug  string `json:"slug" json-pattern:"^[a-z0-9-]+$"`
+	}
+	type Profile struct {
+		Constraints
+		DisplayName string `json:"display_name"`
+	}
+
+	format := "email"
+	pattern := "^[a-z0-9-]+$"
+	expected := &schema.JSON{
+		Type: schema.Object,
+		Properties: map[string]*schema.JSON{
+			"email":        {Type: schema.String, Format: &format, MinLength: ptr(5), MaxLength: ptr(254)},
+			"slug":         {Type: schema.String, Pattern: &pattern},
+			"display_name": {Type: schema.String},
+		},
+		Required: []string{"email", "slug", "display_name"},
+	}
+
+	result := schema.From(Profile{})
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Expected %+v, got %+v", expected, result)
+	}
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }
