@@ -217,9 +217,6 @@ func (j *JavaScript) Execute(code string) (resString string, resErr error, err e
 	})
 	defer timer.Stop()
 
-	// set non-fresh on execution!
-	j.fresh = false
-
 	_, resErr = j.runtime.RunString(code)
 	if resErr != nil {
 		return "", resErr, nil
