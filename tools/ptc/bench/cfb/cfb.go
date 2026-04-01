@@ -204,6 +204,7 @@ func (i *Instance) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest
 	// prompt with retry (cfb restarts on every test...)
 	maxRetries := 5
 	var res *gen.Response
+	var metrics *tracer.Metrics
 	for {
 		// trace llm call start (if not recording already)
 		if i.Tracer.ChatSpan.Span == nil || !i.Tracer.ChatSpan.IsRecording() {
@@ -214,6 +215,14 @@ func (i *Instance) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest
 		res, err = llm.Prompt(toolmanConversation...)
 		duration := time.Since(start)
 		fmt.Printf("prompt duration: %v ms\n", duration.Milliseconds())
+
+		if res != nil {
+			metrics = &tracer.Metrics{
+				InputTokens:    res.Metadata.InputTokens,
+				OutputTokens:   res.Metadata.OutputTokens,
+				ThinkingTokens: res.Metadata.ThinkingTokens,
+			}
+		}
 
 		if err == nil {
 			break
@@ -227,12 +236,7 @@ func (i *Instance) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest
 		}
 
 		// trace error as assistant
-		i.Tracer.Trace(prompt.AsAssistant(err.Error()), toolmanConversation, &tracer.Metrics{
-			InputTokens:    0,
-			OutputTokens:   0,
-			ThinkingTokens: 0,
-			LLMLatency:     duration,
-		})
+		i.Tracer.Trace(prompt.AsAssistant(err.Error()), toolmanConversation, nil)
 
 		// update retry counter
 		i.retries++
@@ -291,7 +295,7 @@ func (i *Instance) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest
 	// trace tool calls
 	for _, call := range toolmanCalls {
 		if res.IsTools() {
-			i.Tracer.Trace(call, toolmanCalls, nil)
+			i.Tracer.Trace(call, toolmanCalls, metrics)
 		}
 	}
 
@@ -315,7 +319,7 @@ func (i *Instance) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		i.Tracer.Trace(prompt.AsAssistant(content), toolmanConversation, nil)
+		//i.Tracer.Trace(prompt.AsAssistant(content), toolmanConversation, metrics) TODO needed?
 	}
 
 	finishReason := "stop"
@@ -513,7 +517,7 @@ func (c *Cache) ensureCache(req BenchmarkRequest) *Instance {
 	if !ok {
 		i = &Instance{
 			Replay: replay.NewReplay(),
-			Tracer: tracer.NewTracer("CFB"),
+			Tracer: tracer.NewTracer(req.TestID + req.Model),
 		}
 		i.timer = time.AfterFunc(3*time.Minute, func() {
 			c.finish(req.TestID)

@@ -183,6 +183,7 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 	// prompt with retry (bfcl restarts on every test...)
 	maxRetries := 5
 	var res *gen.Response
+	var metrics *tracer.Metrics
 	for {
 		// trace llm call start (if not recording already)
 		if i.Tracer.ChatSpan.Span == nil || !i.Tracer.ChatSpan.IsRecording() {
@@ -193,6 +194,14 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 		res, err = llm.Prompt(toolmanConversation...)
 		duration := time.Since(start)
 		fmt.Printf("prompt duration: %v ms\n", duration.Milliseconds())
+
+		if res != nil {
+			metrics = &tracer.Metrics{
+				InputTokens:    res.Metadata.InputTokens,
+				OutputTokens:   res.Metadata.OutputTokens,
+				ThinkingTokens: res.Metadata.ThinkingTokens,
+			}
+		}
 
 		if err == nil {
 			break
@@ -206,12 +215,7 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 		}
 
 		// trace error as assistant
-		i.Tracer.Trace(prompt.AsAssistant(err.Error()), toolmanConversation, &tracer.Metrics{
-			InputTokens:    0,
-			OutputTokens:   0,
-			ThinkingTokens: 0,
-			LLMLatency:     duration,
-		})
+		i.Tracer.Trace(prompt.AsAssistant(err.Error()), toolmanConversation, metrics)
 
 		// update retries counter
 		i.retries++
@@ -250,7 +254,7 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 
 	// trace tool calls
 	for _, call := range toolmanCalls {
-		i.Tracer.Trace(call, toolmanCalls, nil)
+		i.Tracer.Trace(call, toolmanCalls, metrics)
 	}
 
 	// If PTC enabled, and we get to this point:
@@ -403,7 +407,7 @@ func (c *Cache) ensureCache(req BenchmarkRequest) *Instance {
 	if !ok {
 		i = &Instance{
 			Replay: replay.NewReplay(),
-			Tracer: tracer.NewTracer("BFCL"),
+			Tracer: tracer.NewTracer(req.TestID + req.Model),
 		}
 		i.timer = time.AfterFunc(1*time.Minute, func() {
 			c.finish(req.TestID)
