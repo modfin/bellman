@@ -517,7 +517,7 @@ func (c *Cache) ensureCache(req BenchmarkRequest) *Instance {
 	if !ok {
 		i = &Instance{
 			Replay: replay.NewReplay(),
-			Tracer: tracer.NewTracer(req.TestID + req.Model),
+			Tracer: tracer.NewTracer(fmt.Sprintf("%s-%s", req.TestID, req.Model)),
 		}
 		i.timer = time.AfterFunc(3*time.Minute, func() {
 			c.finish(req.TestID)

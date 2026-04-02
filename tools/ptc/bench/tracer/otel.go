@@ -95,7 +95,10 @@ func (t *Tracer) Trace(p prompt.Prompt, messages []prompt.Prompt, metrics *Metri
 				attribute.String("gen_ai.response.model", t.Model.Name),
 				//attribute.String("gen_ai.output.messages", string(jsonResponse)),
 				attribute.String("gen_ai.prompt", fmt.Sprintf("Conversation history...")),
-				//attribute.String("gen_ai.completion", p.Text),
+			)
+		} else if chatSpan.Span != nil {
+			chatSpan.SetAttributes(
+				attribute.String("gen_ai.completion", p.Text),
 			)
 			if metrics != nil {
 				chatSpan.SetAttributes(
