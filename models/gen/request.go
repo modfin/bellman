@@ -22,7 +22,7 @@ type Request struct {
 	Tools             []tools.Tool `json:"tools,omitempty"`
 	PTCTools          []tools.Tool `json:"ptc_tools,omitempty"`
 	ToolConfig        *tools.Tool  `json:"tool,omitempty"`
-	PTCSystemFragment string       `json:"ptc_system_fragment,omitempty"`
+	PTCSystemFragment *string      `json:"ptc_system_fragment,omitempty"`
 
 	ThinkingBudget *int  `json:"thinking_budget,omitempty"`
 	ThinkingParts  *bool `json:"thinking_parts,omitempty"`

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,10 +53,11 @@ type BenchmarkResponse struct {
 type ExtractedCall map[string]map[string]interface{}
 
 type Instance struct {
-	Replay *replay.Replay
-	Tracer *tracer.Tracer
-	timer  *time.Timer
-	mu     sync.Mutex
+	Replay  *replay.Replay
+	Tracer  *tracer.Tracer
+	timer   *time.Timer
+	mu      sync.Mutex
+	retries int
 }
 
 type Cache struct {
@@ -97,7 +99,7 @@ func (c *Cache) HandleGenerateBFCL(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		i.mu.Lock()
-		i.timer.Reset(15 * time.Second)
+		i.timer.Reset(1 * time.Minute)
 		i.mu.Unlock()
 	}()
 
@@ -155,16 +157,11 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 		}
 	}
 
-	// trace llm call start (if not recording already)
-	if i.Tracer.ChatSpan.Span == nil || !i.Tracer.ChatSpan.IsRecording() {
-		i.Tracer.Trace(prompt.AsUser("..."), toolmanConversation)
-	}
-
 	if req.EnablePTC {
 		req.SystemPrompt = req.SystemPrompt + `
 # Rules
 
-- Call ONLY the Tool Functions needed. Return ALL results directly.
+- Call ONLY the Functions needed. Return ALL results directly.
 - NO logic: no if/else, no loops, no try/catch, no data transformation, no maths.
 - NO defensive coding: assume all calls succeed.
 - One var per Function call. Return them all in a single object.
@@ -184,27 +181,59 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 	}
 
 	// prompt with retry (bfcl restarts on every test...)
-	maxRetries := 10
+	maxRetries := 5
 	var res *gen.Response
-	for retry := 0; retry <= maxRetries; retry++ {
+	var metrics *tracer.Metrics
+	for {
+		// trace llm call start (if not recording already)
+		if i.Tracer.ChatSpan.Span == nil || !i.Tracer.ChatSpan.IsRecording() {
+			i.Tracer.Trace(prompt.AsUser("..."), toolmanConversation, nil)
+		}
+
 		start := time.Now()
 		res, err = llm.Prompt(toolmanConversation...)
 		duration := time.Since(start)
 		fmt.Printf("prompt duration: %v ms\n", duration.Milliseconds())
 
+		if res != nil {
+			metrics = &tracer.Metrics{
+				InputTokens:    res.Metadata.InputTokens,
+				OutputTokens:   res.Metadata.OutputTokens,
+				ThinkingTokens: res.Metadata.ThinkingTokens,
+			}
+		}
+
 		if err == nil {
 			break
 		}
 
-		if retry >= maxRetries {
+		if i.retries >= maxRetries {
 			log.Printf("Prompt Error: %+v\n", err)
 			i.Tracer.TraceError(i.Tracer.ChatSpan, err)
-
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		backoff := time.Duration(1<<retry) * time.Second
+		// trace error as assistant
+		i.Tracer.Trace(prompt.AsAssistant(err.Error()), toolmanConversation, metrics)
+
+		// update retries counter
+		i.retries++
+
+		if strings.Contains(err.Error(), "unexpected status code 403") {
+			// return on 403 error (llm provider fire wall)
+			resp := BenchmarkResponse{
+				ToolCalls:      nil,
+				ToolCallIDs:    nil,
+				ToolmanHistory: toolmanConversation,
+				InputTokens:    0,
+				OutputTokens:   0,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		backoff := time.Duration(1<<i.retries) * time.Second
 		log.Printf("Prompt Error: %+v. Retrying in %v...\n", err, backoff)
 		time.Sleep(backoff)
 	}
@@ -225,7 +254,7 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 
 	// trace tool calls
 	for _, call := range toolmanCalls {
-		i.Tracer.Trace(call, toolmanCalls)
+		i.Tracer.Trace(call, toolmanCalls, metrics)
 	}
 
 	// If PTC enabled, and we get to this point:
@@ -270,7 +299,7 @@ func (i *Instance) getToolCalls(res *gen.Response) ([]prompt.Prompt, []Extracted
 	var toolmanCalls []prompt.Prompt
 	for _, tool := range res.Tools {
 		// PTC Tool Call
-		if tool.Name == ptc.PTCToolName {
+		if tool.Name == ptc.ToolName {
 			// Unmarshal the 'argument' string/bytes to get the JS code
 			var codeArgs struct {
 				Code string `json:"code"`
@@ -345,7 +374,7 @@ func (i *Instance) executionReplay(bellmanTools []tools.Tool, toolmanConversatio
 	}
 
 	// execution result --> toolman response
-	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.PTCToolName, result.Output)
+	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.ToolName, result.Output)
 	return nil, &toolResponse
 }
 
@@ -374,30 +403,39 @@ func toolmanToBFCLCall(tool tools.Call) (ExtractedCall, error) {
 func (c *Cache) ensureCache(req BenchmarkRequest) *Instance {
 	c.mu.Lock()
 
+	ptcFlag := "regular-fc" // regular function calling
+	if req.EnablePTC {
+		ptcFlag = "ptc-fc"
+	}
+
 	i, ok := c.Instances[req.TestID]
 	if !ok {
 		i = &Instance{
 			Replay: replay.NewReplay(),
-			Tracer: tracer.NewTracer("BFCL"),
+			Tracer: tracer.NewTracer(fmt.Sprintf("%s-%s-%s", req.TestID, ptcFlag, req.Model)),
 		}
-		i.timer = time.AfterFunc(15*time.Second, func() {
+		i.timer = time.AfterFunc(1*time.Minute, func() {
 			c.finish(req.TestID)
 		})
 		c.Instances[req.TestID] = i
 	} else {
-		i.timer.Reset(15 * time.Second)
+		i.timer.Reset(1 * time.Minute)
 	}
 	c.mu.Unlock()
 
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	// reset cache if only user message, and no hist/new response
 	reset := true
 	for _, m := range req.Messages {
 		if m.Role != "user" {
 			reset = false
 			break
 		}
+	}
+	if len(req.NewToolResponses) > 0 {
+		reset = false
 	}
 	if reset {
 		i.Replay.Clear()
@@ -452,7 +490,7 @@ func (i *Instance) addNewUserConversation(req BenchmarkRequest) []prompt.Prompt 
 				// update turn index & trace
 				i.Tracer.NewTurn()
 				userPrompt := prompt.AsUser(m.Content)
-				i.Tracer.Trace(userPrompt, toolmanHistory)
+				i.Tracer.Trace(userPrompt, toolmanHistory, nil)
 				toolmanHistory = append(toolmanHistory, userPrompt)
 			}
 		}
@@ -473,7 +511,7 @@ func (i *Instance) appendResponseConversation(toolmanHistory []prompt.Prompt, re
 			// priority order: response -> toolman history -> request messages
 			if response != nil && response.ToolResponse.ToolCallID == p.ToolCall.ToolCallID {
 				// trace tool response
-				i.Tracer.Trace(*response, nil)
+				i.Tracer.Trace(*response, nil, nil)
 				rebuiltConversation = append(rebuiltConversation, *response)
 				break
 			}
@@ -490,7 +528,7 @@ func (i *Instance) appendResponseConversation(toolmanHistory []prompt.Prompt, re
 					if m.Role == "tool_response" && m.ToolID == p.ToolCall.ToolCallID {
 						// trace tool response
 						responsePrompt := prompt.AsToolResponse(m.ToolID, m.ToolName, m.Content)
-						i.Tracer.Trace(responsePrompt, nil)
+						i.Tracer.Trace(responsePrompt, nil, nil)
 						rebuiltConversation = append(rebuiltConversation, responsePrompt)
 						break
 					}

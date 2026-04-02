@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -84,9 +86,23 @@ type Usage struct {
 // ExtractedCall is a cfb tool call to be returned
 type ExtractedCall map[string]map[string]interface{}
 
+type Instance struct {
+	Replay  *replay.Replay
+	Tracer  *tracer.Tracer
+	timer   *time.Timer
+	mu      sync.Mutex
+	retries int
+}
+
 type Cache struct {
-	Replay *replay.Replay
-	Tracer *tracer.Tracer
+	Instances map[string]*Instance
+	mu        sync.Mutex
+}
+
+func NewCache() *Cache {
+	return &Cache{
+		Instances: make(map[string]*Instance),
+	}
 }
 
 var (
@@ -107,16 +123,25 @@ func (c *Cache) HandleGenerateCFB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.EnablePTC {
-		// ensure replay cache is ready
-		c.ensureCache(req)
-	}
+	// ensure cache instance, replay cache and tracer
+	i := c.ensureCache(req)
 
-	c.replayGenerateCFB(w, req, nil)
+	// stop finish timer once working and defer reset
+	i.mu.Lock()
+	i.timer.Stop()
+	i.mu.Unlock()
+
+	defer func() {
+		i.mu.Lock()
+		i.timer.Reset(10 * time.Minute)
+		i.mu.Unlock()
+	}()
+
+	i.replayGenerateCFB(w, req, nil)
 }
 
 // replayGenerateCFB is the replay and generate loop for benchmarking
-func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, previousGen *gen.Response) {
+func (i *Instance) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, previousGen *gen.Response) {
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 	client := bellman.New(bellmanUrl, bellman.Key{Name: "cfb", Token: bellmanToken})
@@ -125,16 +150,16 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 
 	model, err := gen.ToModel(req.Model)
 	if err != nil {
+		i.Tracer.TraceError(i.Tracer.RootSpan, err)
 		log.Fatalf("error: %e", err)
 	}
-	//model = openai.GenModel_gpt5_mini_latest
 
 	// add trailing user messages to toolman conversation
-	toolmanConversation := c.addNewUserConversation(req)
+	toolmanConversation := i.addNewUserConversation(req)
 
 	if !req.EnablePTC {
 		// add benchmark responses to tool calls
-		toolmanConversation = c.appendResponseConversation(toolmanConversation, req, nil)
+		toolmanConversation = i.appendResponseConversation(toolmanConversation, req, nil)
 	}
 
 	// Execution replay! - run if new tool responses and PTC enabled
@@ -142,32 +167,30 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 		if len(req.NewToolResponses) > 0 {
 			for _, m := range req.NewToolResponses {
 				// add response to cache and execute reply again (until execution finishes)
-				fmt.Printf("adding result: %s --> %s\n", m.ToolName, m.Content)
-				c.Replay.AddResponse(replay.CallRecord{
+				i.Replay.AddResponse(replay.CallRecord{
 					ToolName: m.ToolName,
 					Result:   m.Content,
 				})
 				// trace code execution
 				toolResponse := prompt.AsToolResponse(m.ToolID, m.ToolName, m.Content)
-				c.Tracer.TraceExec(toolResponse)
+				i.Tracer.TraceExec(toolResponse)
 			}
 		}
+		if len(req.NewToolResponses) > 0 && !i.Replay.IsPending() {
+			log.Printf("?????????")
+
+		}
 		// while there are scripts to run, replay them
-		for c.Replay.IsPending() {
-			resp, toolResponse := c.executionReplay(bellmanTools, toolmanConversation, previousGen, model)
+		for i.Replay.IsPending() {
+			resp, toolResponse := i.executionReplay(bellmanTools, toolmanConversation, previousGen, model)
 			if resp != nil {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(resp)
 				return
 			}
 			// Add response to toolman conversation
-			toolmanConversation = c.appendResponseConversation(toolmanConversation, req, toolResponse)
+			toolmanConversation = i.appendResponseConversation(toolmanConversation, req, toolResponse)
 		}
-	}
-
-	// trace llm call start (if not recording already)
-	if c.Tracer.ChatSpan.Span == nil || !c.Tracer.ChatSpan.IsRecording() {
-		c.Tracer.Trace(prompt.AsUser(""), toolmanConversation)
 	}
 
 	llm := client.Generator().Model(model).
@@ -178,23 +201,91 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 		llm, _ = llm.ActivatePTC(ptc.JavaScript)
 	}
 
-	res, err := llm.Prompt(toolmanConversation...)
-	if err != nil {
-		log.Printf("Prompt Error: %v", err)
-		c.Tracer.TraceError(c.Tracer.ChatSpan, err)
+	// prompt with retry (cfb restarts on every test...)
+	maxRetries := 5
+	var res *gen.Response
+	var metrics *tracer.Metrics
+	for {
+		// trace llm call start (if not recording already)
+		if i.Tracer.ChatSpan.Span == nil || !i.Tracer.ChatSpan.IsRecording() {
+			i.Tracer.Trace(prompt.AsUser(""), toolmanConversation, nil)
+		}
 
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		start := time.Now()
+		res, err = llm.Prompt(toolmanConversation...)
+		duration := time.Since(start)
+		fmt.Printf("prompt duration: %v ms\n", duration.Milliseconds())
+
+		if res != nil {
+			metrics = &tracer.Metrics{
+				InputTokens:    res.Metadata.InputTokens,
+				OutputTokens:   res.Metadata.OutputTokens,
+				ThinkingTokens: res.Metadata.ThinkingTokens,
+			}
+		}
+
+		if err == nil {
+			break
+		}
+
+		if i.retries >= maxRetries {
+			log.Printf("Prompt Error: %+v\n", err)
+			i.Tracer.TraceError(i.Tracer.ChatSpan, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// trace error as assistant
+		i.Tracer.Trace(prompt.AsAssistant(err.Error()), toolmanConversation, nil)
+
+		// update retry counter
+		i.retries++
+
+		if strings.Contains(err.Error(), "unexpected status code 403") {
+			// return on 403 error (llm provider fire wall)
+			completion := ChatCompletionResponse{
+				ID:      "chatcmpl-123", // Important: fill with mock data! (for completion parsing in cfb)
+				Object:  "chat.completion",
+				Created: time.Now().Unix(),
+				Model:   model.String(),
+				Choices: []Choice{{
+					Index: 0,
+					Message: ResponseMessage{
+						Role:      "assistant",
+						Content:   "error",
+						ToolCalls: nil,
+					},
+					FinishReason: "stop",
+				},
+				},
+				Usage: Usage{
+					PromptTokens:     0,
+					CompletionTokens: 0,
+					TotalTokens:      0,
+				},
+			}
+
+			resp := BenchmarkResponse{
+				Completion:     completion,
+				ToolmanHistory: toolmanConversation,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		backoff := time.Duration(1<<i.retries) * time.Second
+		log.Printf("Prompt Error: %+v. Retrying in %v...\n", err, backoff)
+		time.Sleep(backoff)
 	}
 
 	// log token usage
 	logExecution(res)
 
 	// get tool call or text response, and add PTC scripts to cache
-	toolmanCalls, cfbCalls, err := c.getToolCalls(res)
+	toolmanCalls, cfbCalls, err := i.getToolCalls(res)
 	if err != nil {
 		log.Printf("error getting prompts: %v", err)
-		c.Tracer.TraceError(c.Tracer.ChatSpan, err)
+		i.Tracer.TraceError(i.Tracer.ChatSpan, err)
 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -203,7 +294,9 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 
 	// trace tool calls
 	for _, call := range toolmanCalls {
-		c.Tracer.Trace(call, toolmanCalls)
+		if res.IsTools() {
+			i.Tracer.Trace(call, toolmanCalls, metrics)
+		}
 	}
 
 	// If PTC enabled, and we get to this point:
@@ -212,7 +305,7 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 	if req.EnablePTC && !res.IsText() {
 		req.NewToolResponses = nil
 		req.ToolmanHistory = toolmanConversation
-		c.replayGenerateCFB(w, req, res)
+		i.replayGenerateCFB(w, req, res)
 		return
 	}
 
@@ -221,11 +314,12 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 	if res.IsText() {
 		if content, err = res.AsText(); err != nil {
 			log.Printf("error: %v", err)
-			c.Tracer.TraceError(c.Tracer.ChatSpan, err)
+			i.Tracer.TraceError(i.Tracer.ChatSpan, err)
 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		//i.Tracer.Trace(prompt.AsAssistant(content), toolmanConversation, metrics) TODO needed?
 	}
 
 	finishReason := "stop"
@@ -265,7 +359,7 @@ func (c *Cache) replayGenerateCFB(w http.ResponseWriter, req BenchmarkRequest, p
 }
 
 // getToolCalls extracts prompts from response
-func (c *Cache) getToolCalls(res *gen.Response) ([]prompt.Prompt, []ToolCall, error) {
+func (i *Instance) getToolCalls(res *gen.Response) ([]prompt.Prompt, []ToolCall, error) {
 	// response is assistant text
 	if !res.IsTools() { // --> res.IsText()
 		text, err := res.AsText()
@@ -281,7 +375,7 @@ func (c *Cache) getToolCalls(res *gen.Response) ([]prompt.Prompt, []ToolCall, er
 	var cfbCalls []ToolCall
 	for _, tool := range res.Tools {
 		// PTC Tool Call
-		if tool.Name == ptc.PTCToolName {
+		if tool.Name == ptc.ToolName {
 			// Unmarshal the 'argument' string/bytes to get the JS code
 			var codeArgs struct {
 				Code string `json:"code"`
@@ -292,13 +386,13 @@ func (c *Cache) getToolCalls(res *gen.Response) ([]prompt.Prompt, []ToolCall, er
 			}
 
 			// add script to replay cache
-			c.Replay.AddScript(replay.Script{
+			i.Replay.AddScript(replay.Script{
 				Code:   codeArgs.Code,
 				Done:   false,
 				ToolID: tool.ID,
 			})
 
-			toolmanCalls = append(toolmanCalls, prompt.AsToolCall(tool.ID, tool.Name, []byte(string(tool.Argument))))
+			toolmanCalls = append(toolmanCalls, prompt.AsToolCall(tool.ID, tool.Name, tool.Argument))
 			continue
 		}
 
@@ -315,8 +409,8 @@ func (c *Cache) getToolCalls(res *gen.Response) ([]prompt.Prompt, []ToolCall, er
 }
 
 // executionReplay runs execution replay and returns bench response or tool response
-func (c *Cache) executionReplay(bellmanTools []tools.Tool, toolmanConversation []prompt.Prompt, genResponse *gen.Response, model gen.Model) (*BenchmarkResponse, *prompt.Prompt) {
-	result := c.Replay.ExecutionReplay(bellmanTools)
+func (i *Instance) executionReplay(bellmanTools []tools.Tool, toolmanConversation []prompt.Prompt, genResponse *gen.Response, model gen.Model) (*BenchmarkResponse, *prompt.Prompt) {
+	result := i.Replay.ExecutionReplay(bellmanTools)
 	if result.Error != nil {
 		log.Fatalf("error: %e", result.Error)
 	}
@@ -334,7 +428,7 @@ func (c *Cache) executionReplay(bellmanTools []tools.Tool, toolmanConversation [
 			log.Printf("error: Error marshaling arguments: %v\n", err)
 		}
 		toolCall := prompt.AsToolCall(result.ToolID, result.Record.ToolName, jsonBytes)
-		c.Tracer.TraceExec(toolCall)
+		i.Tracer.TraceExec(toolCall)
 
 		inputTokens := 0
 		outputTokens := 0
@@ -380,7 +474,7 @@ func (c *Cache) executionReplay(bellmanTools []tools.Tool, toolmanConversation [
 	}
 
 	// execution result --> toolman response
-	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.PTCToolName, result.Output)
+	toolResponse := prompt.AsToolResponse(result.ToolID, ptc.ToolName, result.Output)
 	return nil, &toolResponse
 }
 
@@ -388,7 +482,7 @@ func (c *Cache) executionReplay(bellmanTools []tools.Tool, toolmanConversation [
 func recordToCFBCall(record *replay.CallRecord) (ToolCall, error) {
 	jsonBytes, err := json.Marshal(record.Argument)
 	if err != nil {
-		fmt.Printf("Error marshaling arguments: %v\n", err)
+		log.Printf("Error marshaling arguments: %v\n", err)
 		return ToolCall{}, err
 	}
 
@@ -416,7 +510,33 @@ func toolmanToCFBCall(tool tools.Call) (ToolCall, error) {
 }
 
 // ensureCache clears cache on new test (only user messages inbound)
-func (c *Cache) ensureCache(req BenchmarkRequest) {
+func (c *Cache) ensureCache(req BenchmarkRequest) *Instance {
+	c.mu.Lock()
+
+	ptcFlag := "regular-fc" // regular function calling
+	if req.EnablePTC {
+		ptcFlag = "ptc-fc"
+	}
+
+	i, ok := c.Instances[req.TestID]
+	if !ok {
+		i = &Instance{
+			Replay: replay.NewReplay(),
+			Tracer: tracer.NewTracer(fmt.Sprintf("%s-%s-%s", req.TestID, ptcFlag, req.Model)),
+		}
+		i.timer = time.AfterFunc(3*time.Minute, func() {
+			c.finish(req.TestID)
+		})
+		c.Instances[req.TestID] = i
+	} else {
+		i.timer.Reset(3 * time.Minute)
+	}
+	c.mu.Unlock()
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// reset cache if only user message, and no new responses
 	reset := true
 	for _, m := range req.Messages {
 		if m.Role != "user" {
@@ -424,13 +544,12 @@ func (c *Cache) ensureCache(req BenchmarkRequest) {
 			break
 		}
 	}
+	if reset && (len(req.NewToolResponses) > 0 || len(req.ToolmanHistory) > 1) {
+		reset = false
+	}
 	if reset {
-		fmt.Printf("clearing cache & new trace\n")
-		c.Replay.Clear()
-		if c.Tracer == nil {
-			c.Tracer = &tracer.Tracer{}
-		}
-		c.Tracer.NewTrace(tracer.TracerRequest{
+		i.Replay.Clear()
+		i.Tracer.NewTrace(tracer.TracerRequest{
 			Model:          req.Model,
 			ToolmanHistory: req.ToolmanHistory,
 			Tools:          req.Tools,
@@ -438,10 +557,30 @@ func (c *Cache) ensureCache(req BenchmarkRequest) {
 			TestID:         req.TestID,
 		})
 	}
+
+	return i
+}
+
+func (c *Cache) finish(testID string) {
+	c.mu.Lock()
+	i, ok := c.Instances[testID]
+	if ok {
+		delete(c.Instances, testID)
+	}
+	c.mu.Unlock()
+
+	if ok {
+		i.mu.Lock()
+		defer i.mu.Unlock()
+
+		i.timer.Stop()
+		i.Tracer.SendTrace(true)
+		i.Replay.Clear()
+	}
 }
 
 // addNewUserConversation adds incoming user messages to toolman conversation
-func (c *Cache) addNewUserConversation(req BenchmarkRequest) []prompt.Prompt {
+func (i *Instance) addNewUserConversation(req BenchmarkRequest) []prompt.Prompt {
 	toolmanHistory := req.ToolmanHistory
 	// count toolman user messages
 	toolmanUserCount := 0
@@ -459,9 +598,9 @@ func (c *Cache) addNewUserConversation(req BenchmarkRequest) []prompt.Prompt {
 			cfbUserCount++
 			if cfbUserCount > toolmanUserCount {
 				// update turn index & trace
-				c.Tracer.NewTurn()
+				i.Tracer.NewTurn()
 				userPrompt := prompt.AsUser(m.Content)
-				c.Tracer.Trace(userPrompt, toolmanHistory)
+				i.Tracer.Trace(userPrompt, toolmanHistory, nil)
 				toolmanHistory = append(toolmanHistory, userPrompt)
 			}
 		}
@@ -470,7 +609,7 @@ func (c *Cache) addNewUserConversation(req BenchmarkRequest) []prompt.Prompt {
 }
 
 // appendResponseConversation rebuilds the toolman conversation to add new tool response (after corresponding tool call)
-func (c *Cache) appendResponseConversation(toolmanHistory []prompt.Prompt, req BenchmarkRequest, response *prompt.Prompt) []prompt.Prompt {
+func (i *Instance) appendResponseConversation(toolmanHistory []prompt.Prompt, req BenchmarkRequest, response *prompt.Prompt) []prompt.Prompt {
 	// Add tool response after call!
 	var rebuiltConversation []prompt.Prompt
 	for _, p := range toolmanHistory {
@@ -482,7 +621,7 @@ func (c *Cache) appendResponseConversation(toolmanHistory []prompt.Prompt, req B
 			// priority order: response -> toolman history -> request messages
 			if response != nil && response.ToolResponse.ToolCallID == p.ToolCall.ToolCallID {
 				// trace tool response
-				c.Tracer.Trace(*response, nil)
+				i.Tracer.Trace(*response, nil, nil)
 				rebuiltConversation = append(rebuiltConversation, *response)
 				break
 			}
@@ -499,7 +638,7 @@ func (c *Cache) appendResponseConversation(toolmanHistory []prompt.Prompt, req B
 					if m.Role == "tool_response" && m.ToolID == p.ToolCall.ToolCallID {
 						// trace tool response
 						responsePrompt := prompt.AsToolResponse(m.ToolID, m.ToolName, m.Content)
-						c.Tracer.Trace(responsePrompt, nil)
+						i.Tracer.Trace(responsePrompt, nil, nil)
 						rebuiltConversation = append(rebuiltConversation, responsePrompt)
 						break
 					}

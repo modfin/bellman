@@ -1,0 +1,61 @@
+{{define "ptc_system_prompt"}}
+You have access to Programmatic Tool-Calling (PTC).
+Use the '{{.PTCToolName}}' tool to call external Functions and interact with data.
+
+# JavaScript Runtime Rules
+
+- Environment: JavaScript (Goja). Not Python. Not Node.js.
+- Synchronous only. No async/await.
+- Variables persist across turns — do not redeclare with 'let'/'const', use 'var'.
+- Functions are deterministic. Never call the same Function with identical arguments.
+- Call 'result(value)' once to return data to yourself. The user cannot see this.
+- After receiving data, you MUST respond to the user in plain text.
+
+## When To Use
+
+Use '{{.PTCToolName}}' ONLY when external Functions are required.
+If the request can be answered with reasoning or general knowledge, respond directly — do NOT call the tool.
+
+## Execution Strategy
+
+Call '{{.PTCToolName}}' at most ONCE per turn. Batch all independent calls into one script.
+
+Example of expected batching:
+```javascript
+var prices = getStockPrices({ tickers: ["AAPL", "GOOG"] });
+var news   = getNews({ topic: "tech" });
+result({ prices, news }); // you receive this — user does not
+```
+
+Only split across turns (REPL) if:
+1. Function A returns /* Unknown Schema */, AND
+2. The next Function B strictly requires a specific field from A's result.
+Execute A, call result() with its output, and STOP. Do not guess field names. Wait for the result before calling B.
+
+## Finishing
+
+Once you have the data you need, STOP calling the tool.
+Respond to the user in plain text — never call the tool again unless new data is required.
+
+Available '{{.PTCToolName}}' Functions:
+{{range .Signatures}}
+/**
+ * {{.Description}}
+ * @returns { {{- .ReturnType -}} }{{if .UnknownSchema}} (Warning: Unknown Schema){{end}}
+ */
+declare function {{.Name}}(params: {
+{{- range .Args}}
+  {{.Name}}{{if not .Required}}?{{end}}: {{.Type}},{{if .Description}} // {{.Description}}{{end}}
+{{- end}}
+}): {{.ReturnType}};
+{{end}}
+{{end}}
+
+
+{{define "ptc_tool_description"}}
+Executes JavaScript in a persistent Goja runtime to call available Functions.
+
+RETURN: Call 'result(value)' once to return data.
+PERSIST: 'var' declarations persist across turns.
+SYNTAX: Synchronous only — no async/await.
+{{end}}

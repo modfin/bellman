@@ -261,7 +261,9 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	}
 
 	// add PTC system fragment to request
-	request.SystemPrompt += g.request.PTCSystemFragment
+	if g.request.PTCSystemFragment != nil {
+		request.SystemPrompt += *g.request.PTCSystemFragment
+	}
 
 	toolBelt := map[string]*tools.Tool{}
 	for _, tool := range request.Tools {
@@ -512,7 +514,9 @@ func (g *generator) buildStreamingRequest(conversation []prompt.Prompt) (gen.Ful
 	request.Stream = true
 
 	// add PTC system fragment to request
-	request.SystemPrompt += g.request.PTCSystemFragment
+	if g.request.PTCSystemFragment != nil {
+		request.SystemPrompt += *g.request.PTCSystemFragment
+	}
 
 	// Validate request parameters for streaming
 	if err := g.validateStreamingRequest(&request); err != nil {

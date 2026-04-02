@@ -510,7 +510,7 @@ func TestMockPTC(t *testing.T) {
 		return string(jsonBytes), nil
 	}
 
-	codeExecution := tools.NewTool(ptc.PTCToolName,
+	codeExecution := tools.NewTool(ptc.ToolName,
 		tools.WithDescription(
 			"MANDATORY: You must write executable JavaScript code. "+
 				"Executes JS code. Environment has: Sum(a,b), askBellman(url,token,prompt), and CONFIG object. "+

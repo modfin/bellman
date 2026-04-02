@@ -8,14 +8,12 @@ import (
 	"github.com/modfin/bellman/tools/ptc/bench/bfcl"
 	"github.com/modfin/bellman/tools/ptc/bench/cfb"
 	"github.com/modfin/bellman/tools/ptc/bench/nestful"
-	"github.com/modfin/bellman/tools/ptc/bench/replay"
-	"github.com/modfin/bellman/tools/ptc/bench/tracer"
 )
 
 func main() {
-	// Create persistent cache and inject into handlers
+	// Create persistent handler caches
 	bfclCache := bfcl.NewCache()
-	cfbCache := &cfb.Cache{Replay: replay.NewReplay(), Tracer: tracer.NewTracer("ComplexFuncBench")}
+	cfbCache := cfb.NewCache()
 
 	// Register API Endpoint
 	http.HandleFunc("/bfcl", bfclCache.HandleGenerateBFCL)

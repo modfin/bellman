@@ -16,6 +16,7 @@ import (
 	"github.com/modfin/bellman/prompt"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -49,6 +50,12 @@ type TracerRequest struct {
 	TestID         string          `json:"test_id"`
 }
 
+type Metrics struct {
+	InputTokens    int
+	OutputTokens   int
+	ThinkingTokens int
+}
+
 // NewTracer creates a new cache
 func NewTracer(name string) *Tracer {
 	t := &Tracer{}
@@ -57,7 +64,7 @@ func NewTracer(name string) *Tracer {
 }
 
 // Trace automatically traces prompts
-func (t *Tracer) Trace(p prompt.Prompt, messages []prompt.Prompt) {
+func (t *Tracer) Trace(p prompt.Prompt, messages []prompt.Prompt, metrics *Metrics) {
 	// add spans to trace
 	chatSpan := t.ChatSpan
 	var toolSpan Span
@@ -89,10 +96,18 @@ func (t *Tracer) Trace(p prompt.Prompt, messages []prompt.Prompt) {
 				//attribute.String("gen_ai.output.messages", string(jsonResponse)),
 				attribute.String("gen_ai.prompt", fmt.Sprintf("Conversation history...")),
 			)
+		} else if chatSpan.Span != nil {
+			chatSpan.SetAttributes(
+				attribute.String("gen_ai.completion", p.Text),
+			)
+			if metrics != nil {
+				chatSpan.SetAttributes(
+					attribute.Int("gen_ai.usage.input_tokens", metrics.InputTokens),
+					attribute.Int("gen_ai.usage.output_tokens", metrics.OutputTokens),
+					attribute.Int("gen_ai.usage.thinking_tokens", metrics.ThinkingTokens),
+				)
+			}
 		}
-		chatSpan.SetAttributes(
-			attribute.String("gen_ai.completion", p.Text),
-		)
 		chatSpan.End()
 		time.Sleep(1 * time.Millisecond) // sleep 1ms to enforce otel order
 	case prompt.ToolCallRole:
@@ -103,6 +118,13 @@ func (t *Tracer) Trace(p prompt.Prompt, messages []prompt.Prompt) {
 				attribute.String("gen_ai.output.messages", string(jsonResponse)),
 				attribute.String("gen_ai.completion", "Tool Calls Requested"),
 			)
+			if metrics != nil {
+				chatSpan.SetAttributes(
+					attribute.Int("gen_ai.usage.input_tokens", metrics.InputTokens),
+					attribute.Int("gen_ai.usage.output_tokens", metrics.OutputTokens),
+					attribute.Int("gen_ai.usage.thinking_tokens", metrics.ThinkingTokens),
+				)
+			}
 			chatSpan.End()
 			time.Sleep(1 * time.Millisecond) // sleep 1ms to enforce otel order
 		}
@@ -167,6 +189,7 @@ func (t *Tracer) TraceError(span Span, err error) {
 	if span.Span != nil && span.IsRecording() {
 		// This adds a red error badge to the span in Langfuse
 		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 	}
 	// Force close the entire test trace so it exports properly
 	t.SendTrace(true)

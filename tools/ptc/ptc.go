@@ -8,9 +8,9 @@ import (
 )
 
 type Runtime interface {
-	AdaptTools(tools []tools.Tool) (tools.Tool, error)
+	AdaptTools(tools ...tools.Tool) (tools.Tool, error)
 	Guardrail(code string) (string, error)
-	SystemFragment(tool ...tools.Tool) string
+	SystemFragment(tool ...tools.Tool) (string, error)
 	Lock()
 	Unlock()
 	Execute(code string) (string, error, error)
@@ -25,13 +25,13 @@ const (
 )
 
 const (
-	PTCToolName string = "code_execution"
+	ToolName string = "code_execution"
 )
 
 func NewRuntime(lang ProgramLanguage) (Runtime, error) {
 	switch lang {
 	case JavaScript:
-		return js.NewRuntime(PTCToolName), nil
+		return js.NewRuntime(ToolName)
 	}
 	return nil, fmt.Errorf("language unsupported: %s", lang)
 }
