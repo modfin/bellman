@@ -56,6 +56,13 @@ var GenModel_4_5_sonnet_20250929 = gen.Model{
 	InputMaxToken:  200_000,
 	OutputMaxToken: 64_000,
 }
+var GenModel_4_6_sonnet_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "claude-sonnet-4-6",
+	Description:    "The best combination of speed and intelligence",
+	InputMaxToken:  1_000_000,
+	OutputMaxToken: 64_000,
+}
 var GenModel_3_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-3-5-sonnet-latest",
@@ -190,6 +197,13 @@ var GenModel_4_1_opus_20250805 = gen.Model{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
+var GenModel_4_6_opus_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "claude-opus-4-6",
+	Description:    "The most intelligent model for building agents and coding",
+	InputMaxToken:  1_000_000,
+	OutputMaxToken: 128_000,
+}
 
 var GenModels = map[string]gen.Model{
 	GenModel_3_5_sonnet_latest.Name:   GenModel_3_5_sonnet_latest,
@@ -198,6 +212,6 @@ var GenModels = map[string]gen.Model{
 	GenModel_3_5_haiku_latest.Name:   GenModel_3_5_haiku_latest,
 	GenModel_3_5_haiku_20241022.Name: GenModel_3_5_haiku_20241022,
 	//GenModel_3_haiku_20240307.Name:    GenModel_3_haiku_20240307,
-	GenModel_3_opus_latest.Name:   GenModel_3_opus_latest,
-	GenModel_3_opus_20240229.Name: GenModel_3_opus_20240229,
+	GenModel_4_6_opus_latest.Name:   GenModel_4_6_opus_latest,
+	GenModel_4_6_sonnet_latest.Name: GenModel_4_6_sonnet_latest,
 }
