@@ -513,11 +513,16 @@ func toolmanToCFBCall(tool tools.Call) (ToolCall, error) {
 func (c *Cache) ensureCache(req BenchmarkRequest) *Instance {
 	c.mu.Lock()
 
+	ptcFlag := "regular-fc" // regular function calling
+	if req.EnablePTC {
+		ptcFlag = "ptc-fc"
+	}
+
 	i, ok := c.Instances[req.TestID]
 	if !ok {
 		i = &Instance{
 			Replay: replay.NewReplay(),
-			Tracer: tracer.NewTracer(fmt.Sprintf("%s-%s", req.TestID, req.Model)),
+			Tracer: tracer.NewTracer(fmt.Sprintf("%s-%s-%s", req.TestID, ptcFlag, req.Model)),
 		}
 		i.timer = time.AfterFunc(3*time.Minute, func() {
 			c.finish(req.TestID)
