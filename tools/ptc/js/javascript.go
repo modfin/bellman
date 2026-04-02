@@ -27,6 +27,11 @@ type JavaScript struct {
 	Log      *slog.Logger `json:"-"`
 }
 
+type resultOutput struct {
+	value string
+	set   bool
+}
+
 type TemplateData struct {
 	PTCToolName string
 	Signatures  []FunctionSignatureData
@@ -49,8 +54,9 @@ type ArgField struct {
 
 //go:embed prompts.tmpl
 var templateFS embed.FS
-
 var parsedTemplates *template.Template
+
+const nilValue string = "null" // nil in JS
 
 func init() {
 	var err error
@@ -87,8 +93,6 @@ func (j *JavaScript) log(msg string, args ...any) {
 	}
 	j.Log.Debug("[bellman/javascript] "+msg, args...)
 }
-
-const nilValue string = "null" // nil in JS
 
 // AdaptTools converts a list of Bellman tools into a single PTC tool with runtime execution environment
 func (j *JavaScript) AdaptTools(tool ...tools.Tool) (tools.Tool, error) {
@@ -230,11 +234,7 @@ func (j *JavaScript) Execute(code string) (resString string, resErr error, err e
 	return nilValue, nil, nil
 }
 
-type resultOutput struct {
-	value string
-	set   bool
-}
-
+// registerResult registers the result function in Goja, that returns the value from the PTC tools code
 func (j *JavaScript) registerResult() (*JavaScript, error) {
 	out := &resultOutput{}
 	j.output = out
@@ -283,6 +283,7 @@ func (j *JavaScript) Guardrail(code string) (string, error) {
 	return code, nil
 }
 
+// SystemFragment creates the system fragment using template and tools
 func (j *JavaScript) SystemFragment(tool ...tools.Tool) (string, error) {
 	sigs := functionSignatures(tool...)
 
