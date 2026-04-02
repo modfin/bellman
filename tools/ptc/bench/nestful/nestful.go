@@ -127,7 +127,11 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	if choice == "" {
 		choice = "required"
 	}
-	tracer := otel.Tracer("toolman/nestful")
+	ptcFlag := "regular-fc"
+	if req.EnablePTC {
+		ptcFlag = "ptc-fc"
+	}
+	tracer := otel.Tracer(fmt.Sprintf("nestful-%s-%s", ptcFlag, model.String()))
 	ctx := r.Context()
 
 	sampleID := benchSampleID(r)
@@ -239,6 +243,7 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 		llmSpan.SetAttributes(
 			attribute.Int("gen_ai.usage.input_tokens", res.Metadata.InputTokens),
 			attribute.Int("gen_ai.usage.output_tokens", res.Metadata.OutputTokens),
+			attribute.Int("gen_ai.usage.thinking_tokens", res.Metadata.ThinkingTokens),
 			attribute.Int("gen_ai.usage.total_tokens", res.Metadata.TotalTokens),
 		)
 	}
