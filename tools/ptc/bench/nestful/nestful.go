@@ -22,6 +22,7 @@ import (
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
+	"github.com/modfin/bellman/services/openai"
 	"github.com/modfin/bellman/tools"
 	"github.com/modfin/bellman/tools/ptc"
 	"go.opentelemetry.io/otel"
@@ -42,6 +43,7 @@ type NestfulBenchmarkRequest struct {
 	Tools              []any   `json:"tools"`
 	Temperature        float64 `json:"temperature"`
 	MaxTokens          int     `json:"max_tokens"`
+	BatchSize          int     `json:"batch_size"`
 	SystemPrompt       string  `json:"system_prompt"`
 	EnablePTC          bool    `json:"enable_ptc"`
 	ToolChoice         string  `json:"tool_choice,omitempty"` // auto|required|none
@@ -78,8 +80,8 @@ func NesfulHandlerFromEnv() http.HandlerFunc {
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
 	client := bellman.New(bellmanURL, bellman.Key{Name: "nestful", Token: bellmanToken})
-	model := "OpenAI/gpt-4o"
-	defaultModelFQN := os.Getenv(model)
+	model := openai.GenModel_gpt5_mini_250807
+	//model := vertexai.GenModel_gemini_2_5_flash_latest
 
 	ctx := context.Background()
 	tp, err := setupHttpLangfuse(ctx)
@@ -90,7 +92,7 @@ func NesfulHandlerFromEnv() http.HandlerFunc {
 		_ = tp
 	}
 
-	return NestfulHandlerWrapper(client, defaultModelFQN)
+	return NestfulHandlerWrapper(client, model)
 }
 
 // NestfulHandler exposes a single-shot endpoint that returns predicted tool-call sequences in NESTFUL's format.
@@ -100,7 +102,7 @@ func NesfulHandlerFromEnv() http.HandlerFunc {
 //
 // Tools are never executed.
 
-func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bellman, defaultModelFQN string) {
+func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bellman, model gen.Model) {
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -125,7 +127,11 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	if choice == "" {
 		choice = "required"
 	}
-	tracer := otel.Tracer("toolman/nestful")
+	ptcFlag := "regular-fc"
+	if req.EnablePTC {
+		ptcFlag = "ptc-fc"
+	}
+	tracer := otel.Tracer(fmt.Sprintf("nestful-%s-%s", ptcFlag, model.String()))
 	ctx := r.Context()
 
 	sampleID := benchSampleID(r)
@@ -138,17 +144,6 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 		attribute.Bool("ptc.enabled", req.EnablePTC),
 		attribute.String("tool.choice", choice),
 	)
-
-	if strings.TrimSpace(defaultModelFQN) == "" {
-		defaultModelFQN = "OpenAI/gpt-4o"
-	}
-	model, err := parseModelFQN(defaultModelFQN)
-	if err != nil {
-		root.RecordError(err)
-		root.SetStatus(codes.Error, err.Error())
-		httpErr(w, fmt.Errorf("invalid model: %w", err), http.StatusBadRequest)
-		return
-	}
 
 	root.SetAttributes(
 		attribute.String("gen_ai.request.model", fmt.Sprintf("%v/%v", model.Provider, model.Name)),
@@ -202,32 +197,22 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	llm := client.Generator().
 		Model(model).
 		System(req.SystemPrompt).
-		SetTools(parsedTools...).
-		Temperature(req.Temperature).
-		MaxTokens(req.MaxTokens)
+		SetTools(parsedTools...)
+	//Temperature(req.Temperature).
+	//MaxTokens(req.MaxTokens)
 
 	if req.EnablePTC {
-		llm, _ = llm.ActivatePTC(ptc.JavaScript)
-	}
-
-	switch choice {
-	case "required":
-		llm = llm.SetToolConfig(tools.RequiredTool)
-	case "auto":
-		llm = llm.SetToolConfig(tools.AutoTool)
-	case "none":
-		llm = llm.SetToolConfig(tools.NoTool)
-	default:
-		httpErr(w, fmt.Errorf("invalid tool_choice: %q", req.ToolChoice), http.StatusBadRequest)
-		root.RecordError(err)
-		root.SetStatus(codes.Error, err.Error())
-		httpErr(w, err, http.StatusBadRequest)
-		return
+		llm, err = llm.ActivatePTC(ptc.JavaScript)
+		if err != nil {
+			log.Printf("failed to activate ptc: %v", err)
+		}
 	}
 
 	var res *gen.Response
 
 	llmCtx, llmSpan := tracer.Start(ctx, "llm.prompt")
+	defer llmSpan.End()
+
 	llmSpan.SetAttributes(
 		attribute.String("gen_ai.operation.name", "chat"),
 		attribute.String("gen_ai.request.model", fmt.Sprintf("%v/%v", model.Provider, model.Name)),
@@ -241,23 +226,39 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	if err != nil {
 		llmSpan.RecordError(err)
 		llmSpan.SetStatus(codes.Error, err.Error())
-		llmSpan.End()
+		//llmSpan.End()
+		root.RecordError(err)
+		root.SetStatus(codes.Error, "llm prompt failed")
+
+		writeJSON(w, http.StatusOK, NestfulBenchmarkResponse{
+			GeneratedText: "[]",
+			Content:       fmt.Sprintf("llm prompt error: %v", err),
+			InputTokens:   0,
+			OutputTokens:  0,
+			TotalTokens:   0,
+		})
+		return
+
 	} else {
 		llmSpan.SetAttributes(
 			attribute.Int("gen_ai.usage.input_tokens", res.Metadata.InputTokens),
 			attribute.Int("gen_ai.usage.output_tokens", res.Metadata.OutputTokens),
+			attribute.Int("gen_ai.usage.thinking_tokens", res.Metadata.ThinkingTokens),
 			attribute.Int("gen_ai.usage.total_tokens", res.Metadata.TotalTokens),
 		)
 	}
 
-	if err != nil {
+	/*if err != nil {
 		httpErr(w, fmt.Errorf("upstream error: %w", err), http.StatusBadGateway)
 		return
-	}
+	}*/
 
 	//tracer := otel.Tracer("toolman/nestful")
 	generated, content := nestfulGeneratedText(llmCtx, tracer, res, parsedTools, nameMap, outKeysByTool, req.JSExtractTimeoutMs)
-	llmSpan.End()
+	if strings.TrimSpace(generated) == "" {
+		generated = "[]"
+	}
+	//llmSpan.End()
 	writeJSON(w, http.StatusOK, NestfulBenchmarkResponse{
 		GeneratedText: generated,
 		Content:       content,
@@ -267,9 +268,9 @@ func NestfulHandler(w http.ResponseWriter, r *http.Request, client *bellman.Bell
 	})
 }
 
-func NestfulHandlerWrapper(client *bellman.Bellman, defaultModelFQN string) http.HandlerFunc {
+func NestfulHandlerWrapper(client *bellman.Bellman, model gen.Model) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		NestfulHandler(w, r, client, defaultModelFQN)
+		NestfulHandler(w, r, client, model)
 	}
 }
 
@@ -333,10 +334,27 @@ func parseNestfulTools(raw []any) ([]tools.Tool, map[string]string, map[string][
 			s.Required = required
 		}
 
+		respSchema := &schema.JSON{
+			Type:       schema.Object,
+			Properties: map[string]*schema.JSON{},
+		}
+
+		for k, v := range def.OutputParameters {
+			ps := schemaFromAny(v)
+			if ps == nil {
+				ps = &schema.JSON{}
+			}
+			respSchema.Properties[k] = ps
+		}
+
+		safe := strings.ReplaceAll(def.Description, "<", "`")
+		safe = strings.ReplaceAll(safe, ">", "`")
+
 		parsed = append(parsed, tools.Tool{
 			Name:           sanitized,
-			Description:    strings.TrimSpace(def.Description + "\nOutput keys: " + strings.Join(outKeys, ", ")),
+			Description:    safe,
 			ArgumentSchema: s,
+			ResponseSchema: respSchema,
 		})
 	}
 	return parsed, nameMap, outKeysByTool, nil
@@ -403,20 +421,32 @@ func executeAndExtractNestful(
 	outKeysByTool map[string][]string,
 	timeoutMs int,
 ) ([]map[string]any, string) {
-	meta := extractMeta{GuardrailOK: false, CapturedCount: 0, CapturedJSONTrunc: ""}
+	const (
+		maxCapturedCalls = 15
+	)
+
+	meta := extractMeta{
+		GuardrailOK:       false,
+		CapturedCount:     0,
+		CapturedJSONTrunc: "",
+	}
+
 	vm := goja.New()
 	captured := make([]map[string]any, 0)
 
 	runtime, err := ptc.NewRuntime(ptc.JavaScript)
 	if err != nil {
-		log.Fatalf("error: %e", err)
+		return captured, fmt.Sprintf("failed to create ptc runtime: %v", err)
 	}
+
+	jsCode = strings.ReplaceAll(jsCode, "\\n", "\n")
+	jsCode = strings.ReplaceAll(jsCode, "\\t", "\t")
+	jsCode = strings.TrimSpace(jsCode)
 
 	guarded, guardErr := runtime.Guardrail(jsCode)
 	if guardErr != nil {
 		return captured, fmt.Sprintf("code_execution guardrail error: %v", guardErr)
 	}
-
 	meta.GuardrailOK = true
 
 	timer := time.AfterFunc(time.Duration(timeoutMs)*time.Millisecond, func() {
@@ -428,12 +458,23 @@ func executeAndExtractNestful(
 	execSpan.SetAttributes(
 		attribute.String("exec.language", "javascript"),
 		attribute.Int("exec.script_len", len(guarded)),
-		//attribute.String("input.value", guarded),
 		attribute.Int("exec.timeout_ms", timeoutMs),
+		attribute.Int("exec.max_captured_calls", maxCapturedCalls),
 		attribute.String("exec.script.trunc", truncate(guarded, 4000)),
 	)
+	defer func() {
+		meta.CapturedCount = len(captured)
+		meta.CapturedJSONTrunc = truncate(string(mustJSON(captured)), 4000)
 
-	defer execSpan.End()
+		execSpan.SetAttributes(
+			attribute.Bool("exec.guardrail_ok", meta.GuardrailOK),
+			attribute.Int("captured.tool_calls", meta.CapturedCount),
+			attribute.String("captured.json", meta.CapturedJSONTrunc),
+		)
+		execSpan.End()
+	}()
+
+	functionsObj := vm.NewObject()
 
 	for _, t := range availableTools {
 		tName := t.Name
@@ -442,61 +483,78 @@ func executeAndExtractNestful(
 			keys = []string{"result"}
 		}
 
-		interceptor := func(call goja.FunctionCall) goja.Value {
-			idx := len(captured) + 1
+		interceptor := func(tName string, keys []string) func(goja.FunctionCall) goja.Value {
+			return func(call goja.FunctionCall) goja.Value {
+				if len(captured) >= maxCapturedCalls {
+					vm.Interrupt(fmt.Sprintf("too many tool calls (>%d)", maxCapturedCalls))
+					return goja.Undefined()
+				}
 
-			outObj := make(map[string]any, len(keys))
-			for _, k := range keys {
-				outObj[k] = fmt.Sprintf("$var_%d.%s$", idx, k)
-			}
-
-			// Extract args from JS call.
-			argsMap := make(map[string]any)
-			if len(call.Arguments) > 0 {
-				first := call.Arguments[0].Export()
-				if obj, ok := first.(map[string]any); ok {
-					for k, v := range obj {
-						argsMap[k] = v
-					}
-				} else {
-					argsMap["arg_0"] = first
-					for i := 1; i < len(call.Arguments); i++ {
-						argsMap[fmt.Sprintf("arg_%d", i)] = call.Arguments[i].Export()
+				argsMap := make(map[string]any)
+				if len(call.Arguments) > 0 {
+					first := call.Arguments[0].Export()
+					if obj, ok := first.(map[string]any); ok {
+						for k, v := range obj {
+							argsMap[k] = v
+						}
+					} else {
+						argsMap["_error"] = "tool call used positional arguments; expected single object argument"
 					}
 				}
+
+				normalized := normalizeVarRefs(argsMap)
+				if m, ok := normalized.(map[string]any); ok {
+					argsMap = m
+				}
+
+				idx := len(captured) + 1
+
+				outObj := make(map[string]any, len(keys))
+				for _, k := range keys {
+					outObj[k] = fmt.Sprintf("$var_%d.%s$", idx, k)
+				}
+
+				captured = append(captured, map[string]any{
+					"name":      tName,
+					"arguments": argsMap,
+				})
+
+				_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName),
+					trace.WithAttributes(
+						attribute.String("gen_ai.operation.name", "execute_tool"),
+						attribute.String("gen_ai.tool.name", tName),
+						attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
+						attribute.Int("index", len(captured)),
+					),
+				)
+				toolSpan.End()
+
+				return vm.ToValue(outObj)
 			}
-			normalizeVarRefs(argsMap)
-			captured = append(captured, map[string]any{
-				"name":      tName,
-				"arguments": argsMap,
-			})
+		}(tName, keys)
 
-			_, toolSpan := tracer.Start(execCtx, fmt.Sprintf("tool.call %s", tName), trace.WithAttributes(
-				attribute.String("gen_ai.operation.name", "execute_tool"),
-				attribute.String("gen_ai.tool.name", tName),
-				attribute.String("gen_ai.tool.call.arguments", string(mustJSON(argsMap))),
-				attribute.Int("index", len(captured)),
-			))
-			toolSpan.End()
-
-			return vm.ToValue(outObj)
+		if err := vm.Set(tName, interceptor); err != nil {
+			return captured, fmt.Sprintf("code_execution binding error: %v", err)
 		}
+		if err := functionsObj.Set(tName, interceptor); err != nil {
+			return captured, fmt.Sprintf("code_execution functions binding error: %v", err)
+		}
+	}
 
-		_ = vm.Set(tName, interceptor)
+	if err := vm.Set("functions", functionsObj); err != nil {
+		return captured, fmt.Sprintf("code_execution functions object error: %v", err)
 	}
 
 	if _, runErr := vm.RunString(guarded); runErr != nil {
 		execSpan.RecordError(runErr)
 		execSpan.SetStatus(codes.Error, runErr.Error())
-		//return fmt.Sprintf(`{"error": %q}`, runErr), "nil"
 		return captured, fmt.Sprintf("code_execution run error: %v", runErr)
 	}
 
 	execSpan.SetAttributes(
-		attribute.String("output.vlue", "ok"),
+		attribute.String("output.value", "ok"),
 		attribute.Int("captured.tool_calls", len(captured)),
-		attribute.String("captured.json", string(mustJSON(captured))),
-	)
+		attribute.String("captured.json", string(mustJSON(captured))))
 
 	return captured, ""
 }
@@ -623,51 +681,6 @@ func httpErr(w http.ResponseWriter, err error, status int) {
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
-}
-
-func parseModelFQN(fqn string) (gen.Model, error) {
-	fqn = strings.TrimSpace(fqn)
-	provider, name, found := strings.Cut(fqn, "/")
-	if !found {
-		provider, name, found = strings.Cut(fqn, ".")
-	}
-	if !found {
-		return gen.Model{}, fmt.Errorf("expected provider/name (or provider.name), got %q", fqn)
-	}
-	provider = canonicalProvider(provider)
-	//name = canonicalModelName(name)
-	if provider == "" || name == "" {
-		return gen.Model{}, fmt.Errorf("expected provider/name (or provider.name), got %q", fqn)
-	}
-	return gen.Model{Provider: provider, Name: name}, nil
-}
-func canonicalProvider(p string) string {
-	pl := strings.ToLower(strings.TrimSpace(p))
-	switch pl {
-	case "openai":
-		return "OpenAI"
-	case "vertexai", "vertex":
-		return "VertexAI"
-	case "anthropic":
-		return "Anthropic"
-	case "ollama":
-		return "Ollama"
-	case "vllm":
-		return "vLLM"
-	case "voyageai", "voyage":
-		return "VoyageAI"
-	default:
-		return strings.TrimSpace(p)
-	}
-}
-
-func canonicalModelName(n string) string {
-	n = strings.TrimSpace(n)
-	n = strings.ReplaceAll(n, "_", "-")
-	if strings.HasPrefix(n, "gpt4o-") {
-		n = "gpt-4o-" + strings.TrimPrefix(n, "gpt4o-")
-	}
-	return n
 }
 
 // setupHttpLangfuse reads the .env and wires a direct HTTP connection to localhost:3000
