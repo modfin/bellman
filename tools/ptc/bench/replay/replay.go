@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,16 +73,20 @@ func (r *Replay) Clear() {
 	defer r.mu.Unlock()
 	r.record = []CallRecord{}
 	r.Scripts = []Script{}
-	r.Replay()
+	r.Cursor = 0
 }
 
 // Replay resets the cursor index (to replay execution)
 func (r *Replay) Replay() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.Cursor = 0
 }
 
 // IsPending returns true if there is a pending script to run
 func (r *Replay) IsPending() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for _, s := range r.Scripts {
 		if !s.Done {
 			return true
@@ -94,13 +99,15 @@ func (r *Replay) IsPending() bool {
 // Returns a recorded (tool) call, code execution result, or error
 // important: if JS errors, let LLM see it (return as string)
 func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Destroy state! Create a new VM for every single replay (prevent unexpected errors)
 	runtime, err := js.NewRuntime(ptc.ToolName)
 	if err != nil {
 		return Result{Error: err}
 	}
-	r.Replay()
+	r.Cursor = 0
 
 	// Inject our cached tools into the VM, and add interrupt on new tool calls
 	for _, t := range tools {
@@ -112,7 +119,7 @@ func (r *Replay) ExecutionReplay(tools []tools.Tool) Result {
 
 	// Run the next code script
 	for i, s := range r.Scripts {
-		res, resErr, err := runtime.Execute(s.Code)
+		res, resErr, err := runtime.Execute(context.Background(), s.Code)
 		if err != nil {
 			return Result{Error: err}
 		}

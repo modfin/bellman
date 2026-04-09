@@ -1,6 +1,7 @@
 package ptc
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/modfin/bellman/tools"
@@ -13,7 +14,7 @@ type Runtime interface {
 	SystemFragment(tool ...tools.Tool) (string, error)
 	Lock()
 	Unlock()
-	Execute(code string) (string, error, error)
+	Execute(ctx context.Context, code string) (string, error, error)
 }
 
 type ProgramLanguage string

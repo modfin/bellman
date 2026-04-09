@@ -23,6 +23,7 @@ import (
 type JavaScript struct {
 	runtime  *goja.Runtime
 	mu       sync.Mutex
+	ctx      context.Context // set during Execute, used by tool wrappers
 	toolName string
 	output   *resultOutput
 	Log      *slog.Logger `json:"-"`
@@ -113,7 +114,7 @@ func (j *JavaScript) AdaptTools(tool ...tools.Tool) (tools.Tool, error) {
 			return "", err
 		}
 
-		res, resErr, err := j.Execute(arg.Code)
+		res, resErr, err := j.Execute(ctx, arg.Code)
 		if err != nil {
 			return res, err
 		}
@@ -167,7 +168,11 @@ func (j *JavaScript) bindToolFunction(tool tools.Tool) error {
 		}
 
 		// execute the actual go tool
-		res, err := tool.Function(context.Background(), tools.Call{
+		ctx := j.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		res, err := tool.Function(ctx, tools.Call{
 			Argument: jsonArgs,
 		})
 		if err != nil {
@@ -197,15 +202,18 @@ func (j *JavaScript) bindToolFunction(tool tools.Tool) error {
 }
 
 // Execute runs a code script in the runtime, uses same error handling as LLM (runtime errors return string!)
-func (j *JavaScript) Execute(code string) (resString string, resErr error, err error) {
+func (j *JavaScript) Execute(ctx context.Context, code string) (resString string, resErr error, err error) {
 	code, resErr = j.Guardrail(code)
 	if resErr != nil {
 		return "", resErr, nil
 	}
-	j.output.set = false // reset output
-
 	j.Lock()
 	defer j.Unlock()
+
+	j.output.set = false // reset output
+
+	j.ctx = ctx
+	defer func() { j.ctx = nil }()
 
 	// panic recovery
 	defer func() {
