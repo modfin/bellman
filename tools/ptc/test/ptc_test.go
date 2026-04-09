@@ -66,7 +66,6 @@ func TestStream(t *testing.T) {
 
 	userPrompt := "1. Do you know what PTC is (programmatic tool calling), and how LLMs call tools? If yes; answer me which tool at your disposal is PTC. If no; why not?"
 	userPrompt += "2. Predict the future, 3. convert 69 usd to sek, and then 4. generate a secret password. "
-	userPrompt += "also, 5. get me the stock info (price/details) for saab, ericsson, and telia."
 
 	prompts := []prompt.Prompt{prompt.AsUser(userPrompt)}
 
@@ -113,6 +112,9 @@ func TestStream(t *testing.T) {
 
 		prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 	}
+
+	// add new tool calls!
+	prompts = append(prompts, prompt.AsUser("also, 5. get me the stock info (price/details) for saab, ericsson, and telia."))
 
 	streamChan, err := llm.Stream(prompts...)
 	if err != nil {
