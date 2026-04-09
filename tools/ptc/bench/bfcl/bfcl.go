@@ -195,15 +195,12 @@ func (i *Instance) replayGenerateBFCL(w http.ResponseWriter, req BenchmarkReques
 		duration := time.Since(start)
 		fmt.Printf("prompt duration: %v ms\n", duration.Milliseconds())
 
-		if res != nil {
+		if err == nil && res != nil {
 			metrics = &tracer.Metrics{
 				InputTokens:    res.Metadata.InputTokens,
 				OutputTokens:   res.Metadata.OutputTokens,
 				ThinkingTokens: res.Metadata.ThinkingTokens,
 			}
-		}
-
-		if err == nil {
 			break
 		}
 

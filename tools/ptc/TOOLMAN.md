@@ -2,7 +2,7 @@
 
 Toolman introduces Programmatic Tool-Calling (PTC), allowing LLMs to write and execute code (e.g., JavaScript) to interact with tools. This enables complex logic, loops, and data manipulation that standard single-turn tool calling struggles with.
 
-### Usage
+## Usage
 
 To use PTC, you need to define your tools and set the PTC language on the generator.
 
@@ -68,6 +68,24 @@ if err != nil {
 ```
 
 For documentation on how to use Bellman, please refer to the Bellman [README.md](../../README.md).
+
+### Custom PTC System Prompt
+
+When guiding the model for using PTC, a PTC system fragment is added to the system prompt.
+The default PTC system fragment can be overwritten:
+```go
+//TODO
+```
+
+### Statefulness
+
+The code execution runtime is stateful! it is up to the developer to utilize or destroy state in a practical manner.
+Statefulness is often practical even for stateless LLM APIs,and standard for LLMs code execution sandboxes.
+
+The runtime can be reset by recreating it:
+```go
+//TODO
+```
 
 ## Benchmarking
 

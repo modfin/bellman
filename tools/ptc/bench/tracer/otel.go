@@ -106,6 +106,8 @@ func (t *Tracer) Trace(p prompt.Prompt, messages []prompt.Prompt, metrics *Metri
 					attribute.Int("gen_ai.usage.output_tokens", metrics.OutputTokens),
 					attribute.Int("gen_ai.usage.thinking_tokens", metrics.ThinkingTokens),
 				)
+			} else {
+				log.Printf("no metrics available in llm trace!")
 			}
 		}
 		chatSpan.End()
@@ -124,6 +126,8 @@ func (t *Tracer) Trace(p prompt.Prompt, messages []prompt.Prompt, metrics *Metri
 					attribute.Int("gen_ai.usage.output_tokens", metrics.OutputTokens),
 					attribute.Int("gen_ai.usage.thinking_tokens", metrics.ThinkingTokens),
 				)
+			} else {
+				log.Printf("no metrics available in llm trace!")
 			}
 			chatSpan.End()
 			time.Sleep(1 * time.Millisecond) // sleep 1ms to enforce otel order

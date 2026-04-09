@@ -223,6 +223,7 @@ func (j *JavaScript) Execute(code string) (resString string, resErr error, err e
 
 	_, resErr = j.runtime.RunString(code)
 	if resErr != nil {
+		j.log("error: runtime error!")
 		return "", resErr, nil
 	}
 
