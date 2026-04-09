@@ -7,15 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/tools"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/gen"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 )
 
 var requestNo int64
@@ -435,7 +436,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 						Type: "function",
 						Function: genRequestMessageToolCallFunction{
 							Name:      c.ToolCall.Name,
-							Arguments: jsonArguments,
+							Arguments: string(c.ToolCall.Arguments),
 						},
 					},
 				},
