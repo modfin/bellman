@@ -2,6 +2,7 @@ package openai
 
 import (
 	"encoding/json"
+
 	"github.com/modfin/bellman/tools"
 )
 
@@ -26,7 +27,7 @@ func (g genRequestMessageText) GetRole() string { return g.Role }
 
 type genRequestMessageToolCallFunction struct {
 	Name      string `json:"name"`
-	Arguments any    `json:"arguments"`
+	Arguments string `json:"arguments"`
 }
 type genRequestMessageToolCall struct {
 	ID       string                            `json:"id"`

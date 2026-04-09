@@ -37,34 +37,7 @@ func typeToSchema(t reflect.Type) *JSON {
 		schema.Properties = make(map[string]*JSON)
 		schema.Required = []string{}
 
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-
-			// Skip unexported fields
-			if !field.IsExported() {
-				continue
-			}
-
-			// Get the JSON field name from the json tag
-			jsonTag := field.Tag.Get("json")
-			name := strings.Split(jsonTag, ",")[0]
-			if name == "-" {
-				continue
-			}
-			if name == "" {
-				name = field.Name
-			}
-
-			// Check if this field is required
-			if !strings.Contains(jsonTag, "omitempty") {
-				schema.Required = append(schema.Required, name)
-			}
-
-			fieldSchema := fieldToSchema(field)
-			if fieldSchema != nil {
-				schema.Properties[name] = fieldSchema
-			}
-		}
+		collectStructFields(t, schema)
 
 		if len(schema.Required) == 0 {
 			schema.Required = nil
@@ -89,6 +62,56 @@ func typeToSchema(t reflect.Type) *JSON {
 	}
 
 	return schema
+}
+
+func collectStructFields(t reflect.Type, schema *JSON) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// Skip unexported fields
+		if !field.IsExported() {
+			continue
+		}
+
+		// In Go, an anonymous (embedded) struct field promotes its fields to the
+		// parent struct. encoding/json flattens these into the parent JSON object
+		// rather than nesting them. We mirror that behavior here: when we encounter
+		// an anonymous field whose underlying type is a struct, we recurse into it
+		// and collect its fields directly into the parent schema. This ensures that
+		// struct tags (json-enum, json-description, etc.) on the embedded struct's
+		// fields are preserved in the parent schema. Pointer-to-struct embeddings
+		// (e.g. *Embedded) are handled by dereferencing the pointer type first.
+		if field.Anonymous {
+			ft := field.Type
+			if ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				collectStructFields(ft, schema)
+				continue
+			}
+		}
+
+		// Get the JSON field name from the json tag
+		jsonTag := field.Tag.Get("json")
+		name := strings.Split(jsonTag, ",")[0]
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = field.Name
+		}
+
+		// Check if this field is required
+		if !strings.Contains(jsonTag, "omitempty") {
+			schema.Required = append(schema.Required, name)
+		}
+
+		fieldSchema := fieldToSchema(field)
+		if fieldSchema != nil {
+			schema.Properties[name] = fieldSchema
+		}
+	}
 }
 
 func fieldToSchema(field reflect.StructField) *JSON {
