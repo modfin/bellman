@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -144,17 +145,18 @@ func (j *JavaScript) AdaptTools(tool ...tools.Tool) (tools.Tool, error) {
 
 // bindToolFunction wraps a Bellman tool as a runtime function: toolName({ args... })
 func (j *JavaScript) bindToolFunction(tool tools.Tool) error {
+	escapedName := escapeFunctionName(tool.Name)
 	wrapper := func(call goja.FunctionCall) goja.Value {
 		// check if LLM passed multiple arguments (common mistake)
 		if len(call.Arguments) > 1 {
 			errMsg := fmt.Sprintf("Error: %s expects a single configuration object argument, but received %d arguments. Usage: %s({ key: val })",
-				tool.Name, len(call.Arguments), tool.Name)
+				escapedName, len(call.Arguments), escapedName)
 			return j.runtime.ToValue(map[string]string{"error": errMsg})
 		}
 
 		// extract runtime argument (expecting a single object)
 		if len(call.Arguments) == 0 {
-			return j.runtime.NewGoError(fmt.Errorf("tool %s requires arguments", tool.Name))
+			return j.runtime.NewGoError(fmt.Errorf("tool %s requires arguments", escapedName))
 		}
 		jsArgs := call.Argument(0).Export()
 
@@ -186,7 +188,7 @@ func (j *JavaScript) bindToolFunction(tool tools.Tool) error {
 	j.Lock()
 	defer j.Unlock()
 
-	err := j.runtime.Set(tool.Name, wrapper)
+	err := j.runtime.Set(escapedName, wrapper)
 	if err != nil {
 		return err
 	}
@@ -233,6 +235,20 @@ func (j *JavaScript) Execute(code string) (resString string, resErr error, err e
 	}
 
 	return nilValue, nil, nil
+}
+
+// Matches anything that IS NOT a letter, number, underscore, or dollar sign
+var invalidJSFuncSymbols = regexp.MustCompile(`[^a-zA-Z0-9_$]`)
+
+func escapeFunctionName(name string) string {
+	safeName := invalidJSFuncSymbols.ReplaceAllString(name, "_")
+
+	// JS identifiers cannot start with a number
+	if len(safeName) > 0 && safeName[0] >= '0' && safeName[0] <= '9' {
+		safeName = "_" + safeName
+	}
+
+	return safeName
 }
 
 // registerResult registers the result function in Goja, that returns the value from the PTC tools code
@@ -316,7 +332,7 @@ func functionSignatures(tool ...tools.Tool) []FunctionSignatureData {
 		}
 
 		signatures = append(signatures, FunctionSignatureData{
-			Name:          t.Name,
+			Name:          escapeFunctionName(t.Name),
 			Description:   t.Description,
 			Args:          extractArgs(t.ArgumentSchema),
 			ReturnType:    returnType,
