@@ -81,11 +81,56 @@ func TestStream(t *testing.T) {
 		log.Fatalf("Stream() error = %v", err)
 	}
 
+	// get stream res, exec tool calls and add prompts
+	streamRes := getStreamResult(streamChan)
+	newPrompts = getResponse(streamRes)
+	prompts = append(prompts, newPrompts...)
+
+	// new prompt
+	prompts = append(prompts, prompt.AsUser("also, 5. get me the stock info (price/details) for google and apple."))
+
+	// stream again...
+	streamChan, err = llm.Stream(prompts...)
+	if err != nil {
+		log.Fatalf("Stream() error = %v", err)
+	}
+
+	// exec tool calls and add prompts
+	streamRes = getStreamResult(streamChan)
+	newPrompts = getResponse(streamRes)
+	prompts = append(prompts, newPrompts...)
+
+	// new prompt
+	prompts = append(prompts, prompt.AsUser("make an analytic comparison of saab and ericsson stocks."))
+
+	// stream again...
+	streamChan, err = llm.Stream(prompts...)
+	if err != nil {
+		log.Fatalf("Stream() error = %v", err)
+	}
+
+	// exec tool calls and add prompts
+	streamRes = getStreamResult(streamChan)
+	newPrompts = getResponse(streamRes)
+	prompts = append(prompts, newPrompts...)
+
+	//
+	for i, m := range prompts {
+		fmt.Printf("prompt %v: { role: %v, text: %v, tool_call: %v, tool_response: %v }\n", i, m.Role, m.Text, m.ToolCall, m.ToolResponse)
+	}
+
+	elapsed := time.Since(start)
+	fmt.Printf("Prompt took %s", elapsed)
+}
+
+// getStreamResult gets a tool call or assistant text response
+func getStreamResult(streamChan <-chan *gen.StreamResponse) *gen.Response {
 	fmt.Println("\n----Streaming result:")
-	tName := ""
+	var tName string
 	var tRef *tools.Tool
 	var tArgs []byte
-	tId := ""
+	var tId string
+	var content string
 	for chunk := range streamChan {
 		if chunk.Error() != nil {
 			log.Fatalf("\nError during stream: %v", chunk.Error())
@@ -93,13 +138,11 @@ func TestStream(t *testing.T) {
 
 		// Print the chunk without a newline so it flows naturally
 		if chunk.Role == prompt.AssistantRole {
-			fmt.Print(chunk.Content)
+			content += chunk.Content
 		}
 
 		if chunk.Role == prompt.ToolCallRole {
-			if tName == "" {
-				tName = chunk.ToolCall.Name
-			}
+			tName = chunk.ToolCall.Name
 			tArgs = append(tArgs, chunk.ToolCall.Argument...)
 			tRef = chunk.ToolCall.Ref
 			tId = chunk.ToolCall.ID
@@ -108,7 +151,13 @@ func TestStream(t *testing.T) {
 	fmt.Printf("toolname: %s\ntoolargs: %v", tName, string(tArgs))
 	fmt.Println()
 
-	// exec tools
+	if content != "" && tRef == nil {
+		resStream := &gen.Response{
+			Texts: []string{content},
+		}
+		return resStream
+	}
+
 	toolCall := tools.Call{
 		ID:       tId,
 		Name:     tName,
@@ -119,21 +168,7 @@ func TestStream(t *testing.T) {
 	resStream := &gen.Response{
 		Tools: []tools.Call{toolCall},
 	}
-
-	// add new tool calls!
-	newPrompts = getResponse(resStream)
-	prompts = append(prompts, newPrompts...)
-
-	prompts = append(prompts, prompt.AsUser("also, 5. get me the stock info (price/details) for google and apple."))
-
-	// stream again...
-	streamChan, err = llm.Stream(prompts...)
-	if err != nil {
-		log.Fatalf("Stream() error = %v", err)
-	}
-
-	elapsed := time.Since(start)
-	fmt.Printf("Prompt took %s", elapsed)
+	return resStream
 }
 
 func getResponse(res *gen.Response) []prompt.Prompt {
