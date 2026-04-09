@@ -41,16 +41,6 @@ func TestStream(t *testing.T) {
 	bellmanUrl := os.Getenv("BELLMAN_URL")
 	bellmanToken := os.Getenv("BELLMAN_TOKEN")
 
-	ctx := context.Background()
-
-	type callbackResult struct {
-		Index    int
-		ID       string
-		Name     string
-		Response string
-		Error    error
-	}
-
 	enablePTC := true
 	allTools := GetMockBellmanTools(enablePTC)
 	model := openai.GenModel_gpt5_mini_latest
@@ -76,9 +66,93 @@ func TestStream(t *testing.T) {
 	llm = llm.Model(model)
 	res, err := llm.Prompt(prompts...)
 	if err != nil {
-		log.Printf("Prompt() error = %v", err)
+		log.Fatalf("Prompt() error = %v", err)
 	}
-	fmt.Printf("Prompt result: %v", res)
+	fmt.Printf("----Prompt result: %v\n", res)
+
+	// add new tool calls!
+	newPrompts := getResponse(res)
+	prompts = append(prompts, newPrompts...)
+
+	prompts = append(prompts, prompt.AsUser("also, 5. get me the stock info (price/details) for saab, ericsson, and telia."))
+
+	streamChan, err := llm.Stream(prompts...)
+	if err != nil {
+		log.Fatalf("Stream() error = %v", err)
+	}
+
+	fmt.Println("\n----Streaming result:")
+	tName := ""
+	var tRef *tools.Tool
+	var tArgs []byte
+	tId := ""
+	for chunk := range streamChan {
+		if chunk.Error() != nil {
+			log.Fatalf("\nError during stream: %v", chunk.Error())
+		}
+
+		// Print the chunk without a newline so it flows naturally
+		if chunk.Role == prompt.AssistantRole {
+			fmt.Print(chunk.Content)
+		}
+
+		if chunk.Role == prompt.ToolCallRole {
+			if tName == "" {
+				tName = chunk.ToolCall.Name
+			}
+			tArgs = append(tArgs, chunk.ToolCall.Argument...)
+			tRef = chunk.ToolCall.Ref
+			tId = chunk.ToolCall.ID
+		}
+	}
+	fmt.Printf("toolname: %s\ntoolargs: %v", tName, string(tArgs))
+	fmt.Println()
+
+	// exec tools
+	toolCall := tools.Call{
+		ID:       tId,
+		Name:     tName,
+		Argument: tArgs,
+		Ref:      tRef,
+	}
+
+	resStream := &gen.Response{
+		Tools: []tools.Call{toolCall},
+	}
+
+	// add new tool calls!
+	newPrompts = getResponse(resStream)
+	prompts = append(prompts, newPrompts...)
+
+	prompts = append(prompts, prompt.AsUser("also, 5. get me the stock info (price/details) for google and apple."))
+
+	// stream again...
+	streamChan, err = llm.Stream(prompts...)
+	if err != nil {
+		log.Fatalf("Stream() error = %v", err)
+	}
+
+	elapsed := time.Since(start)
+	fmt.Printf("Prompt took %s", elapsed)
+}
+
+func getResponse(res *gen.Response) []prompt.Prompt {
+	if !res.IsTools() {
+		text, err := res.AsText()
+		if err != nil {
+			log.Fatalf("res as text error")
+		}
+		return []prompt.Prompt{prompt.AsAssistant(text)}
+	}
+
+	ctx := context.Background()
+	type callbackResult struct {
+		Index    int
+		ID       string
+		Name     string
+		Response string
+		Error    error
+	}
 
 	var results []callbackResult
 	for i, callback := range res.Tools {
@@ -102,6 +176,7 @@ func TestStream(t *testing.T) {
 	}
 
 	// Process results and check for errors
+	var prompts []prompt.Prompt
 	for _, cbResult := range results {
 		callback := res.Tools[cbResult.Index]
 		prompts = append(prompts, prompt.AsToolCall(callback.ID, callback.Name, callback.Argument))
@@ -112,43 +187,7 @@ func TestStream(t *testing.T) {
 
 		prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 	}
-
-	// add new tool calls!
-	prompts = append(prompts, prompt.AsUser("also, 5. get me the stock info (price/details) for saab, ericsson, and telia."))
-
-	streamChan, err := llm.Stream(prompts...)
-	if err != nil {
-		log.Printf("Stream() error = %v", err)
-	}
-
-	fmt.Println("Streaming result:")
-	tName := ""
-	var tArgs []byte
-	for chunk := range streamChan {
-		if chunk.Error() != nil {
-			log.Printf("\nError during stream: %v", chunk.Error())
-			break
-		}
-
-		// Print the chunk without a newline so it flows naturally
-		if chunk.Role == prompt.AssistantRole {
-			fmt.Print(chunk.Content)
-		}
-
-		if chunk.Role == prompt.ToolCallRole {
-			if tName == "" {
-				tName = chunk.ToolCall.Name
-			}
-			tArgs = append(tArgs, chunk.ToolCall.Argument...)
-		}
-	}
-	fmt.Printf("\n\ntoolname: %s\ntoolargs: %v", tName, string(tArgs))
-	fmt.Println()
-
-	// exec tools
-
-	elapsed := time.Since(start)
-	fmt.Printf("Prompt took %s", elapsed)
+	return prompts
 }
 
 func TestOpenTelemetry(t *testing.T) {
