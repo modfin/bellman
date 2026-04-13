@@ -7,16 +7,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman/models/embed"
-	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/tools"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 )
 
 const Provider = "Bellman"
@@ -530,21 +531,6 @@ func (g *generator) validateStreamingRequest(request *gen.FullRequest) error {
 	// Validate that we have prompts
 	if len(request.Prompts) == 0 {
 		return fmt.Errorf("at least one prompt is required for streaming request")
-	}
-
-	// Validate tool configuration if tools are present
-	if len(request.Tools) > 0 && request.ToolConfig != nil {
-		// Check if the specified tool exists
-		toolExists := false
-		for _, tool := range request.Tools {
-			if tool.Name == request.ToolConfig.Name {
-				toolExists = true
-				break
-			}
-		}
-		if !toolExists {
-			return fmt.Errorf("specified tool '%s' not found in available tools", request.ToolConfig.Name)
-		}
 	}
 
 	return nil

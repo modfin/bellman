@@ -7,22 +7,22 @@ import (
 
 type EmptyArgs struct{}
 
-// NoTool means the model will not call any tool and instead generates a message
-var NoTool = Tool{
-	Name: "none",
+// ToolChoice represents a tool selection configuration for the model.
+// It is distinct from Tool — it only carries a name used to control tool behavior.
+type ToolChoice struct {
+	Name string `json:"name"`
 }
+
+// NoTool means the model will not call any tool and instead generates a message
+var NoTool = ToolChoice{Name: "none"}
 
 // AutoTool means the model can pick between generating a message or calling one or more tools
-var AutoTool = Tool{
-	Name: "auto",
-}
+var AutoTool = ToolChoice{Name: "auto"}
 
 // RequiredTool means the model must call one or more tools.
-var RequiredTool = Tool{
-	Name: "required",
-}
+var RequiredTool = ToolChoice{Name: "required"}
 
-var ControlTools = []Tool{
+var ControlTools = []ToolChoice{
 	NoTool,
 	AutoTool,
 	RequiredTool,

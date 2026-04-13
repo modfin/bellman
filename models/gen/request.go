@@ -19,7 +19,7 @@ type Request struct {
 	StrictOutput bool         `json:"output_strict,omitempty"`
 
 	Tools      []tools.Tool `json:"tools,omitempty"`
-	ToolConfig *tools.Tool  `json:"tool,omitempty"`
+	ToolConfig *tools.ToolChoice `json:"tool,omitempty"`
 
 	ThinkingBudget *int  `json:"thinking_budget,omitempty"`
 	ThinkingParts  *bool `json:"thinking_parts,omitempty"`

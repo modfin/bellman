@@ -25,3 +25,8 @@ var GenModel_gpt_oss_20b = gen.Model{
 	Provider: Provider,
 	Name:     "openai/gpt-oss-20b",
 }
+
+var GenModel_gemma_4_e4b_it = gen.Model{
+	Provider: Provider,
+	Name:     "google/gemma-4-E4B-it",
+}
