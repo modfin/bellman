@@ -137,16 +137,10 @@ func (b *Generator) AddTools(tool ...tools.Tool) *Generator {
 	return b.SetTools(append(b.Request.Tools, tool...)...)
 }
 
-func (b *Generator) SetToolConfig(tool tools.Tool) *Generator {
+func (b *Generator) SetToolConfig(choice tools.ToolChoice) *Generator {
 	bb := b.clone()
-	bb.Request.ToolConfig = &tool
+	bb.Request.ToolConfig = &choice
 
-	for _, t := range tools.ControlTools {
-		if t.Name == tool.Name {
-			return bb
-		}
-	}
-	bb.Request.Tools = []tools.Tool{tool}
 	return bb
 }
 
@@ -237,9 +231,9 @@ func WithTools(tools ...tools.Tool) Option {
 	}
 }
 
-func WithToolConfig(tool tools.Tool) Option {
+func WithToolConfig(choice tools.ToolChoice) Option {
 	return func(g *Generator) *Generator {
-		return g.SetToolConfig(tool)
+		return g.SetToolConfig(choice)
 	}
 }
 

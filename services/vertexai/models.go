@@ -28,6 +28,31 @@ var GenModel_gemini_2_5_flash_lite_latest = gen.Model{
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
 }
+var GenModel_gemini_3_pro_preview = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3-pro-preview",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_3_1_pro_preview = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.1-pro-preview",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_3_flash_preview = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3-flash-preview",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+
+var GenModel_gemini_3_1_flash_lite_preview = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.1-flash-lite-preview",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
 
 // https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#supported-models
 

@@ -68,7 +68,7 @@ type StreamOptions struct {
 type ReasoningEffort string
 
 const (
-	ReasoningEffortNone   ReasoningEffort = "low"
+	ReasoningEffortNone   ReasoningEffort = "none"
 	ReasoningEffortLow    ReasoningEffort = "low"
 	ReasoningEffortMedium ReasoningEffort = "medium"
 	ReasoningEffortHigh   ReasoningEffort = "high"
