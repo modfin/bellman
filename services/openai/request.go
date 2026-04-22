@@ -1,80 +1,61 @@
 package openai
 
 import (
-	"encoding/json"
-
 	"github.com/modfin/bellman/tools"
 )
 
-// https://platform.openai.com/docs/api-reference/chat/create
+// https://platform.openai.com/docs/api-reference/responses
 
-type genRequestMessage interface {
-	GetRole() string
+type inputItem interface {
+	isInputItem()
 }
 
-type genRequestMessageContent struct {
-	Type     string    `json:"type"`
-	Text     *string   `json:"text,omitempty"`
-	ImageUrl *ImageUrl `json:"image_url,omitempty"`
+type messageItem struct {
+	Role    string           `json:"role"`
+	Content []messageContent `json:"content"`
 }
 
-type genRequestMessageText struct {
-	Role    string                     `json:"role"`
-	Content []genRequestMessageContent `json:"content"`
+func (messageItem) isInputItem() {}
+
+type messageContent struct {
+	Type     string  `json:"type"` // "input_text" | "output_text" | "input_image"
+	Text     *string `json:"text,omitempty"`
+	ImageURL *string `json:"image_url,omitempty"`
+	Detail   *string `json:"detail,omitempty"`
 }
 
-func (g genRequestMessageText) GetRole() string { return g.Role }
-
-type genRequestMessageToolCallFunction struct {
+type functionCallItem struct {
+	Type      string `json:"type"` // "function_call"
+	CallID    string `json:"call_id"`
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
 }
-type genRequestMessageToolCall struct {
-	ID       string                            `json:"id"`
-	Type     string                            `json:"type"`
-	Function genRequestMessageToolCallFunction `json:"function"`
+
+func (functionCallItem) isInputItem() {}
+
+type functionCallOutputItem struct {
+	Type   string `json:"type"` // "function_call_output"
+	CallID string `json:"call_id"`
+	Output string `json:"output"`
 }
 
-type genRequestMessageToolCalls struct {
-	Role      string                      `json:"role"`
-	ToolCalls []genRequestMessageToolCall `json:"tool_calls"`
-}
+func (functionCallOutputItem) isInputItem() {}
 
-func (g genRequestMessageToolCalls) GetRole() string { return g.Role }
-
-type genRequestMessageToolResponse struct {
-	Role       string `json:"role"`
-	Content    any    `json:"content"`
-	ToolCallID string `json:"tool_call_id"`
-}
-
-func (g genRequestMessageToolResponse) GetRole() string { return g.Role }
-
-type ImageUrl struct {
-	Url  string `json:"url"` /// data:image/jpeg;base64,......
-	data string
-}
-
-func (i ImageUrl) MarshalJSON() ([]byte, error) {
-	if len(i.Url) > 0 {
-		return json.Marshal(i.Url)
-	}
-	return []byte(`{"url": "data:image/jpeg;base64,` + i.data + `"}`), nil
-}
-
-type StreamOptions struct {
-	IncludeUsage bool `json:"include_usage"`
-}
-
-// ReasoningEffort is a string that can be "low", "medium", or "high".
+// ReasoningEffort is a string that can be "minimal", "low", "medium", "high", or "none" (model-dependent).
 type ReasoningEffort string
 
 const (
-	ReasoningEffortNone   ReasoningEffort = "none"
-	ReasoningEffortLow    ReasoningEffort = "low"
-	ReasoningEffortMedium ReasoningEffort = "medium"
-	ReasoningEffortHigh   ReasoningEffort = "high"
+	ReasoningEffortNone    ReasoningEffort = "none"
+	ReasoningEffortMinimal ReasoningEffort = "minimal"
+	ReasoningEffortLow     ReasoningEffort = "low"
+	ReasoningEffortMedium  ReasoningEffort = "medium"
+	ReasoningEffortHigh    ReasoningEffort = "high"
 )
+
+type reasoningConfig struct {
+	Effort  *ReasoningEffort `json:"effort,omitempty"`
+	Summary *string          `json:"summary,omitempty"`
+}
 
 type ServiceTier string
 
@@ -85,44 +66,43 @@ const (
 	ServiceTierPriority ServiceTier = "priority"
 )
 
+type responsesTool struct {
+	Type        string      `json:"type"` // always "function"
+	Name        string      `json:"name"`
+	Description string      `json:"description,omitempty"`
+	Parameters  *JSONSchema `json:"parameters,omitempty"`
+	Strict      bool        `json:"strict,omitempty"`
+}
+
+type responseTextFormat struct {
+	Type   string      `json:"type"` // "json_schema" or "text"
+	Name   string      `json:"name,omitempty"`
+	Schema *JSONSchema `json:"schema,omitempty"`
+	Strict bool        `json:"strict,omitempty"`
+}
+
+type textConfig struct {
+	Format *responseTextFormat `json:"format,omitempty"`
+}
+
 type genRequest struct {
-	Stream        bool           `json:"stream,omitempty"`
-	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
+	Model        string      `json:"model"`
+	Input        []inputItem `json:"input"`
+	Instructions *string     `json:"instructions,omitempty"`
 
-	Model          string              `json:"model"`
-	Messages       []genRequestMessage `json:"messages"`
-	ResponseFormat *responseFormat     `json:"response_format,omitempty"`
+	Tools      []responsesTool `json:"tools,omitempty"`
+	ToolChoice any             `json:"tool_choice,omitempty"`
 
-	Tools      []requestTool `json:"tools,omitempty"`
-	ToolChoice any           `json:"tool_choice,omitempty"`
+	Text      *textConfig      `json:"text,omitempty"`
+	Reasoning *reasoningConfig `json:"reasoning,omitempty"`
 
-	Stop []string `json:"stop,omitempty"`
-
-	MaxTokens        *int             `json:"max_completion_tokens,omitempty"`
-	ReasoningEffort  *ReasoningEffort `json:"reasoning_effort,omitempty"` // "low", "medium", "high"
-	Temperature      *float64         `json:"temperature,omitempty"`
-	TopP             *float64         `json:"top_p,omitempty"`
-	FrequencyPenalty *float64         `json:"frequency_penalty,omitempty"`
-	PresencePenalty  *float64         `json:"presence_penalty,omitempty"`
-
-	toolBelt map[string]*tools.Tool
+	MaxOutputTokens *int     `json:"max_output_tokens,omitempty"`
+	Temperature     *float64 `json:"temperature,omitempty"`
+	TopP            *float64 `json:"top_p,omitempty"`
 
 	ServiceTier *ServiceTier `json:"service_tier,omitempty"`
-}
+	Stream      bool         `json:"stream,omitempty"`
+	Store       *bool        `json:"store,omitempty"`
 
-type responseFormatSchema struct {
-	Name   string      `json:"name"`
-	Strict bool        `json:"strict"`
-	Schema *JSONSchema `json:"schema"`
-}
-
-type responseFormat struct {
-	Type string `json:"type"`
-
-	ResponseFormatSchema responseFormatSchema `json:"json_schema"`
-}
-
-type requestTool struct {
-	Type     string   `json:"type"` // Always function
-	Function toolFunc `json:"function"`
+	toolBelt map[string]*tools.Tool
 }

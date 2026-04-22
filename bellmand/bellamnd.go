@@ -407,7 +407,7 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 	internalH.Handle("/metrics", promhttp.Handler())
 	internalServer := &http.Server{Addr: fmt.Sprintf(":%d", cfg.InternalHttpPort), Handler: internalH}
 	go func() {
-		logger.Info("Start", "action", "starting internal server", "port", cfg.HttpPort)
+		logger.Info("Start", "action", "starting internal server", "port", cfg.InternalHttpPort)
 		err = internalServer.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("http internal server error", "err", err)
