@@ -1,81 +1,83 @@
 package openai
 
-type openaiStreamResponse struct {
-	ID                string       `json:"id"`
-	Object            string       `json:"object"`
-	Created           int          `json:"created"`
-	Model             string       `json:"model"`
-	ServiceTier       *ServiceTier `json:"service_tier,omitempty"`
-	SystemFingerprint string       `json:"system_fingerprint"`
-	Choices           []struct {
-		Index int `json:"index"`
-		Delta struct {
-			Content   *string     `json:"content"`
-			Refusal   interface{} `json:"refusal"`
-			Role      string      `json:"role"`
-			ToolCalls []struct {
-				Index    int    `json:"index"`
-				ID       string `json:"id"`
-				Function struct {
-					Arguments string `json:"arguments"`
-					Name      string `json:"name"`
-				} `json:"function,omitempty"`
-				Type string `json:"type"`
-			} `json:"tool_calls,omitempty"`
-		} `json:"delta"`
-		Logprobs     interface{} `json:"logprobs"`
-		FinishReason interface{} `json:"finish_reason"`
-	} `json:"choices"`
-	Usage *usage `json:"usage"`
+type responseUsage struct {
+	InputTokens        int `json:"input_tokens"`
+	InputTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
+	OutputTokens        int `json:"output_tokens"`
+	OutputTokensDetails struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"output_tokens_details"`
+	TotalTokens int `json:"total_tokens"`
 }
 
-type usage struct {
-	PromptTokens        int `json:"prompt_tokens"`
-	CompletionTokens    int `json:"completion_tokens"`
-	TotalTokens         int `json:"total_tokens"`
-	PromptTokensDetails struct {
-		CachedTokens int `json:"cached_tokens"`
-		AudioTokens  int `json:"audio_tokens"`
-	} `json:"prompt_tokens_details"`
-	CompletionTokensDetails struct {
-		ReasoningTokens          int `json:"reasoning_tokens"`
-		AudioTokens              int `json:"audio_tokens"`
-		AcceptedPredictionTokens int `json:"accepted_prediction_tokens"`
-		RejectedPredictionTokens int `json:"rejected_prediction_tokens"`
-	} `json:"completion_tokens_details"`
+type outputContent struct {
+	Type string `json:"type"` // "output_text" | "refusal"
+	Text string `json:"text"`
+}
+
+type outputReasoningSummary struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type outputItem struct {
+	Type      string                   `json:"type"` // "message" | "function_call" | "reasoning"
+	ID        string                   `json:"id"`
+	Role      string                   `json:"role,omitempty"`    // for "message"
+	Content   []outputContent          `json:"content,omitempty"` // for "message"
+	CallID    string                   `json:"call_id,omitempty"` // for "function_call"
+	Name      string                   `json:"name,omitempty"`
+	Arguments string                   `json:"arguments,omitempty"`
+	Summary   []outputReasoningSummary `json:"summary,omitempty"` // for "reasoning"
+}
+
+type openaiResponseError struct {
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type openaiResponseIncomplete struct {
+	Reason string `json:"reason,omitempty"`
 }
 
 type openaiResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int    `json:"created"`
-	Model   string `json:"model"`
-	Usage   usage  `json:"usage"`
-	Choices []struct {
-		Message struct {
-			Role      string             `json:"role"`
-			Content   string             `json:"content"`
-			ToolCalls []responseToolCall `json:"tool_calls"`
-		} `json:"message"`
-		Logprobs     any    `json:"logprobs"`
-		FinishReason string `json:"finish_reason"`
-		Index        int    `json:"index"`
-	} `json:"choices"`
-	ServiceTier *ServiceTier `json:"service_tier,omitempty"`
+	ID                string                    `json:"id"`
+	Object            string                    `json:"object"`
+	Model             string                    `json:"model"`
+	Status            string                    `json:"status"`
+	Output            []outputItem              `json:"output"`
+	Usage             responseUsage             `json:"usage"`
+	ServiceTier       *ServiceTier              `json:"service_tier,omitempty"`
+	Error             *openaiResponseError      `json:"error,omitempty"`
+	IncompleteDetails *openaiResponseIncomplete `json:"incomplete_details,omitempty"`
 }
 
-type responseToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Arguments string `json:"arguments"`
-		Name      string `json:"name"`
-	} `json:"function"`
+// streamEventItem is the `item` payload attached to response.output_item.added/done
+// (and, via its parent, referenced by function_call_arguments.* events).
+type streamEventItem struct {
+	Type      string `json:"type"`
+	ID        string `json:"id"`
+	CallID    string `json:"call_id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	Role      string `json:"role,omitempty"`
 }
 
-type toolFunc struct {
-	Name        string      `json:"name"`
-	Parameters  *JSONSchema `json:"parameters,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Strict      bool        `json:"strict,omitempty"`
+// streamEvent is the union envelope for every SSE event on /v1/responses.
+// The `type` field discriminates; unused fields stay zero-valued.
+type streamEvent struct {
+	Type           string           `json:"type"`
+	SequenceNumber int              `json:"sequence_number,omitempty"`
+	OutputIndex    int              `json:"output_index,omitempty"`
+	ContentIndex   int              `json:"content_index,omitempty"`
+	ItemID         string           `json:"item_id,omitempty"`
+	Item           *streamEventItem `json:"item,omitempty"`
+	Delta          string           `json:"delta,omitempty"`
+	Arguments      string           `json:"arguments,omitempty"`
+	Text           string           `json:"text,omitempty"`
+	Response       *openaiResponse  `json:"response,omitempty"`
+	Code           string           `json:"code,omitempty"`
+	Message        string           `json:"message,omitempty"`
 }

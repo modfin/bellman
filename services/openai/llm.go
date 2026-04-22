@@ -30,6 +30,11 @@ func (g *generator) SetRequest(config gen.Request) {
 	g.request = config
 }
 
+type streamingFunctionCall struct {
+	CallID string
+	Name   string
+}
+
 func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamResponse, error) {
 	g.request.Stream = true
 	req, reqModel, err := g.prompt(conversation...)
@@ -60,10 +65,12 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 
 	if resp.StatusCode != http.StatusOK {
 		b, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}", resp.StatusCode, string(b)), err)
 	}
 
-	reader := bufio.NewReader(resp.Body)
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 
 	stream := make(chan *gen.StreamResponse)
 
@@ -77,22 +84,18 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			}
 		}()
 
-		var role string
-		var toolName string
-		var toolCallID string
-		for {
-			line, _, err := reader.ReadLine()
-			if err != nil {
-				// If there's an error, check if it's EOF (end of stream)
-				if errors.Is(err, http.ErrBodyReadAfterClose) {
-					log.Println("SSE stream closed by server (Read after close).")
-					break
-				}
-				log.Printf("Error reading from stream: %v", err)
-				break // Exit the loop on any other error
-			}
+		functionCalls := map[int]streamingFunctionCall{}
+
+		for scanner.Scan() {
+			line := scanner.Bytes()
 
 			if len(line) == 0 {
+				continue
+			}
+			if bytes.HasPrefix(line, []byte("event: ")) {
+				continue
+			}
+			if bytes.HasPrefix(line, []byte(":")) {
 				continue
 			}
 			if !bytes.HasPrefix(line, []byte("data: ")) {
@@ -102,101 +105,121 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				}
 				break
 			}
-			line = line[6:] // removing header
+			line = line[6:]
 
 			if bytes.Equal(line, []byte("[DONE]")) {
-				break // Exit the loop on any other error
+				break
 			}
 
-			//fmt.Printf("LINE: %s\n", string(line))
-
-			var ss openaiStreamResponse
-			err = json.Unmarshal(line, &ss)
-			if err != nil {
+			var ev streamEvent
+			if err := json.Unmarshal(line, &ev); err != nil {
 				log.Printf("could not unmarshal chunk, %v", err)
 				break
 			}
 
-			if ss.Usage != nil {
-				thinkingTokens := ss.Usage.CompletionTokensDetails.ReasoningTokens
-				outputTokens := ss.Usage.CompletionTokens - thinkingTokens
-				if outputTokens < 0 {
-					outputTokens = 0
+			switch ev.Type {
+			case "response.output_item.added":
+				if ev.Item != nil && ev.Item.Type == "function_call" {
+					functionCalls[ev.OutputIndex] = streamingFunctionCall{
+						CallID: ev.Item.CallID,
+						Name:   ev.Item.Name,
+					}
 				}
-				m := &models.Metadata{
-					Model:          ss.Model,
-					InputTokens:    ss.Usage.PromptTokens,
-					OutputTokens:   outputTokens,
-					ThinkingTokens: thinkingTokens,
-					TotalTokens:    ss.Usage.PromptTokens + outputTokens + thinkingTokens,
-				}
-				if ss.ServiceTier != nil {
-					m.Other = map[string]any{"service_tier": *ss.ServiceTier}
-				}
-				stream <- &gen.StreamResponse{
-					Type:     gen.TYPE_METADATA,
-					Metadata: m,
-				}
-				continue
-			}
 
-			if ss.ServiceTier != nil {
-				g.openai.log("[gen] stream resp, service tier", "msg", string(line), "service_tier", *ss.ServiceTier)
-			}
-
-			if len(ss.Choices) == 0 { // Something wrong
-				// Should never really get here...
-				g.openai.log("[gen] stream request, no choices", "msg", string(line))
-				stream <- &gen.StreamResponse{
-					Type:    gen.TYPE_ERROR,
-					Content: "there where no choises in response",
-				}
-				break
-			}
-
-			for _, choice := range ss.Choices {
-				// eg, "finish_reason":"stop", discard and wait for usage
-				if choice.FinishReason != nil { // ignore it...
+			case "response.output_text.delta":
+				if ev.Delta == "" {
 					continue
 				}
-				if len(choice.Delta.Role) > 0 {
-					role = choice.Delta.Role // Probably usually check, assistant
+				stream <- &gen.StreamResponse{
+					Type:    gen.TYPE_DELTA,
+					Role:    prompt.AssistantRole,
+					Index:   ev.OutputIndex,
+					Content: ev.Delta,
 				}
-				if choice.Delta.Content != nil {
-					stream <- &gen.StreamResponse{
-						Type:    gen.TYPE_DELTA,
-						Role:    prompt.Role(role),
-						Index:   choice.Index,
-						Content: *choice.Delta.Content,
-					}
-				}
-				if len(choice.Delta.ToolCalls) > 0 {
-					for _, toolCall := range choice.Delta.ToolCalls {
-						if len(toolCall.Function.Name) > 0 && len(toolCall.ID) > 0 {
-							toolName = toolCall.Function.Name
-							toolCallID = toolCall.ID
-						}
-						if len(toolName) == 0 || len(toolCallID) == 0 {
-							stream <- &gen.StreamResponse{
-								Type:    gen.TYPE_ERROR,
-								Content: "tool call without name or id",
-							}
-							continue
-						}
 
-						stream <- &gen.StreamResponse{
-							Type:  gen.TYPE_DELTA,
-							Role:  prompt.ToolCallRole,
-							Index: choice.Index,
-							ToolCall: &tools.Call{
-								ID:       toolCallID,
-								Name:     toolName,
-								Argument: []byte(toolCall.Function.Arguments),
-								Ref:      reqModel.toolBelt[toolName],
-							},
-						}
+			case "response.function_call_arguments.delta":
+				fc, ok := functionCalls[ev.OutputIndex]
+				if !ok || fc.CallID == "" || fc.Name == "" {
+					stream <- &gen.StreamResponse{
+						Type:    gen.TYPE_ERROR,
+						Content: "tool call without name or id",
+					}
+					continue
+				}
+				stream <- &gen.StreamResponse{
+					Type:  gen.TYPE_DELTA,
+					Role:  prompt.ToolCallRole,
+					Index: ev.OutputIndex,
+					ToolCall: &tools.Call{
+						ID:       fc.CallID,
+						Name:     fc.Name,
+						Argument: []byte(ev.Delta),
+						Ref:      reqModel.toolBelt[fc.Name],
+					},
+				}
+
+			case "response.reasoning_summary_text.delta":
+				if g.request.ThinkingParts == nil || !*g.request.ThinkingParts {
+					continue
+				}
+				if ev.Delta == "" {
+					continue
+				}
+				stream <- &gen.StreamResponse{
+					Type:    gen.TYPE_THINKING_DELTA,
+					Role:    prompt.AssistantRole,
+					Index:   ev.OutputIndex,
+					Content: ev.Delta,
+				}
+
+			case "response.completed":
+				if ev.Response != nil {
+					if ev.Response.ServiceTier != nil {
+						g.openai.log("[gen] stream resp, service tier", "service_tier", *ev.Response.ServiceTier)
+					}
+					stream <- &gen.StreamResponse{
+						Type:     gen.TYPE_METADATA,
+						Metadata: responseToMetadata(ev.Response),
 					}
 				}
+				return
+
+			case "response.failed":
+				msg := "response failed"
+				if ev.Response != nil && ev.Response.Error != nil && ev.Response.Error.Message != "" {
+					msg = ev.Response.Error.Message
+				}
+				stream <- &gen.StreamResponse{Type: gen.TYPE_ERROR, Content: msg}
+				return
+
+			case "response.incomplete":
+				reason := "response incomplete"
+				if ev.Response != nil && ev.Response.IncompleteDetails != nil && ev.Response.IncompleteDetails.Reason != "" {
+					reason = "response incomplete: " + ev.Response.IncompleteDetails.Reason
+				}
+				stream <- &gen.StreamResponse{Type: gen.TYPE_ERROR, Content: reason}
+				return
+
+			case "error":
+				msg := ev.Message
+				if msg == "" {
+					msg = "stream error"
+				}
+				stream <- &gen.StreamResponse{Type: gen.TYPE_ERROR, Content: msg}
+				return
+
+			default:
+				// Ignore: response.created, response.in_progress, response.queued,
+				// response.content_part.*, response.output_text.done, response.output_item.done,
+				// response.function_call_arguments.done, response.refusal.*, reasoning_summary_part.*,
+				// MCP/web_search/file_search/code_interpreter/image_generation/audio events.
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Printf("Error reading from stream: %v", err)
+			stream <- &gen.StreamResponse{
+				Type:    gen.TYPE_ERROR,
+				Content: fmt.Sprintf("sse read error: %v", err),
 			}
 		}
 
@@ -246,45 +269,49 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	if err != nil {
 		return nil, fmt.Errorf("could not decode openai response, %w", err)
 	}
-	if len(respModel.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in response")
+
+	if respModel.Status != "" && respModel.Status != "completed" {
+		if respModel.Error != nil && respModel.Error.Message != "" {
+			return nil, fmt.Errorf("openai response status %s: %s", respModel.Status, respModel.Error.Message)
+		}
+		if respModel.IncompleteDetails != nil && respModel.IncompleteDetails.Reason != "" {
+			return nil, fmt.Errorf("openai response status %s: %s", respModel.Status, respModel.IncompleteDetails.Reason)
+		}
+		return nil, fmt.Errorf("openai response status %s", respModel.Status)
 	}
 
 	res := &gen.Response{
-		Metadata: models.Metadata{
-			Model: g.request.Model.FQN(),
-		},
+		Metadata: *responseToMetadata(&respModel),
 	}
-	thinkingTokens := respModel.Usage.CompletionTokensDetails.ReasoningTokens
-	outputTokens := respModel.Usage.CompletionTokens - thinkingTokens
-	if outputTokens < 0 {
-		outputTokens = 0
-	}
-	res.Metadata.InputTokens = respModel.Usage.PromptTokens
-	res.Metadata.OutputTokens = outputTokens
-	res.Metadata.ThinkingTokens = thinkingTokens
-	res.Metadata.TotalTokens = respModel.Usage.PromptTokens + outputTokens + thinkingTokens
+	res.Metadata.Model = g.request.Model.FQN()
+
 	if respModel.ServiceTier != nil {
 		g.openai.log("[gen] prompt resp, service tier", "service_tier", *respModel.ServiceTier)
-		if res.Metadata.Other == nil {
-			res.Metadata.Other = map[string]any{}
-		}
-		res.Metadata.Other["service_tier"] = *respModel.ServiceTier
 	}
-	for _, c := range respModel.Choices {
-		message := c.Message
-		if len(message.ToolCalls) == 0 { // Not Tools
-			res.Texts = append(res.Texts, c.Message.Content)
-		}
 
-		if len(message.ToolCalls) > 0 { // ToolResponseRole calls
-			for _, t := range message.ToolCalls {
-				res.Tools = append(res.Tools, tools.Call{
-					ID:       t.ID,
-					Name:     t.Function.Name,
-					Argument: []byte(t.Function.Arguments),
-					Ref:      reqModel.toolBelt[t.Function.Name],
-				})
+	for _, item := range respModel.Output {
+		switch item.Type {
+		case "message":
+			for _, c := range item.Content {
+				if c.Type == "output_text" && c.Text != "" {
+					res.Texts = append(res.Texts, c.Text)
+				}
+			}
+		case "function_call":
+			res.Tools = append(res.Tools, tools.Call{
+				ID:       item.CallID,
+				Name:     item.Name,
+				Argument: []byte(item.Arguments),
+				Ref:      reqModel.toolBelt[item.Name],
+			})
+		case "reasoning":
+			if g.request.ThinkingParts == nil || !*g.request.ThinkingParts {
+				continue
+			}
+			for _, s := range item.Summary {
+				if s.Text != "" {
+					res.Thinking = append(res.Thinking, s.Text)
+				}
 			}
 		}
 	}
@@ -301,42 +328,60 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	return res, nil
 }
 
+func responseToMetadata(r *openaiResponse) *models.Metadata {
+	thinking := r.Usage.OutputTokensDetails.ReasoningTokens
+	output := r.Usage.OutputTokens - thinking
+	if output < 0 {
+		output = 0
+	}
+	m := &models.Metadata{
+		Model:          r.Model,
+		InputTokens:    r.Usage.InputTokens,
+		OutputTokens:   output,
+		ThinkingTokens: thinking,
+		TotalTokens:    r.Usage.TotalTokens,
+	}
+	if r.ServiceTier != nil {
+		m.Other = map[string]any{"service_tier": *r.ServiceTier}
+	}
+	return m
+}
+
 func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genRequest, error) {
 	reqModel := genRequest{
-		Stream: g.request.Stream,
-		Model:  g.request.Model.Name,
-		Stop:   g.request.StopSequences,
-
-		MaxTokens:        g.request.MaxTokens,
-		FrequencyPenalty: g.request.FrequencyPenalty,
-		PresencePenalty:  g.request.PresencePenalty,
-		Temperature:      g.request.Temperature,
-		TopP:             g.request.TopP,
-	}
-
-	if reqModel.Stream {
-		reqModel.StreamOptions = &StreamOptions{IncludeUsage: true}
+		Stream:          g.request.Stream,
+		Model:           g.request.Model.Name,
+		MaxOutputTokens: g.request.MaxTokens,
+		Temperature:     g.request.Temperature,
+		TopP:            g.request.TopP,
+		Store:           new(false),
 	}
 
 	if g.request.Model.Name == "" {
 		return nil, reqModel, fmt.Errorf("model is required")
 	}
 
+	if len(g.request.StopSequences) > 0 {
+		g.openai.log("[gen] dropping stop_sequences (not supported by /v1/responses)", "stop", g.request.StopSequences)
+	}
+	if g.request.FrequencyPenalty != nil {
+		g.openai.log("[gen] dropping frequency_penalty (not supported by /v1/responses)")
+	}
+	if g.request.PresencePenalty != nil {
+		g.openai.log("[gen] dropping presence_penalty (not supported by /v1/responses)")
+	}
+
 	if len(g.request.Model.Config) > 0 {
 		if v, ok := g.request.Model.Config["service_tier"]; ok {
 			switch fmt.Sprintf("%v", v) {
 			case "auto":
-				st := ServiceTierAuto
-				reqModel.ServiceTier = &st
+				reqModel.ServiceTier = new(ServiceTierAuto)
 			case "default":
-				st := ServiceTierDefault
-				reqModel.ServiceTier = &st
+				reqModel.ServiceTier = new(ServiceTierDefault)
 			case "flex":
-				st := ServiceTierFlex
-				reqModel.ServiceTier = &st
+				reqModel.ServiceTier = new(ServiceTierFlex)
 			case "priority":
-				st := ServiceTierPriority
-				reqModel.ServiceTier = &st
+				reqModel.ServiceTier = new(ServiceTierPriority)
 			default:
 				return nil, reqModel, fmt.Errorf("unknown service tier: %s", v)
 			}
@@ -344,39 +389,32 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	}
 
 	reqModel.toolBelt = map[string]*tools.Tool{}
-	// Dealing with Tools
 	for _, t := range g.request.Tools {
-		reqModel.Tools = append(reqModel.Tools, requestTool{
-			Type: "function",
-			Function: toolFunc{
-				Name:        t.Name,
-				Parameters:  fromBellmanSchema(t.ArgumentSchema),
-				Description: t.Description,
-				Strict:      g.request.StrictOutput,
-			},
+		reqModel.Tools = append(reqModel.Tools, responsesTool{
+			Type:        "function",
+			Name:        t.Name,
+			Description: t.Description,
+			Parameters:  fromBellmanSchema(t.ArgumentSchema),
+			Strict:      g.request.StrictOutput,
 		})
 		reqModel.toolBelt[t.Name] = &t
 	}
-	// Selecting specific tool
 	if g.request.ToolConfig != nil {
 		switch g.request.ToolConfig.Name {
 		case tools.NoTool.Name, tools.AutoTool.Name, tools.RequiredTool.Name:
 			reqModel.ToolChoice = g.request.ToolConfig.Name
 		default:
-			reqModel.ToolChoice = requestTool{
-				Type: "function",
-				Function: toolFunc{
-					Name: g.request.ToolConfig.Name,
-				},
+			reqModel.ToolChoice = map[string]any{
+				"type": "function",
+				"name": g.request.ToolConfig.Name,
 			}
 		}
 	}
 
-	// Dealing with Output Schema
 	if g.request.OutputSchema != nil {
-		reqModel.ResponseFormat = &responseFormat{
-			Type: "json_schema",
-			ResponseFormatSchema: responseFormatSchema{
+		reqModel.Text = &textConfig{
+			Format: &responseTextFormat{
+				Type:   "json_schema",
 				Name:   "response",
 				Strict: g.request.StrictOutput,
 				Schema: fromBellmanSchema(g.request.OutputSchema),
@@ -396,29 +434,30 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		default:
 			reffort = ReasoningEffortHigh
 		}
-		reqModel.ReasoningEffort = &reffort
+		reqModel.Reasoning = &reasoningConfig{Effort: &reffort}
+	}
+	if g.request.ThinkingParts != nil && *g.request.ThinkingParts {
+		if reqModel.Reasoning == nil {
+			reqModel.Reasoning = &reasoningConfig{}
+		}
+		reqModel.Reasoning.Summary = new("auto")
 	}
 
-	messages := []genRequestMessage{}
-
-	// Dealing with Prompt Messages
-	// Open Ai specific
 	if g.request.SystemPrompt != "" {
-		messages = append(messages, genRequestMessageText{
-			Role:    "system",
-			Content: []genRequestMessageContent{{Type: "text", Text: &g.request.SystemPrompt}},
-		})
+		reqModel.Instructions = new(g.request.SystemPrompt)
 	}
+
+	var input []inputItem
 	for _, c := range conversation {
 		switch c.Role {
 		case prompt.ToolResponseRole:
 			if c.ToolResponse == nil {
 				return nil, reqModel, fmt.Errorf("ToolResponse is required for role tool response")
 			}
-			messages = append(messages, genRequestMessageToolResponse{
-				Role:       "tool",
-				ToolCallID: c.ToolResponse.ToolCallID,
-				Content:    c.ToolResponse.Response,
+			input = append(input, functionCallOutputItem{
+				Type:   "function_call_output",
+				CallID: c.ToolResponse.ToolCallID,
+				Output: c.ToolResponse.Response,
 			})
 		case prompt.ToolCallRole:
 			if c.ToolCall == nil {
@@ -428,51 +467,42 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 			if err := json.Unmarshal(c.ToolCall.Arguments, &jsonArguments); err != nil {
 				return nil, reqModel, fmt.Errorf("ToolCall.Arguments is not valid JSON object: %w", err)
 			}
-			messages = append(messages, genRequestMessageToolCalls{
-				Role: "assistant",
-				ToolCalls: []genRequestMessageToolCall{
-					{
-						ID:   c.ToolCall.ToolCallID,
-						Type: "function",
-						Function: genRequestMessageToolCallFunction{
-							Name:      c.ToolCall.Name,
-							Arguments: string(c.ToolCall.Arguments),
-						},
-					},
-				},
+			input = append(input, functionCallItem{
+				Type:      "function_call",
+				CallID:    c.ToolCall.ToolCallID,
+				Name:      c.ToolCall.Name,
+				Arguments: string(c.ToolCall.Arguments),
 			})
 		default: // prompt.UserRole, prompt.AssistantRole
-			message := genRequestMessageText{
+			contentType := "input_text"
+			if c.Role == prompt.AssistantRole {
+				contentType = "output_text"
+			}
+			item := messageItem{
 				Role: string(c.Role),
-				Content: []genRequestMessageContent{
-					{Type: "text", Text: &c.Text},
+				Content: []messageContent{
+					{Type: contentType, Text: new(c.Text)},
 				},
 			}
-
 			if c.Payload != nil {
-				message.Content = append(message.Content,
-					genRequestMessageContent{
-						Type: "image_url",
-						ImageUrl: &ImageUrl{
-							Url:  c.Payload.Uri,
-							data: c.Payload.Data,
-						},
-					},
-				)
+				item.Content = append(item.Content, messageContent{
+					Type:     "input_image",
+					ImageURL: new(imagePayloadURL(c.Payload)),
+				})
 			}
-			messages = append(messages, message)
+			input = append(input, item)
 		}
 	}
-	reqModel.Messages = messages
+	reqModel.Input = input
 
 	body, err := json.Marshal(reqModel)
 	if err != nil {
 		return nil, reqModel, fmt.Errorf("could not marshal open ai request, %w", err)
 	}
 
-	u, err := url.JoinPath(g.openai.getBaseURL(), "/v1/chat/completions")
+	u, err := url.JoinPath(g.openai.getBaseURL(), "/v1/responses")
 	if err != nil {
-		return nil, reqModel, fmt.Errorf("could not construct chat completions URL, %w", err)
+		return nil, reqModel, fmt.Errorf("could not construct responses URL, %w", err)
 	}
 
 	ctx := g.request.Context
@@ -487,4 +517,15 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	req.Header.Set("Content-Type", "application/json")
 
 	return req, reqModel, err
+}
+
+func imagePayloadURL(p *prompt.Payload) string {
+	if p.Uri != "" {
+		return p.Uri
+	}
+	mime := p.Mime
+	if mime == "" {
+		mime = "image/jpeg"
+	}
+	return "data:" + mime + ";base64," + p.Data
 }

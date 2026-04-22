@@ -7,7 +7,7 @@ go run -race . \
   --voyageai-key="$(cat ./credentials/voyageai-api-key.txt)" \
   \
   --google-project=modular-finance \
-  --google-region=europe-north1 \
+  --google-region=global \
   --google-credential="$(cat ./credentials/google-service-account.json)" \
   \
   --ollama-url=http://localhost:11434 \
