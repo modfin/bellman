@@ -295,6 +295,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			for _, c := range item.Content {
 				if c.Type == "output_text" && c.Text != "" {
 					res.Texts = append(res.Texts, c.Text)
+					res.Turn = append(res.Turn, prompt.AsAssistant(c.Text))
 				}
 			}
 		case "function_call":
@@ -305,12 +306,23 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				Ref:      reqModel.toolBelt[item.Name],
 			})
 		case "reasoning":
-			if g.request.ThinkingParts == nil || !*g.request.ThinkingParts {
-				continue
+			var text string
+			for i, s := range item.Summary {
+				if i > 0 {
+					text += "\n"
+				}
+				text += s.Text
 			}
-			for _, s := range item.Summary {
-				if s.Text != "" {
-					res.Thinking = append(res.Thinking, s.Text)
+			var sig []byte
+			if item.EncryptedContent != nil {
+				sig = []byte(*item.EncryptedContent)
+			}
+			res.Turn = append(res.Turn, prompt.AsThinking(text, sig, item.ID))
+			if g.request.ThinkingParts != nil && *g.request.ThinkingParts {
+				for _, s := range item.Summary {
+					if s.Text != "" {
+						res.Thinking = append(res.Thinking, s.Text)
+					}
 				}
 			}
 		}
@@ -442,6 +454,12 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		}
 		reqModel.Reasoning.Summary = new("auto")
 	}
+	// Request encrypted reasoning content so reasoning items can be replayed
+	// on the next turn in stateless (store=false) mode — required for tool-use
+	// chains with reasoning.
+	if reqModel.Reasoning != nil {
+		reqModel.Include = append(reqModel.Include, "reasoning.encrypted_content")
+	}
 
 	if g.request.SystemPrompt != "" {
 		reqModel.Instructions = new(g.request.SystemPrompt)
@@ -473,6 +491,18 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 				Name:      c.ToolCall.Name,
 				Arguments: string(c.ToolCall.Arguments),
 			})
+		case prompt.ThinkingRole:
+			if c.Thinking == nil || c.Thinking.ID == "" {
+				continue
+			}
+			reqItem := reasoningInputItem{Type: "reasoning", ID: c.Thinking.ID, Summary: []outputReasoningSummary{}}
+			if c.Thinking.Text != "" {
+				reqItem.Summary = []outputReasoningSummary{{Type: "summary_text", Text: c.Thinking.Text}}
+			}
+			if len(c.Signature) > 0 {
+				reqItem.EncryptedContent = new(string(c.Signature))
+			}
+			input = append(input, reqItem)
 		default: // prompt.UserRole, prompt.AssistantRole
 			contentType := "input_text"
 			if c.Role == prompt.AssistantRole {

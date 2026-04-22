@@ -117,6 +117,10 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			}
 			t := time.Now().UnixNano()
 			for idx, part := range candidate.Content.Parts {
+				var sig []byte
+				if part.ThoughtSignature != nil && *part.ThoughtSignature != "" {
+					sig = []byte(*part.ThoughtSignature)
+				}
 				if part.Text != nil {
 					if part.Thought != nil && *part.Thought {
 						stream <- &gen.StreamResponse{
@@ -125,6 +129,14 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 							Index:   candidate.Index,
 							Content: *part.Text,
 						}
+						if len(sig) > 0 {
+							stream <- &gen.StreamResponse{
+								Type:  gen.TYPE_BLOCK,
+								Role:  role,
+								Index: candidate.Index,
+								Block: new(prompt.AsThinking(*part.Text, sig, "")),
+							}
+						}
 						continue
 					}
 					stream <- &gen.StreamResponse{
@@ -132,6 +144,17 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						Role:    role,
 						Index:   candidate.Index,
 						Content: *part.Text,
+					}
+					// Gemini may attach a thoughtSignature to plain assistant text
+					// parts too — emit a finalized block so streaming consumers can
+					// capture the signature for replay.
+					if len(sig) > 0 {
+						stream <- &gen.StreamResponse{
+							Type:  gen.TYPE_BLOCK,
+							Role:  role,
+							Index: candidate.Index,
+							Block: new(prompt.AsAssistantWithSignature(*part.Text, sig)),
+						}
 					}
 				}
 				if part.FunctionCall != nil {
@@ -149,10 +172,11 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						Role:  prompt.ToolCallRole,
 						Index: candidate.Index,
 						ToolCall: &tools.Call{
-							Name:     f.Name,
-							Argument: arg,
-							ID:       fmt.Sprintf("%d-%d", t, idx),
-							Ref:      model.toolBelt[f.Name],
+							Name:      f.Name,
+							Argument:  arg,
+							ID:        fmt.Sprintf("%d-%d", t, idx),
+							Signature: sig,
+							Ref:       model.toolBelt[f.Name],
 						},
 					}
 				}
@@ -238,12 +262,22 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	res.Metadata.TotalTokens = respModel.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens
 	for _, c := range respModel.Candidates {
 		for _, p := range c.Content.Parts {
+			var sig []byte
+			if p.ThoughtSignature != nil && *p.ThoughtSignature != "" {
+				sig = []byte(*p.ThoughtSignature)
+			}
 			if p.Thought != nil && *p.Thought {
 				res.Thinking = append(res.Thinking, p.Text)
+				res.Turn = append(res.Turn, prompt.AsThinking(p.Text, sig, ""))
 				continue
 			}
 			if len(p.Text) > 0 {
 				res.Texts = append(res.Texts, p.Text)
+				// Gemini may attach thoughtSignature to plain assistant text parts
+				// too (the "save state" on the final visible output). Emit the
+				// part as its own assistant prompt so the signature travels with
+				// the text that was signed.
+				res.Turn = append(res.Turn, prompt.AsAssistantWithSignature(p.Text, sig))
 			}
 
 			if len(p.Text) == 0 && len(p.FunctionCall.Name) > 0 { // Tool calls
@@ -253,9 +287,10 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 					return nil, fmt.Errorf("could not marshal google request, %w", err)
 				}
 				res.Tools = append(res.Tools, tools.Call{
-					Name:     f.Name,
-					Argument: arg,
-					Ref:      model.toolBelt[f.Name],
+					Name:      f.Name,
+					Argument:  arg,
+					Signature: sig,
+					Ref:       model.toolBelt[f.Name],
 				})
 
 			}
@@ -364,17 +399,25 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		model.GenerationConfig.ThinkingConfig.IncludeThoughts = g.request.ThinkingParts
 	}
 
-	for _, p := range prompts {
-		content := genRequestContent{
-			Parts: []genRequestContentPart{},
+	// Append a part into the current Content of the given role, merging with
+	// the previous Content when it already has the same role. Gemini requires
+	// thinking/text/functionCall parts from one model turn to live under a
+	// single `model` Content so thoughtSignature validation can match them up.
+	appendPart := func(role string, part genRequestContentPart) {
+		if n := len(model.Contents); n > 0 && model.Contents[n-1].Role == role {
+			model.Contents[n-1].Parts = append(model.Contents[n-1].Parts, part)
+			return
 		}
+		model.Contents = append(model.Contents, genRequestContent{Role: role, Parts: []genRequestContentPart{part}})
+	}
+
+	for _, p := range prompts {
 		switch p.Role {
 		case prompt.ToolResponseRole:
 			if p.ToolResponse == nil {
 				return nil, model, fmt.Errorf("ToolResponse is required for role tool response")
 			}
-			content.Role = "tool"
-			content.Parts = append(content.Parts, genRequestContentPart{
+			appendPart("tool", genRequestContentPart{
 				FunctionResponse: &functionResponse{
 					Name: p.ToolResponse.Name,
 					Response: struct {
@@ -387,21 +430,39 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 			if p.ToolCall == nil {
 				return nil, model, fmt.Errorf("ToolCall is required for role tool call")
 			}
-			content.Role = "model"
 			var jsonArguments map[string]any
 			err := json.Unmarshal(p.ToolCall.Arguments, &jsonArguments)
 			if err != nil {
 				return nil, model, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
 			}
-			content.Parts = append(content.Parts, genRequestContentPart{
+			part := genRequestContentPart{
 				FunctionCall: &functionCall{Name: p.ToolCall.Name, Args: jsonArguments},
-			})
+			}
+			if len(p.Signature) > 0 {
+				part.ThoughtSignature = string(p.Signature)
+			}
+			appendPart("model", part)
+		case prompt.ThinkingRole:
+			if p.Thinking == nil {
+				continue
+			}
+			part := genRequestContentPart{
+				Text:    p.Thinking.Text,
+				Thought: true,
+			}
+			if len(p.Signature) > 0 {
+				part.ThoughtSignature = string(p.Signature)
+			}
+			appendPart("model", part)
 		default: // prompt.UserRole, prompt.AssistantRole
-			content.Role = "user"
+			role := "user"
 			if p.Role == prompt.AssistantRole {
-				content.Role = "model"
+				role = "model"
 			}
 			part := genRequestContentPart{Text: p.Text}
+			if p.Role == prompt.AssistantRole && len(p.Signature) > 0 {
+				part.ThoughtSignature = string(p.Signature)
+			}
 			if p.Payload != nil {
 				if len(p.Payload.Data) > 0 {
 					part.InlineData = &inlineData{
@@ -417,9 +478,8 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 					}
 				}
 			}
-			content.Parts = append(content.Parts, part)
+			appendPart(role, part)
 		}
-		model.Contents = append(model.Contents, content)
 	}
 
 	region := g.google.config.Region

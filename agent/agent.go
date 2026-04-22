@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
-	"sync"
 )
 
 // Run will prompt until the llm responds with no tool calls, or until maxDepth is reached. Unless Output is already
@@ -77,10 +78,15 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 			callbackResults = executeCallbacksParallel(g.Request.Context, callbacks, parallelism)
 		}
 
+		// Replay the assistant-turn artifacts (thinking + any text) before the
+		// tool_use blocks. Providers that validate signatures require the whole
+		// turn to round-trip intact.
+		prompts = append(prompts, resp.Turn...)
+
 		// Process results and check for errors
 		for _, cbResult := range callbackResults {
 			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCall(callback.ID, callback.Name, callback.Argument))
+			prompts = append(prompts, prompt.AsToolCallWithSignature(callback.ID, callback.Name, callback.Argument, callback.Signature))
 
 			if cbResult.Error != nil {
 				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)
@@ -165,10 +171,15 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 			callbackResults = executeCallbacksParallel(g.Request.Context, callbacks, parallelism)
 		}
 
+		// Replay the assistant-turn artifacts (thinking + any text) before the
+		// tool_use blocks. Providers that validate signatures require the whole
+		// turn to round-trip intact.
+		prompts = append(prompts, resp.Turn...)
+
 		// Process results and check for errors
 		for _, cbResult := range callbackResults {
 			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCall(callback.ID, callback.Name, callback.Argument))
+			prompts = append(prompts, prompt.AsToolCallWithSignature(callback.ID, callback.Name, callback.Argument, callback.Signature))
 
 			if cbResult.Error != nil {
 				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)

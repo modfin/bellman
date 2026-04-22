@@ -7,12 +7,15 @@ type genRequestContent struct {
 	Parts []genRequestContentPart `json:"parts,omitempty"`
 }
 type genRequestContentPart struct {
-	Text string `json:"text,omitempty"`
+	Text    string `json:"text,omitempty"`
+	Thought bool   `json:"thought,omitempty"` // true when text is a thinking summary replayed from a prior turn
 
 	InlineData       *inlineData       `json:"inlineData,omitempty"`
 	FileData         *fileData         `json:"fileData,omitempty"`
 	FunctionCall     *functionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *functionResponse `json:"functionResponse,omitempty"`
+
+	ThoughtSignature string `json:"thoughtSignature,omitempty"`
 }
 
 type inlineData struct {

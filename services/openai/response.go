@@ -23,14 +23,15 @@ type outputReasoningSummary struct {
 }
 
 type outputItem struct {
-	Type      string                   `json:"type"` // "message" | "function_call" | "reasoning"
-	ID        string                   `json:"id"`
-	Role      string                   `json:"role,omitempty"`    // for "message"
-	Content   []outputContent          `json:"content,omitempty"` // for "message"
-	CallID    string                   `json:"call_id,omitempty"` // for "function_call"
-	Name      string                   `json:"name,omitempty"`
-	Arguments string                   `json:"arguments,omitempty"`
-	Summary   []outputReasoningSummary `json:"summary,omitempty"` // for "reasoning"
+	Type             string                   `json:"type"` // "message" | "function_call" | "reasoning"
+	ID               string                   `json:"id"`
+	Role             string                   `json:"role,omitempty"`              // for "message"
+	Content          []outputContent          `json:"content,omitempty"`           // for "message"
+	CallID           string                   `json:"call_id,omitempty"`           // for "function_call"
+	Name             string                   `json:"name,omitempty"`
+	Arguments        string                   `json:"arguments,omitempty"`
+	Summary          []outputReasoningSummary `json:"summary,omitempty"`           // for "reasoning"
+	EncryptedContent *string                  `json:"encrypted_content,omitempty"` // for "reasoning" when include=["reasoning.encrypted_content"]
 }
 
 type openaiResponseError struct {

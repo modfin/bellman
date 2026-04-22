@@ -101,6 +101,11 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	//var hasPayload bool
 	messages := []genRequestMessage{}
 	for _, c := range conversation {
+		if c.Role == prompt.ThinkingRole {
+			// Ollama does not participate in the signature/thoughtSignature
+			// protocol; thinking prompts from other providers are dropped.
+			continue
+		}
 		message := genRequestMessage{
 			Role:    string(c.Role),
 			Content: c.Text,

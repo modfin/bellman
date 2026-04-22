@@ -75,5 +75,10 @@ type Call struct {
 	Name     string `json:"name"`
 	Argument []byte `json:"argument"`
 
+	// Signature is the opaque per-provider signature the model issued for this
+	// tool call (e.g. Gemini thoughtSignature). The agent loop moves it onto
+	// Prompt.Signature when replaying the call in conversation history.
+	Signature []byte `json:"signature,omitempty"`
+
 	Ref *Tool `json:"-"`
 }

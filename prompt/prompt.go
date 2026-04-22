@@ -8,6 +8,7 @@ const UserRole = Role("user")
 const AssistantRole = Role("assistant")
 const ToolCallRole = Role("tool-call")
 const ToolResponseRole = Role("tool-resp")
+const ThinkingRole = Role("thinking")
 
 type Prompt struct {
 	Role         Role          `json:"role"`
@@ -15,6 +16,17 @@ type Prompt struct {
 	Payload      *Payload      `json:"payload,omitempty"`
 	ToolCall     *ToolCall     `json:"tool_call,omitempty"`
 	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
+
+	Thinking  *ThinkingContent `json:"thinking,omitempty"`
+	Signature []byte           `json:"signature,omitempty"` // opaque per-provider signature; meaning is role-dependent
+}
+
+// ThinkingContent is the payload attached to a Prompt with Role==ThinkingRole.
+// The opaque replay signature lives on the wrapping Prompt.Signature field.
+type ThinkingContent struct {
+	Text     string `json:"text,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Redacted bool   `json:"redacted,omitempty"`
 }
 
 type Payload struct {
@@ -37,6 +49,9 @@ type ToolResponse struct {
 func AsAssistant(text string) Prompt {
 	return Prompt{Role: AssistantRole, Text: text}
 }
+func AsAssistantWithSignature(text string, signature []byte) Prompt {
+	return Prompt{Role: AssistantRole, Text: text, Signature: signature}
+}
 func AsUser(text string) Prompt {
 	return Prompt{Role: UserRole, Text: text}
 }
@@ -49,8 +64,30 @@ func AsUserWithURI(mime string, uri string) Prompt {
 func AsToolCall(toolCallID, functionName string, functionArg []byte) Prompt {
 	return Prompt{Role: ToolCallRole, ToolCall: &ToolCall{ToolCallID: toolCallID, Name: functionName, Arguments: functionArg}}
 }
+func AsToolCallWithSignature(toolCallID, functionName string, functionArg, signature []byte) Prompt {
+	return Prompt{
+		Role:      ToolCallRole,
+		Signature: signature,
+		ToolCall:  &ToolCall{ToolCallID: toolCallID, Name: functionName, Arguments: functionArg},
+	}
+}
 func AsToolResponse(toolCallID, functionName string, response string) Prompt {
 	return Prompt{Role: ToolResponseRole, ToolResponse: &ToolResponse{ToolCallID: toolCallID, Name: functionName, Response: response}}
+}
+func AsThinking(text string, signature []byte, id string) Prompt {
+	return Prompt{
+		Role:      ThinkingRole,
+		Signature: signature,
+		Thinking:  &ThinkingContent{Text: text, ID: id},
+	}
+}
+
+func AsRedactedThinking(signature []byte) Prompt {
+	return Prompt{
+		Role:      ThinkingRole,
+		Signature: signature,
+		Thinking:  &ThinkingContent{Redacted: true},
+	}
 }
 
 const MimeApplicationPDF = "application/pdf"
