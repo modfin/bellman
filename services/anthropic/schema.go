@@ -126,3 +126,55 @@ func fromBellmanSchema(bellmanSchema *schema.JSON) *JSONSchema {
 
 	return def
 }
+
+// sanitizeForStructuredOutput mutates s (and descendants) in place to satisfy
+// Anthropic's native structured-outputs constraints: every object must set
+// additionalProperties: false, and numeric/array-size constraints are
+// unsupported and must be stripped. minItems is clamped to {0, 1}.
+func sanitizeForStructuredOutput(s *JSONSchema) *JSONSchema {
+	if s == nil {
+		return nil
+	}
+
+	if isObjectType(s.Type) && s.AdditionalProperties == nil {
+		s.AdditionalProperties = false
+	}
+
+	s.Minimum = 0
+	s.Maximum = 0
+	s.MaxItems = 0
+	if s.MinItems > 1 {
+		s.MinItems = 1
+	}
+
+	for k, prop := range s.Properties {
+		sanitizeForStructuredOutput(&prop)
+		s.Properties[k] = prop
+	}
+	sanitizeForStructuredOutput(s.Items)
+	for _, d := range s.Defs {
+		sanitizeForStructuredOutput(d)
+	}
+	if nested, ok := s.AdditionalProperties.(JSONSchema); ok {
+		sanitizeForStructuredOutput(&nested)
+		s.AdditionalProperties = nested
+	}
+
+	return s
+}
+
+func isObjectType(t any) bool {
+	switch v := t.(type) {
+	case DataType:
+		return v == Object
+	case string:
+		return v == string(Object)
+	case []any:
+		for _, x := range v {
+			if isObjectType(x) {
+				return true
+			}
+		}
+	}
+	return false
+}

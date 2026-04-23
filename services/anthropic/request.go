@@ -27,7 +27,20 @@ type request struct {
 
 	Thinking *reqExtendedThinking `json:"thinking,omitempty"`
 
+	// OutputConfig enables native structured outputs (GA Nov 2025).
+	// https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+	OutputConfig *reqOutputConfig `json:"output_config,omitempty"`
+
 	toolBelt map[string]*tools.Tool
+}
+
+type reqOutputConfig struct {
+	Format *reqOutputFormat `json:"format,omitempty"`
+}
+
+type reqOutputFormat struct {
+	Type   string      `json:"type"` // "json_schema"
+	Schema *JSONSchema `json:"schema,omitempty"`
 }
 
 type reqMessages struct {

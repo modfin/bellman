@@ -7,15 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/prompt"
-	"github.com/modfin/bellman/tools"
 	"io"
 	"log"
 	"net/http"
 	"strings"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/gen"
+	"github.com/modfin/bellman/prompt"
+	"github.com/modfin/bellman/tools"
 )
 
 var requestNo int64
@@ -180,28 +181,17 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			}
 			if ss.Delta != nil {
 				if len(toolID) > 0 && len(toolName) > 0 && ss.Delta.PartialJSON != nil {
-					if toolName == respone_output_callback_name {
-						// If the tool is the output callback, we just send the partial JSON as text
-						stream <- &gen.StreamResponse{
-							Type:    gen.TYPE_DELTA,
-							Role:    prompt.AssistantRole,
-							Index:   ss.Index,
-							Content: *ss.Delta.PartialJSON,
-						}
-					} else {
-						stream <- &gen.StreamResponse{
-							Type:  gen.TYPE_DELTA,
-							Role:  prompt.ToolCallRole,
-							Index: ss.Index,
-							ToolCall: &tools.Call{
-								ID:       toolID,
-								Name:     toolName,
-								Argument: []byte(*ss.Delta.PartialJSON),
-								Ref:      reqModel.toolBelt[toolName],
-							},
-						}
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_DELTA,
+						Role:  prompt.ToolCallRole,
+						Index: ss.Index,
+						ToolCall: &tools.Call{
+							ID:       toolID,
+							Name:     toolName,
+							Argument: []byte(*ss.Delta.PartialJSON),
+							Ref:      reqModel.toolBelt[toolName],
+						},
 					}
-
 				}
 				if ss.Delta.Text != nil && len(*ss.Delta.Text) > 0 {
 					stream <- &gen.StreamResponse{
@@ -306,12 +296,6 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		}
 	}
 
-	// This is really an output schema callback. So lets just transform it to Text
-	if len(res.Tools) == 1 && res.Tools[0].Name == respone_output_callback_name {
-		res.Texts = []string{string(res.Tools[0].Argument)}
-		res.Tools = nil
-	}
-
 	g.anthropic.log("[gen] response",
 		"request", reqc,
 		"model", g.request.Model.FQN(),
@@ -344,15 +328,11 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 	}
 
 	if g.request.OutputSchema != nil {
-		model.Tools = []reqTool{
-			{
-				Name:        respone_output_callback_name,
-				Description: "function that is called with the result of the llm query",
-				InputSchema: fromBellmanSchema(g.request.OutputSchema),
+		model.OutputConfig = &reqOutputConfig{
+			Format: &reqOutputFormat{
+				Type:   "json_schema",
+				Schema: sanitizeForStructuredOutput(fromBellmanSchema(g.request.OutputSchema)),
 			},
-		}
-		model.Tool = &reqToolChoice{
-			Type: "any",
 		}
 	}
 
@@ -368,29 +348,19 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 	}
 
 	if g.request.ToolConfig != nil {
-		_name := ""
-		_type := ""
-
+		var choice *reqToolChoice
 		switch g.request.ToolConfig.Name {
 		case tools.NoTool.Name:
+			choice = &reqToolChoice{Type: "none"}
 		case tools.AutoTool.Name:
-			_type = "auto"
+			choice = &reqToolChoice{Type: "auto"}
 		case tools.RequiredTool.Name:
-			_type = "any"
+			choice = &reqToolChoice{Type: "any"}
 		default:
-			_type = "tool"
-			_name = g.request.ToolConfig.Name
+			choice = &reqToolChoice{Type: "auto"}
 		}
-		if model.Tool != nil {
-			model.Tool = &reqToolChoice{
-				Type: _type, // // "auto, any, tool"
-				Name: _name,
-			}
-		}
-
-		if g.request.ToolConfig.Name == tools.NoTool.Name { // None is not supporded by Anthropic, so lets just remove the toolks.
-			model.Tool = nil
-			model.Tools = nil
+		if len(model.Tools) > 0 {
+			model.Tool = choice
 		}
 	}
 

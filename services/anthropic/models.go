@@ -43,25 +43,31 @@ var GenModel_4_0_sonnet_20250514 = gen.Model{
 	OutputMaxToken: 64_000,
 }
 var GenModel_4_5_sonnet_latest = gen.Model{
-	Provider:       Provider,
-	Description:    "Our smartest model for complex agents and coding",
-	Name:           "claude-4-5-sonnet",
-	InputMaxToken:  200_000,
-	OutputMaxToken: 64_000,
+	Provider:                Provider,
+	Description:             "Our smartest model for complex agents and coding",
+	Name:                    "claude-4-5-sonnet",
+	InputMaxToken:           200_000,
+	OutputMaxToken:          64_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
 }
 var GenModel_4_5_sonnet_20250929 = gen.Model{
-	Provider:       Provider,
-	Description:    "Our smartest model for complex agents and coding",
-	Name:           "claude-sonnet-4-5-20250929",
-	InputMaxToken:  200_000,
-	OutputMaxToken: 64_000,
+	Provider:                Provider,
+	Description:             "Our smartest model for complex agents and coding",
+	Name:                    "claude-sonnet-4-5-20250929",
+	InputMaxToken:           200_000,
+	OutputMaxToken:          64_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
 }
 var GenModel_4_6_sonnet_latest = gen.Model{
-	Provider:       Provider,
-	Name:           "claude-sonnet-4-6",
-	Description:    "The best combination of speed and intelligence",
-	InputMaxToken:  1_000_000,
-	OutputMaxToken: 64_000,
+	Provider:                Provider,
+	Name:                    "claude-sonnet-4-6",
+	Description:             "The best combination of speed and intelligence",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          64_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
 }
 var GenModel_3_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
@@ -198,11 +204,13 @@ var GenModel_4_1_opus_20250805 = gen.Model{
 	SupportStructuredOutput: false,
 }
 var GenModel_4_6_opus_latest = gen.Model{
-	Provider:       Provider,
-	Name:           "claude-opus-4-6",
-	Description:    "The most intelligent model for building agents and coding",
-	InputMaxToken:  1_000_000,
-	OutputMaxToken: 128_000,
+	Provider:                Provider,
+	Name:                    "claude-opus-4-6",
+	Description:             "The most intelligent model for building agents and coding",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
 }
 
 var GenModels = map[string]gen.Model{
