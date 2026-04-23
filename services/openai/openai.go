@@ -38,14 +38,44 @@ type embedResponse struct {
 
 type OpenAI struct {
 	apiKey      string
+	provider    string
 	baseURL     string
 	baseURLFunc func(model string) string
 	Log         *slog.Logger `json:"-"`
 }
 
+// CompatibleConfig configures an OpenAI-compatible backend (xAI, vLLM, Fireworks,
+// oMLX, etc.) that speaks the /v1/responses (and optionally /v1/embeddings) API.
+// Exactly one of BaseURL or BaseURLFunc should be set; if both are provided,
+// BaseURLFunc wins.
+type CompatibleConfig struct {
+	Provider    string
+	APIKey      string
+	BaseURL     string
+	BaseURLFunc func(model string) string
+}
+
 func New(key string) *OpenAI {
 	return &OpenAI{
-		apiKey: key,
+		apiKey:   key,
+		provider: Provider,
+	}
+}
+
+// NewCompatible builds a client for a provider that speaks the OpenAI API shape
+// but lives at a different base URL. Wrappers like services/xai and services/vllm
+// use this to declare their identity and endpoint without reimplementing the
+// request/response pipeline.
+func NewCompatible(cfg CompatibleConfig) *OpenAI {
+	name := cfg.Provider
+	if name == "" {
+		name = Provider
+	}
+	return &OpenAI{
+		apiKey:      cfg.APIKey,
+		provider:    name,
+		baseURL:     cfg.BaseURL,
+		baseURLFunc: cfg.BaseURLFunc,
 	}
 }
 
@@ -53,11 +83,12 @@ func (g *OpenAI) log(msg string, args ...any) {
 	if g.Log == nil {
 		return
 	}
-	g.Log.Debug("[bellman/open_ai] "+msg, args...)
+	args = append([]any{"provider", g.provider}, args...)
+	g.Log.Debug("[bellman/"+g.provider+"] "+msg, args...)
 }
 
 func (g *OpenAI) Provider() string {
-	return Provider
+	return g.provider
 }
 
 func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
@@ -131,7 +162,7 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 }
 
 func (g *OpenAI) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
-	return nil, fmt.Errorf("not supported by openai embed models")
+	return nil, fmt.Errorf("not supported by %s embed models", g.provider)
 }
 
 func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
