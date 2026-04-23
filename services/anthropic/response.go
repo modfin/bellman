@@ -1,7 +1,5 @@
 package anthropic
 
-const respone_output_callback_name = "__bellman__result_callback"
-
 type anthropicResponse struct {
 	Content []struct {
 		Type     string `json:"type"` // text or tool_use
