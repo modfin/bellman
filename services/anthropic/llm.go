@@ -60,6 +60,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 
 	if resp.StatusCode != http.StatusOK {
 		b, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}", resp.StatusCode, string(b)), err)
 	}
 

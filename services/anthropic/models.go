@@ -8,19 +8,6 @@ const Provider = "Anthropic"
 
 const Version = "2023-06-01"
 
-//curl https://api.anthropic.com/v1/models/claude-3-5-sonnet-20241022 \
-//  --header "x-api-key: $ANTHROPIC_API_KEY" \
-//  --header "anthropic-version: 2023-06-01"
-//{
-//  "data": [
-//    {
-//      "type": "model",
-//      "id": "claude-3-5-sonnet-20241022",
-//      "display_name": "Claude 3.5 Sonnet (New)",
-//      "created_at": "2024-10-22T00:00:00Z"
-//    },
-//	{...
-
 //type GenModel string
 
 // https://docs.anthropic.com/en/docs/about-claude/models
@@ -100,17 +87,6 @@ var GenModel_3_5_sonnet_20240620 = gen.Model{
 	SupportStructuredOutput: false,
 }
 
-//var GenModel_3_sonnet_20240229 = gen.Model{
-//	Provider:                Provider,
-//	Name:                    "claude-3-sonnet-20240229",
-//	Description:             "",
-//	InputContentTypes:       nil,
-//	InputMaxToken:           0,
-//	OutputMaxToken:          0,
-//	SupportTools:            false,
-//	SupportStructuredOutput: false,
-//}
-
 var GenModel_4_5_haiku_latest = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-haiku-4-5",
@@ -152,37 +128,6 @@ var GenModel_3_5_haiku_20241022 = gen.Model{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
-var GenModel_3_haiku_20240307 = gen.Model{
-	Provider:                Provider,
-	Name:                    "claude-3-haiku-20240307",
-	Description:             "",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
-}
-
-var GenModel_3_opus_latest = gen.Model{
-	Provider:                Provider,
-	Name:                    "claude-3-opus-latest",
-	Description:             "",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
-}
-var GenModel_3_opus_20240229 = gen.Model{
-	Provider:                Provider,
-	Name:                    "claude-3-opus-20240229",
-	Description:             "",
-	InputContentTypes:       nil,
-	InputMaxToken:           0,
-	OutputMaxToken:          0,
-	SupportTools:            false,
-	SupportStructuredOutput: false,
-}
 var GenModel_4_0_opus_20250514 = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-opus-4-20250514",
@@ -212,14 +157,21 @@ var GenModel_4_6_opus_latest = gen.Model{
 	SupportTools:            true,
 	SupportStructuredOutput: true,
 }
+var GenModel_4_7_opus_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-4-7",
+	Description:             "The most intelligent model for building agents and coding",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
 
 var GenModels = map[string]gen.Model{
 	GenModel_3_5_sonnet_latest.Name:   GenModel_3_5_sonnet_latest,
 	GenModel_3_5_sonnet_20241022.Name: GenModel_3_5_sonnet_20241022,
-	//GenModel_3_5_sonnet_20240620.Name: GenModel_3_5_sonnet_20240620,
-	GenModel_3_5_haiku_latest.Name:   GenModel_3_5_haiku_latest,
-	GenModel_3_5_haiku_20241022.Name: GenModel_3_5_haiku_20241022,
-	//GenModel_3_haiku_20240307.Name:    GenModel_3_haiku_20240307,
-	GenModel_4_6_opus_latest.Name:   GenModel_4_6_opus_latest,
-	GenModel_4_6_sonnet_latest.Name: GenModel_4_6_sonnet_latest,
+	GenModel_3_5_haiku_latest.Name:    GenModel_3_5_haiku_latest,
+	GenModel_3_5_haiku_20241022.Name:  GenModel_3_5_haiku_20241022,
+	GenModel_4_6_opus_latest.Name:     GenModel_4_6_opus_latest,
+	GenModel_4_6_sonnet_latest.Name:   GenModel_4_6_sonnet_latest,
 }
