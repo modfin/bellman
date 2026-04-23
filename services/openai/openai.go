@@ -4,20 +4,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/embed"
-	"github.com/modfin/bellman/models/gen"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
 )
 
 type embedRequest struct {
 	Input          []string `json:"input"`
-	Model          string   `json:"Model"`
+	Model          string   `json:"model"`
 	EncodingFormat string   `json:"encoding_format"`
 }
 
@@ -28,23 +29,18 @@ type embedResponse struct {
 		Index     int       `json:"index"`
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
-	Model string `json:"Model"`
+	Model string `json:"model"`
 	Usage struct {
 		PromptTokens int `json:"prompt_tokens"`
 		TotalTokens  int `json:"total_tokens"`
 	} `json:"usage"`
 }
 
-//type Request struct {
-//	GenModel   string `cli:"ai-openai-gen-Model"`
-//	EmbedModel string `cli:"ai-openai-embedding-Model"`
-//	ApiKey string `cli:"ai-openai-api-key"`
-//}
-
 type OpenAI struct {
-	apiKey  string
-	baseURL string
-	Log     *slog.Logger `json:"-"`
+	apiKey      string
+	baseURL     string
+	baseURLFunc func(model string) string
+	Log         *slog.Logger `json:"-"`
 }
 
 func New(key string) *OpenAI {
@@ -75,7 +71,7 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 		EncodingFormat: "float",
 	}
 
-	u, err := url.JoinPath(g.getBaseURL(), "/v1/embeddings")
+	u, err := url.JoinPath(g.getBaseURL(request.Model.Name), "/v1/embeddings")
 	if err != nil {
 		return nil, fmt.Errorf("could not construct embeddings URL, %w", err)
 	}
@@ -89,7 +85,9 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not create openai request, %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+g.apiKey)
+	if g.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+g.apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -137,7 +135,7 @@ func (g *OpenAI) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentR
 }
 
 func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
-	var gen = &gen.Generator{
+	var _gen = &gen.Generator{
 		Prompter: &generator{
 			openai: g,
 		},
@@ -145,10 +143,10 @@ func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
 	}
 
 	for _, op := range options {
-		gen = op(gen)
+		_gen = op(_gen)
 	}
 
-	return gen
+	return _gen
 }
 
 func (g *OpenAI) SetBaseURL(baseURL string) *OpenAI {
@@ -156,7 +154,15 @@ func (g *OpenAI) SetBaseURL(baseURL string) *OpenAI {
 	return g
 }
 
-func (g *OpenAI) getBaseURL() string {
+func (g *OpenAI) SetBaseURLFunc(f func(model string) string) *OpenAI {
+	g.baseURLFunc = f
+	return g
+}
+
+func (g *OpenAI) getBaseURL(model string) string {
+	if g.baseURLFunc != nil {
+		return g.baseURLFunc(model)
+	}
 	if g.baseURL != "" {
 		return g.baseURL
 	}

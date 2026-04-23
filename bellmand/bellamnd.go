@@ -28,11 +28,14 @@ import (
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/services/anthropic"
+	"github.com/modfin/bellman/services/fireworks"
 	"github.com/modfin/bellman/services/ollama"
+	"github.com/modfin/bellman/services/omlx"
 	"github.com/modfin/bellman/services/openai"
 	"github.com/modfin/bellman/services/vertexai"
 	"github.com/modfin/bellman/services/vllm"
 	"github.com/modfin/bellman/services/voyageai"
+	"github.com/modfin/bellman/services/xai"
 	"github.com/modfin/clix"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -141,6 +144,27 @@ func main() {
 				Name:    "vllm-model",
 				EnvVars: []string{"BELLMAN_VLLM_MODEL"},
 				Usage:   `The model loaded on url, has to be in the same order as vllm-url. Supports * if you want to direct all requests to the same url.`,
+			},
+
+			&cli.StringFlag{
+				Name:    "fireworks-key",
+				EnvVars: []string{"BELLMAN_FIREWORKS_KEY"},
+			},
+
+			&cli.StringFlag{
+				Name:    "xai-key",
+				EnvVars: []string{"BELLMAN_XAI_KEY"},
+			},
+
+			&cli.StringFlag{
+				Name:    "omlx-url",
+				EnvVars: []string{"BELLMAN_OMLX_URL"},
+				Usage:   `The url of the oMLX service, eg http://localhost:8000`,
+			},
+			&cli.StringFlag{
+				Name:    "omlx-key",
+				EnvVars: []string{"BELLMAN_OMLX_KEY"},
+				Usage:   `Optional API key, when the oMLX server is started with --api-key`,
 			},
 
 			&cli.BoolFlag{
@@ -278,6 +302,10 @@ type Config struct {
 	OllamaURL    string   `cli:"ollama-url"`
 	VLLMURL      []string `cli:"vllm-url"`
 	VLLMModel    []string `cli:"vllm-model"`
+	FireworksKey string   `cli:"fireworks-key"`
+	XAiKey       string   `cli:"xai-key"`
+	OMLXURL      string   `cli:"omlx-url"`
+	OMLXKey      string   `cli:"omlx-key"`
 
 	PrometheusPushUrl string `cli:"prometheus-push-url"`
 }
@@ -942,6 +970,31 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 
 		proxy.RegisterGen(client)
 		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
+	}
+
+	if cfg.FireworksKey != "" {
+		client := fireworks.New(cfg.FireworksKey)
+
+		proxy.RegisterGen(client)
+		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
+	}
+
+	if cfg.XAiKey != "" {
+		client := xai.New(cfg.XAiKey)
+
+		proxy.RegisterGen(client)
+		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
+	}
+
+	if cfg.OMLXURL != "" {
+		client := omlx.New(cfg.OMLXURL, cfg.OMLXKey)
+
+		proxy.RegisterGen(client)
+		proxy.RegisterEmbeder(client)
+		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
 		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
 	}
 

@@ -500,7 +500,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		return nil, reqModel, fmt.Errorf("could not marshal open ai request, %w", err)
 	}
 
-	u, err := url.JoinPath(g.openai.getBaseURL(), "/v1/responses")
+	u, err := url.JoinPath(g.openai.getBaseURL(g.request.Model.Name), "/v1/responses")
 	if err != nil {
 		return nil, reqModel, fmt.Errorf("could not construct responses URL, %w", err)
 	}
@@ -513,7 +513,9 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	if err != nil {
 		return nil, reqModel, fmt.Errorf("could not create openai request, %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+g.openai.apiKey)
+	if g.openai.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+g.openai.apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	return req, reqModel, err
