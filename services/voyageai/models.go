@@ -59,6 +59,30 @@ var EmbedModel_voyage_3_lite = embed.Model{
 	Description:      "Optimized for latency and cost",
 }
 
+var EmbedModel_voyage_4_large = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-4-large",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "The best general-purpose and multilingual retrieval quality",
+}
+
+var EmbedModel_voyage_4 = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-4",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "Optimized for general-purpose and multilingual retrieval quality.",
+}
+
+var EmbedModel_voyage_4_lite = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-4-lite",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "Optimized for latency and cost",
+}
+
 var EmbedModel_voyage_finance_2 = embed.Model{
 	Provider:         Provider,
 	Name:             "voyage-finance-2",

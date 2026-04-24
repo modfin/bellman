@@ -1,0 +1,28 @@
+name: live-tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  live-tests:
+    name: integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go test (live)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          VERTEXAI_CREDENTIALS: ${{ secrets.VERTEXAI_CREDENTIALS }}
+          VERTEXAI_PROJECT: ${{ secrets.VERTEXAI_PROJECT }}
+          VERTEXAI_REGION: ${{ secrets.VERTEXAI_REGION }}
+          VOYAGEAI_API_KEY: ${{ secrets.VOYAGEAI_API_KEY }}
+        run: go test -v -timeout 10m ./...
