@@ -1,9 +1,10 @@
 package schema_test
 
 import (
-	"github.com/modfin/bellman/schema"
 	"reflect"
 	"testing"
+
+	"github.com/modfin/bellman/schema"
 )
 
 func TestOf(t *testing.T) {
@@ -338,8 +339,8 @@ func TestFrom_Enum(t *testing.T) {
 
 func TestFrom_UnexportedFields(t *testing.T) {
 	type TestStruct struct {
-		name string `json:"name"`
-		Age  int    `json:"age"`
+		name string
+		Age  int `json:"age"`
 	}
 
 	expected := &schema.JSON{
@@ -670,8 +671,8 @@ func TestFrom_EmbeddedStructWithNestedStruct(t *testing.T) {
 
 func TestFrom_EmbeddedStructWithNumberValidation(t *testing.T) {
 	type Limits struct {
-		Score   float64 `json:"score" json-minimum:"0.0" json-maximum:"100.0"`
-		Count   int     `json:"count" json-exclusive-minimum:"0" json-exclusive-maximum:"1000"`
+		Score float64 `json:"score" json-minimum:"0.0" json-maximum:"100.0"`
+		Count int     `json:"count" json-exclusive-minimum:"0" json-exclusive-maximum:"1000"`
 	}
 	type Report struct {
 		Limits
