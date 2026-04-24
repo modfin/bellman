@@ -313,7 +313,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 	model := request{
 		Stream:    g.request.Stream,
 		Model:     g.request.Model.Name,
-		MaxTokens: 1024,
+		MaxTokens: 8192,
 
 		// Optionals..
 		Temperature:   g.request.Temperature,

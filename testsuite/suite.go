@@ -11,9 +11,11 @@ import (
 // The harness skips subtests whose flag is false so missing coverage surfaces
 // in `go test -v` output instead of being silently elided.
 type Capabilities struct {
-	Tools            bool
-	StructuredOutput bool
-	Streaming        bool
+	Tools               bool
+	StructuredOutput    bool
+	Streaming           bool
+	Agent               bool // agent.Run[T] — multi-depth tool-calling loop with structured result
+	StreamThinkingTools bool // Stream() interleaving text + thinking + tool-call deltas
 }
 
 // EmbedCapabilities declares which embed-side features the model under test
@@ -55,6 +57,20 @@ func Run(t *testing.T, g *gen.Generator, caps Capabilities) {
 				t.Skip("capability Streaming not advertised")
 			}
 			testStreamCount(g)(t)
+		})
+
+		t.Run("agent/run", func(t *testing.T) {
+			if !caps.Agent {
+				t.Skip("capability Agent not advertised")
+			}
+			testAgentRun(g)(t)
+		})
+
+		t.Run("stream/thinking_tools", func(t *testing.T) {
+			if !caps.StreamThinkingTools {
+				t.Skip("capability StreamThinkingTools not advertised")
+			}
+			testStreamThinkingTools(g)(t)
 		})
 	})
 }

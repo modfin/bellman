@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/modfin/bellman/testsuite"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/services/anthropic"
+	"github.com/modfin/bellman/testsuite"
 )
 
 func TestAnthropicIntegration(t *testing.T) {
@@ -19,8 +19,10 @@ func TestAnthropicIntegration(t *testing.T) {
 	g := client.Generator(gen.WithModel(anthropic.GenModel_4_5_haiku_latest))
 
 	testsuite.Run(t, g, testsuite.Capabilities{
-		Tools:            true,
-		StructuredOutput: true,
-		Streaming:        true,
+		Tools:               true,
+		StructuredOutput:    true,
+		Streaming:           true,
+		Agent:               true,
+		StreamThinkingTools: true,
 	})
 }

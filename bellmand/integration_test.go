@@ -39,7 +39,13 @@ func TestBellmandIntegration(t *testing.T) {
 	c := bellman.New(url, bellman.Key{Name: testAPIKeyName, Token: testAPIKey})
 
 	testsuite.Run(t, c.Generator(gen.WithModel(openai.GenModel_gpt5_4_mini_latest)),
-		testsuite.Capabilities{Tools: true, StructuredOutput: true, Streaming: true})
+		testsuite.Capabilities{
+			Tools:               true,
+			StructuredOutput:    true,
+			Streaming:           true,
+			Agent:               true,
+			StreamThinkingTools: true,
+		})
 	testsuite.RunEmbed(t, c, openai.EmbedModel_text3_small,
 		testsuite.EmbedCapabilities{Single: true, Many: true})
 }

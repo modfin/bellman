@@ -31,6 +31,8 @@ func TestVertexAIIntegration(t *testing.T) {
 		Tools:            true,
 		StructuredOutput: true,
 		Streaming:        true,
+		//Agent:            true,// missing thinking signature atm
+		StreamThinkingTools: true,
 	})
 
 	testsuite.RunEmbed(t, client, vertexai.EmbedModel_text_004, testsuite.EmbedCapabilities{

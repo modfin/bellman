@@ -19,9 +19,11 @@ func TestOpenAIIntegration(t *testing.T) {
 	g := client.Generator(gen.WithModel(openai.GenModel_gpt5_4_mini_latest))
 
 	testsuite.Run(t, g, testsuite.Capabilities{
-		Tools:            true,
-		StructuredOutput: true,
-		Streaming:        true,
+		Tools:               true,
+		StructuredOutput:    true,
+		Streaming:           true,
+		Agent:               true,
+		StreamThinkingTools: true,
 	})
 
 	testsuite.RunEmbed(t, client, openai.EmbedModel_text3_small, testsuite.EmbedCapabilities{
