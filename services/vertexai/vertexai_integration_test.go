@@ -28,10 +28,10 @@ func TestVertexAIIntegration(t *testing.T) {
 	g := client.Generator(gen.WithModel(vertexai.GenModel_gemini_3_1_flash_lite_preview))
 
 	testsuite.Run(t, g, testsuite.Capabilities{
-		Tools:            true,
-		StructuredOutput: true,
-		Streaming:        true,
-		//Agent:            true,// missing thinking signature atm
+		Tools:               true,
+		StructuredOutput:    true,
+		Streaming:           true,
+		Agent:               true,
 		StreamThinkingTools: true,
 	})
 
