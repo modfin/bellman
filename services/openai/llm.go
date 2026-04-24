@@ -126,6 +126,45 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 					}
 				}
 
+			case "response.output_item.done":
+				if ev.Item == nil {
+					continue
+				}
+				switch ev.Item.Type {
+				case "reasoning":
+					var text string
+					for i, s := range ev.Item.Summary {
+						if i > 0 {
+							text += "\n"
+						}
+						text += s.Text
+					}
+					var sig []byte
+					if ev.Item.EncryptedContent != nil {
+						sig = []byte(*ev.Item.EncryptedContent)
+					}
+					p := prompt.AsThinking(text, sig, ev.Item.ID)
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.AssistantRole,
+						Index: ev.OutputIndex,
+						Block: &p,
+					}
+				case "message":
+					for _, c := range ev.Item.Content {
+						if c.Type != "output_text" || c.Text == "" {
+							continue
+						}
+						p := prompt.AsAssistant(c.Text)
+						stream <- &gen.StreamResponse{
+							Type:  gen.TYPE_BLOCK,
+							Role:  prompt.AssistantRole,
+							Index: ev.OutputIndex,
+							Block: &p,
+						}
+					}
+				}
+
 			case "response.output_text.delta":
 				if ev.Delta == "" {
 					continue
@@ -210,7 +249,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 
 			default:
 				// Ignore: response.created, response.in_progress, response.queued,
-				// response.content_part.*, response.output_text.done, response.output_item.done,
+				// response.content_part.*, response.output_text.done,
 				// response.function_call_arguments.done, response.refusal.*, reasoning_summary_part.*,
 				// MCP/web_search/file_search/code_interpreter/image_generation/audio events.
 			}

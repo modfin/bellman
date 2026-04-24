@@ -37,8 +37,16 @@ func testAgentRun(g *gen.Generator) func(*testing.T) {
 			}),
 		)
 
-		res, err := agent.Run[Result](5, 1,
-			g.System("You look up stock prices using the available tool, then return the result as JSON.").SetTools(priceTool),
+		// Force thinking on so the signature round-trip is a required path:
+		// the agent loop must replay the model's signed thinking/reasoning
+		// output alongside the tool_use, or the provider rejects the follow-up.
+		sg := g.
+			System("You look up stock prices using the available tool, then return the result as JSON.").
+			SetTools(priceTool).
+			ThinkingBudget(1024).
+			IncludeThinkingParts(true)
+
+		res, err := agent.Run[Result](5, 1, sg,
 			prompt.AsUser("What is the price of VOLV-B.ST? Use the tool and then return the symbol and price."),
 		)
 		if err != nil {
@@ -63,4 +71,73 @@ func testAgentRun(g *gen.Generator) func(*testing.T) {
 			t.Fatalf("expected token accounting in Metadata, got %+v", res.Metadata)
 		}
 	}
+}
+
+// testAgentRunMultiHop forces the agent loop through at least two tool-call
+// rounds. The first hop exercises resp.Turn replay from the initial response;
+// the second hop exercises replay of a follow-up turn that itself contains
+// signed artifacts from the prior replayed context. With thinking enabled,
+// providers that validate signatures will reject the third call if any link
+// in the chain drops a signature.
+func testAgentRunMultiHop(g *gen.Generator) func(*testing.T) {
+	return func(t *testing.T) {
+		type Args struct {
+			Symbol string `json:"symbol" json-description:"the ticker symbol of a stock"`
+		}
+		type Result struct {
+			Cheaper string `json:"cheaper" json-description:"the ticker symbol of the cheaper stock"`
+		}
+
+		var collected []Args
+
+		prices := map[string]float64{
+			"VOLV-B.ST": 250.0,
+			"ERIC-B.ST": 80.0,
+		}
+
+		priceTool := tools.NewTool("get_stock_price",
+			tools.WithDescription("get the current price of a stock by its ticker symbol. Only returns one price per call."),
+			tools.WithArgSchema(Args{}),
+			tools.WithFunction(func(ctx context.Context, call tools.Call) (string, error) {
+				var a Args
+				if err := json.Unmarshal(call.Argument, &a); err != nil {
+					return "", err
+				}
+				collected = append(collected, a)
+				p, ok := prices[strings.ToUpper(a.Symbol)]
+				if !ok {
+					return `{"error":"unknown symbol"}`, nil
+				}
+				return `{"symbol":"` + a.Symbol + `","price":` + formatFloat(p) + `}`, nil
+			}),
+		)
+
+		sg := g.
+			System("You compare stock prices. Call the get_stock_price tool once per symbol, then return the ticker of the cheaper stock as JSON.").
+			SetTools(priceTool).
+			ThinkingBudget(1024).
+			IncludeThinkingParts(true)
+
+		res, err := agent.Run[Result](6, 2, sg,
+			prompt.AsUser("Which is cheaper right now — VOLV-B.ST or ERIC-B.ST? Call the tool once per symbol."),
+		)
+		if err != nil {
+			t.Fatalf("agent.Run() error = %v", err)
+		}
+
+		if len(collected) < 2 {
+			t.Fatalf("expected at least two tool calls (one per symbol), got %d", len(collected))
+		}
+		if res.Depth < 1 {
+			t.Fatalf("expected at least one tool-call loop, got Depth=%d", res.Depth)
+		}
+		if !strings.EqualFold(res.Result.Cheaper, "ERIC-B.ST") {
+			t.Fatalf("expected ERIC-B.ST as the cheaper stock, got %q", res.Result.Cheaper)
+		}
+	}
+}
+
+func formatFloat(f float64) string {
+	b, _ := json.Marshal(f)
+	return string(b)
 }

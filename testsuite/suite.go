@@ -66,6 +66,13 @@ func Run(t *testing.T, g *gen.Generator, caps Capabilities) {
 			testAgentRun(g)(t)
 		})
 
+		t.Run("agent/run_multihop", func(t *testing.T) {
+			if !caps.Agent {
+				t.Skip("capability Agent not advertised")
+			}
+			testAgentRunMultiHop(g)(t)
+		})
+
 		t.Run("stream/thinking_tools", func(t *testing.T) {
 			if !caps.StreamThinkingTools {
 				t.Skip("capability StreamThinkingTools not advertised")

@@ -83,15 +83,24 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 		// turn to round-trip intact.
 		prompts = append(prompts, resp.Turn...)
 
-		// Process results and check for errors
+		// Fail fast on any tool error before appending any replay prompts.
+		for _, cbResult := range callbackResults {
+			if cbResult.Error != nil {
+				callback := callbacks[cbResult.Index]
+				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)
+			}
+		}
+
+		// All tool calls go together, then all tool responses. Interleaving
+		// call/response/call/response splits a single model turn across
+		// multiple contents on providers that group by role (Gemini,
+		// Anthropic), which breaks thinking-signature validation for
+		// parallel tool calls.
 		for _, cbResult := range callbackResults {
 			callback := callbacks[cbResult.Index]
 			prompts = append(prompts, prompt.AsToolCallWithSignature(callback.ID, callback.Name, callback.Argument, callback.Signature))
-
-			if cbResult.Error != nil {
-				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)
-			}
-
+		}
+		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 		}
 
@@ -176,15 +185,24 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 		// turn to round-trip intact.
 		prompts = append(prompts, resp.Turn...)
 
-		// Process results and check for errors
+		// Fail fast on any tool error before appending any replay prompts.
+		for _, cbResult := range callbackResults {
+			if cbResult.Error != nil {
+				callback := callbacks[cbResult.Index]
+				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)
+			}
+		}
+
+		// All tool calls go together, then all tool responses. Interleaving
+		// call/response/call/response splits a single model turn across
+		// multiple contents on providers that group by role (Gemini,
+		// Anthropic), which breaks thinking-signature validation for
+		// parallel tool calls.
 		for _, cbResult := range callbackResults {
 			callback := callbacks[cbResult.Index]
 			prompts = append(prompts, prompt.AsToolCallWithSignature(callback.ID, callback.Name, callback.Argument, callback.Signature))
-
-			if cbResult.Error != nil {
-				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)
-			}
-
+		}
+		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 		}
 	}
