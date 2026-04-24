@@ -35,7 +35,6 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 		sg := g.
 			System("You are a helpful assistant. You MUST call the get_weather tool exactly once to answer any weather question. Think briefly before calling the tool.").
 			SetTools(weatherTool).
-			ThinkingBudget(4096).
 			IncludeThinkingParts(true)
 
 		stream, err := sg.Stream(prompt.AsUser("Think briefly about which city is warmer this time of year — Stockholm or Madrid — then call get_weather for the warmer one."))

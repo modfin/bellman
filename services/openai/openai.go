@@ -4,20 +4,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/embed"
-	"github.com/modfin/bellman/models/gen"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
 )
 
 type embedRequest struct {
 	Input          []string `json:"input"`
-	Model          string   `json:"Model"`
+	Model          string   `json:"model"`
 	EncodingFormat string   `json:"encoding_format"`
 }
 
@@ -28,28 +29,53 @@ type embedResponse struct {
 		Index     int       `json:"index"`
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
-	Model string `json:"Model"`
+	Model string `json:"model"`
 	Usage struct {
 		PromptTokens int `json:"prompt_tokens"`
 		TotalTokens  int `json:"total_tokens"`
 	} `json:"usage"`
 }
 
-//type Request struct {
-//	GenModel   string `cli:"ai-openai-gen-Model"`
-//	EmbedModel string `cli:"ai-openai-embedding-Model"`
-//	ApiKey string `cli:"ai-openai-api-key"`
-//}
-
 type OpenAI struct {
-	apiKey  string
-	baseURL string
-	Log     *slog.Logger `json:"-"`
+	apiKey      string
+	provider    string
+	baseURL     string
+	baseURLFunc func(model string) string
+	Log         *slog.Logger `json:"-"`
+}
+
+// CompatibleConfig configures an OpenAI-compatible backend (xAI, vLLM, Fireworks,
+// oMLX, etc.) that speaks the /v1/responses (and optionally /v1/embeddings) API.
+// Exactly one of BaseURL or BaseURLFunc should be set; if both are provided,
+// BaseURLFunc wins.
+type CompatibleConfig struct {
+	Provider    string
+	APIKey      string
+	BaseURL     string
+	BaseURLFunc func(model string) string
 }
 
 func New(key string) *OpenAI {
 	return &OpenAI{
-		apiKey: key,
+		apiKey:   key,
+		provider: Provider,
+	}
+}
+
+// NewCompatible builds a client for a provider that speaks the OpenAI API shape
+// but lives at a different base URL. Wrappers like services/xai and services/vllm
+// use this to declare their identity and endpoint without reimplementing the
+// request/response pipeline.
+func NewCompatible(cfg CompatibleConfig) *OpenAI {
+	name := cfg.Provider
+	if name == "" {
+		name = Provider
+	}
+	return &OpenAI{
+		apiKey:      cfg.APIKey,
+		provider:    name,
+		baseURL:     cfg.BaseURL,
+		baseURLFunc: cfg.BaseURLFunc,
 	}
 }
 
@@ -57,11 +83,12 @@ func (g *OpenAI) log(msg string, args ...any) {
 	if g.Log == nil {
 		return
 	}
-	g.Log.Debug("[bellman/open_ai] "+msg, args...)
+	args = append([]any{"provider", g.provider}, args...)
+	g.Log.Debug("[bellman/"+g.provider+"] "+msg, args...)
 }
 
 func (g *OpenAI) Provider() string {
-	return Provider
+	return g.provider
 }
 
 func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
@@ -75,7 +102,7 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 		EncodingFormat: "float",
 	}
 
-	u, err := url.JoinPath(g.getBaseURL(), "/v1/embeddings")
+	u, err := url.JoinPath(g.getBaseURL(request.Model.Name), "/v1/embeddings")
 	if err != nil {
 		return nil, fmt.Errorf("could not construct embeddings URL, %w", err)
 	}
@@ -89,7 +116,9 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not create openai request, %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+g.apiKey)
+	if g.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+g.apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -133,11 +162,11 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 }
 
 func (g *OpenAI) EmbedDocument(request *embed.DocumentRequest) (*embed.DocumentResponse, error) {
-	return nil, fmt.Errorf("not supported by openai embed models")
+	return nil, fmt.Errorf("not supported by %s embed models", g.provider)
 }
 
 func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
-	var gen = &gen.Generator{
+	var _gen = &gen.Generator{
 		Prompter: &generator{
 			openai: g,
 		},
@@ -145,10 +174,10 @@ func (g *OpenAI) Generator(options ...gen.Option) *gen.Generator {
 	}
 
 	for _, op := range options {
-		gen = op(gen)
+		_gen = op(_gen)
 	}
 
-	return gen
+	return _gen
 }
 
 func (g *OpenAI) SetBaseURL(baseURL string) *OpenAI {
@@ -156,7 +185,15 @@ func (g *OpenAI) SetBaseURL(baseURL string) *OpenAI {
 	return g
 }
 
-func (g *OpenAI) getBaseURL() string {
+func (g *OpenAI) SetBaseURLFunc(f func(model string) string) *OpenAI {
+	g.baseURLFunc = f
+	return g
+}
+
+func (g *OpenAI) getBaseURL(model string) string {
+	if g.baseURLFunc != nil {
+		return g.baseURLFunc(model)
+	}
 	if g.baseURL != "" {
 		return g.baseURL
 	}
