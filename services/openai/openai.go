@@ -109,12 +109,12 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 
 	body, err := json.Marshal(reqModel)
 	if err != nil {
-		return nil, fmt.Errorf("could not marshal openai request, %w", err)
+		return nil, fmt.Errorf("could not marshal %s request, %w", g.provider, err)
 	}
 
 	req, err := http.NewRequest("POST", u, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("could not create openai request, %w", err)
+		return nil, fmt.Errorf("could not create %s request, %w", g.provider, err)
 	}
 	if g.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+g.apiKey)
@@ -124,7 +124,7 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
-		return nil, fmt.Errorf("could not post openai request, %w", err)
+		return nil, fmt.Errorf("could not post %s request, %w", g.provider, err)
 	}
 	defer resp.Body.Close()
 
@@ -137,7 +137,7 @@ func (g *OpenAI) Embed(request *embed.Request) (*embed.Response, error) {
 	err = json.NewDecoder(resp.Body).Decode(&respModel)
 
 	if err != nil {
-		return nil, fmt.Errorf("could not decode openai response, %w", err)
+		return nil, fmt.Errorf("could not decode %s response, %w", g.provider, err)
 	}
 	if len(respModel.Data) == 0 {
 		return nil, fmt.Errorf("no data in response")

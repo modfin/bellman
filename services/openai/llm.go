@@ -60,7 +60,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not post openai request, %w", err)
+		return nil, fmt.Errorf("could not post %s request, %w", g.openai.provider, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -292,12 +292,12 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not post openai request, %w", err)
+		return nil, fmt.Errorf("could not post %s request, %w", g.openai.provider, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not read openai response, %w", err)
+		return nil, fmt.Errorf("could not read %s response, %w", g.openai.provider, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code, %d: err %s", resp.StatusCode, string(body))
@@ -306,17 +306,17 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	var respModel openaiResponse
 	err = json.Unmarshal(body, &respModel)
 	if err != nil {
-		return nil, fmt.Errorf("could not decode openai response, %w", err)
+		return nil, fmt.Errorf("could not decode %s response, %w", g.openai.provider, err)
 	}
 
 	if respModel.Status != "" && respModel.Status != "completed" {
 		if respModel.Error != nil && respModel.Error.Message != "" {
-			return nil, fmt.Errorf("openai response status %s: %s", respModel.Status, respModel.Error.Message)
+			return nil, fmt.Errorf("%s response status %s: %s", g.openai.provider, respModel.Status, respModel.Error.Message)
 		}
 		if respModel.IncompleteDetails != nil && respModel.IncompleteDetails.Reason != "" {
-			return nil, fmt.Errorf("openai response status %s: %s", respModel.Status, respModel.IncompleteDetails.Reason)
+			return nil, fmt.Errorf("%s response status %s: %s", g.openai.provider, respModel.Status, respModel.IncompleteDetails.Reason)
 		}
-		return nil, fmt.Errorf("openai response status %s", respModel.Status)
+		return nil, fmt.Errorf("%s response status %s", g.openai.provider, respModel.Status)
 	}
 
 	res := &gen.Response{
@@ -473,7 +473,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		}
 	}
 
-	if g.request.ThinkingBudget != nil {
+	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingBudget != nil {
 		var reffort ReasoningEffort
 		switch true {
 		case *g.request.ThinkingBudget == 0:
@@ -487,7 +487,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		}
 		reqModel.Reasoning = &reasoningConfig{Effort: &reffort}
 	}
-	if g.request.ThinkingParts != nil && *g.request.ThinkingParts {
+	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingParts != nil && *g.request.ThinkingParts {
 		if reqModel.Reasoning == nil {
 			reqModel.Reasoning = &reasoningConfig{}
 		}
@@ -496,7 +496,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	// Request encrypted reasoning content so reasoning items can be replayed
 	// on the next turn in stateless (store=false) mode — required for tool-use
 	// chains with reasoning.
-	if reqModel.Reasoning != nil {
+	if reqModel.Reasoning != nil || g.request.Model.UsesAdaptiveThinking {
 		reqModel.Include = append(reqModel.Include, "reasoning.encrypted_content")
 	}
 
@@ -566,7 +566,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 
 	body, err := json.Marshal(reqModel)
 	if err != nil {
-		return nil, reqModel, fmt.Errorf("could not marshal open ai request, %w", err)
+		return nil, reqModel, fmt.Errorf("could not marshal %s request, %w", g.openai.provider, err)
 	}
 
 	u, err := url.JoinPath(g.openai.getBaseURL(g.request.Model.Name), "/v1/responses")
@@ -580,7 +580,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	if err != nil {
-		return nil, reqModel, fmt.Errorf("could not create openai request, %w", err)
+		return nil, reqModel, fmt.Errorf("could not create %s request, %w", g.openai.provider, err)
 	}
 	if g.openai.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+g.openai.apiKey)
