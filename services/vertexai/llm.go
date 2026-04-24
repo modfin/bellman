@@ -71,6 +71,16 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			}
 		}()
 
+		// Track the first tool call of this response. Gemini may emit the
+		// thoughtSignature for a turn in a separate "closure" part (empty
+		// text, no functionCall) arriving in a later SSE chunk; per the
+		// docs only the first functionCall part carries the signature, so
+		// we attach late-arriving closure signatures to the first tool
+		// call's ID so the handler can merge them by ID.
+		var firstToolCallID string
+		var firstToolCallName string
+		var firstToolCallRef *tools.Tool
+
 		for {
 			line, _, err := reader.ReadLine()
 			if err != nil {
@@ -121,7 +131,12 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 				if part.ThoughtSignature != nil && *part.ThoughtSignature != "" {
 					sig = []byte(*part.ThoughtSignature)
 				}
-				if part.Text != nil {
+				// Only process parts with actual visible text content here.
+				// Empty-text parts (part.Text == "" or nil) fall through to the
+				// closure-signature handler below, which attaches any signature
+				// to the first tool call of the turn — empty assistant text
+				// parts sent on replay are rejected by the API.
+				if part.Text != nil && *part.Text != "" {
 					if part.Thought != nil && *part.Thought {
 						stream <- &gen.StreamResponse{
 							Type:    gen.TYPE_THINKING_DELTA,
@@ -167,6 +182,13 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						}
 						continue
 					}
+					id := fmt.Sprintf("%d-%d", t, idx)
+					ref := model.toolBelt[f.Name]
+					if firstToolCallID == "" {
+						firstToolCallID = id
+						firstToolCallName = f.Name
+						firstToolCallRef = ref
+					}
 					stream <- &gen.StreamResponse{
 						Type:  gen.TYPE_DELTA,
 						Role:  prompt.ToolCallRole,
@@ -174,10 +196,40 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						ToolCall: &tools.Call{
 							Name:     f.Name,
 							Argument: arg,
-							ID:       fmt.Sprintf("%d-%d", t, idx),
+							ID:       id,
 							Replay:   sig,
-							Ref:      model.toolBelt[f.Name],
+							Ref:      ref,
 						},
+					}
+					continue
+				}
+
+				// Closure signature part: Gemini may return the turn's
+				// thoughtSignature in a later part with empty text and no
+				// functionCall. Attach it to the first tool call of this turn
+				// via a second delta that the handler merges by ID, or (if the
+				// turn had no tool call) preserve it as a thinking block.
+				textIsEmpty := part.Text == nil || *part.Text == ""
+				if textIsEmpty && part.FunctionCall == nil && len(sig) > 0 {
+					if firstToolCallID != "" {
+						stream <- &gen.StreamResponse{
+							Type:  gen.TYPE_DELTA,
+							Role:  prompt.ToolCallRole,
+							Index: candidate.Index,
+							ToolCall: &tools.Call{
+								Name:   firstToolCallName,
+								ID:     firstToolCallID,
+								Replay: sig,
+								Ref:    firstToolCallRef,
+							},
+						}
+					} else {
+						stream <- &gen.StreamResponse{
+							Type:  gen.TYPE_BLOCK,
+							Role:  role,
+							Index: candidate.Index,
+							Block: new(prompt.AsThinking("", sig, "")),
+						}
 					}
 				}
 
