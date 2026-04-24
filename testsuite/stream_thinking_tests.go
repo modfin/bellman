@@ -46,6 +46,7 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 		calls := map[string]*tools.Call{}
 		var thinkingBuf strings.Builder
 		var metadata models.Metadata
+		var blocks []prompt.Prompt
 		textDeltas := 0
 		thinkingDeltas := 0
 
@@ -81,6 +82,11 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 			case gen.TYPE_THINKING_DELTA:
 				thinkingDeltas++
 				thinkingBuf.WriteString(r.Content)
+
+			case gen.TYPE_BLOCK:
+				if r.Block != nil {
+					blocks = append(blocks, *r.Block)
+				}
 
 			case gen.TYPE_METADATA:
 				if r.Metadata != nil {
@@ -121,6 +127,23 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 		}
 		if metadata.Model == "" {
 			t.Fatalf("expected model name in metadata")
+		}
+
+		// Permissive signature check: thinking blocks the stream hands back
+		// must carry the per-provider replay payload on Prompt.Signature
+		// (or be flagged Redacted). Not requiring any blocks keeps the test
+		// portable to providers that stream thinking without signatures.
+		for i, b := range blocks {
+			if b.Role != prompt.ThinkingRole {
+				continue
+			}
+			if b.Thinking != nil && b.Thinking.Redacted {
+				continue
+			}
+			if len(b.Signature) == 0 {
+				t.Fatalf("thinking block %d emitted without signature", i)
+			}
+			t.Logf("thinking block %d emitted with signature %s", i, b.Signature)
 		}
 	}
 }

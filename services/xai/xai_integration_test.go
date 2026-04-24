@@ -25,5 +25,4 @@ func TestXAIIntegration(t *testing.T) {
 		Agent:               true,
 		StreamThinkingTools: true,
 	})
-
 }

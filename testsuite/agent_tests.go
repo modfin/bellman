@@ -39,7 +39,7 @@ func testAgentRun(g *gen.Generator) func(*testing.T) {
 
 		res, err := agent.Run[Result](5, 1,
 			g.System("You look up stock prices using the available tool, then return the result as JSON.").SetTools(priceTool),
-			prompt.AsUser("What is the price of VOLVO-B? Use the tool and then return the symbol and price."),
+			prompt.AsUser("What is the price of VOLV-B.ST? Use the tool and then return the symbol and price."),
 		)
 		if err != nil {
 			t.Fatalf("agent.Run() error = %v", err)
@@ -51,8 +51,8 @@ func testAgentRun(g *gen.Generator) func(*testing.T) {
 		if len(collected) == 0 {
 			t.Fatalf("expected the get_stock_price tool to be called at least once")
 		}
-		if !strings.EqualFold(collected[0].Symbol, "VOLVO-B") {
-			t.Fatalf("expected tool call with symbol VOLVO-B, got %q", collected[0].Symbol)
+		if !strings.EqualFold(collected[0].Symbol, "VOLV-B.ST") {
+			t.Fatalf("expected tool call with symbol VOLV-B.ST, got %q", collected[0].Symbol)
 		}
 		if res.Result.Price <= 0 {
 			t.Fatalf("expected non-zero Price in result, got %v", res.Result)
