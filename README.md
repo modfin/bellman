@@ -1,5 +1,7 @@
 # Bellman
 
+[![integration-tests](https://github.com/modfin/bellman/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/modfin/bellman/actions/workflows/integration-tests.yml)
+
 It tries to be a unified interface to interact with LLMs and embedding models.
 In particular, it seeks to make it easier to switch between models and vendors
 while lowering the barrier to get started.
