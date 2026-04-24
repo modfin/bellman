@@ -153,7 +153,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 							Type:  gen.TYPE_BLOCK,
 							Role:  role,
 							Index: candidate.Index,
-							Block: new(prompt.AsAssistantWithSignature(*part.Text, sig)),
+							Block: new(prompt.AsAssistantWithReplay(*part.Text, sig)),
 						}
 					}
 				}
@@ -172,11 +172,11 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						Role:  prompt.ToolCallRole,
 						Index: candidate.Index,
 						ToolCall: &tools.Call{
-							Name:      f.Name,
-							Argument:  arg,
-							ID:        fmt.Sprintf("%d-%d", t, idx),
-							Signature: sig,
-							Ref:       model.toolBelt[f.Name],
+							Name:     f.Name,
+							Argument: arg,
+							ID:       fmt.Sprintf("%d-%d", t, idx),
+							Replay:   sig,
+							Ref:      model.toolBelt[f.Name],
 						},
 					}
 				}
@@ -277,7 +277,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 				// too (the "save state" on the final visible output). Emit the
 				// part as its own assistant prompt so the signature travels with
 				// the text that was signed.
-				res.Turn = append(res.Turn, prompt.AsAssistantWithSignature(p.Text, sig))
+				res.Turn = append(res.Turn, prompt.AsAssistantWithReplay(p.Text, sig))
 			}
 
 			if len(p.Text) == 0 && len(p.FunctionCall.Name) > 0 { // Tool calls
@@ -287,10 +287,10 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 					return nil, fmt.Errorf("could not marshal google request, %w", err)
 				}
 				res.Tools = append(res.Tools, tools.Call{
-					Name:      f.Name,
-					Argument:  arg,
-					Signature: sig,
-					Ref:       model.toolBelt[f.Name],
+					Name:     f.Name,
+					Argument: arg,
+					Replay:   sig,
+					Ref:      model.toolBelt[f.Name],
 				})
 
 			}
@@ -438,8 +438,8 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 			part := genRequestContentPart{
 				FunctionCall: &functionCall{Name: p.ToolCall.Name, Args: jsonArguments},
 			}
-			if len(p.Signature) > 0 {
-				part.ThoughtSignature = string(p.Signature)
+			if len(p.Replay) > 0 {
+				part.ThoughtSignature = string(p.Replay)
 			}
 			appendPart("model", part)
 		case prompt.ThinkingRole:
@@ -450,8 +450,8 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 				Text:    p.Thinking.Text,
 				Thought: true,
 			}
-			if len(p.Signature) > 0 {
-				part.ThoughtSignature = string(p.Signature)
+			if len(p.Replay) > 0 {
+				part.ThoughtSignature = string(p.Replay)
 			}
 			appendPart("model", part)
 		default: // prompt.UserRole, prompt.AssistantRole
@@ -460,8 +460,8 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 				role = "model"
 			}
 			part := genRequestContentPart{Text: p.Text}
-			if p.Role == prompt.AssistantRole && len(p.Signature) > 0 {
-				part.ThoughtSignature = string(p.Signature)
+			if p.Role == prompt.AssistantRole && len(p.Replay) > 0 {
+				part.ThoughtSignature = string(p.Replay)
 			}
 			if p.Payload != nil {
 				if len(p.Payload.Data) > 0 {

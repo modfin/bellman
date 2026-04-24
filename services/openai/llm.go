@@ -538,8 +538,8 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 			if c.Thinking.Text != "" {
 				reqItem.Summary = []outputReasoningSummary{{Type: "summary_text", Text: c.Thinking.Text}}
 			}
-			if len(c.Signature) > 0 {
-				reqItem.EncryptedContent = new(string(c.Signature))
+			if len(c.Replay) > 0 {
+				reqItem.EncryptedContent = new(string(c.Replay))
 			}
 			input = append(input, reqItem)
 		default: // prompt.UserRole, prompt.AssistantRole

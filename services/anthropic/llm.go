@@ -473,20 +473,20 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 				Input: jsonArguments,
 			})
 		case prompt.ThinkingRole:
-			if t.Thinking == nil || len(t.Signature) == 0 {
+			if t.Thinking == nil || len(t.Replay) == 0 {
 				continue
 			}
 			if t.Thinking.Redacted {
 				appendBlock("assistant", reqContent{
 					Type: "redacted_thinking",
-					Data: string(t.Signature),
+					Data: string(t.Replay),
 				})
 				continue
 			}
 			appendBlock("assistant", reqContent{
 				Type:      "thinking",
 				Thinking:  t.Thinking.Text,
-				Signature: string(t.Signature),
+				Signature: string(t.Replay),
 			})
 		case prompt.AssistantRole:
 			if t.Text != "" {

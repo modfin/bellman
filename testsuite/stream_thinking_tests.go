@@ -78,12 +78,12 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 						calls[r.ToolCall.ID] = c
 					}
 					c.Argument = append(c.Argument, r.ToolCall.Argument...)
-					// Some providers (e.g. Gemini) attach the replay signature
-					// directly to the function_call part rather than emitting a
-					// separate thought block. Capture it here so the final
-					// assertion can count it as signature evidence.
-					if len(r.ToolCall.Signature) > 0 {
-						c.Signature = r.ToolCall.Signature
+					// Some providers (e.g. Gemini) attach replay bytes directly
+					// to the function_call part rather than emitting a separate
+					// thought block. Capture them here so the final assertion
+					// can count them as replay evidence.
+					if len(r.ToolCall.Replay) > 0 {
+						c.Replay = r.ToolCall.Replay
 					}
 				}
 
@@ -138,46 +138,45 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 		}
 
 		// We asked for thinking parts and tools, which means we're exercising
-		// the replay-signature path. Require the stream to hand back at least
-		// one signed replay artifact — otherwise the consumer has nothing to
-		// replay on the next turn, and the signature plumbing is silently
-		// broken. Signatures can ride on three different artifacts across
-		// providers:
+		// the replay path. Require the stream to hand back at least one
+		// replay artifact — otherwise the consumer has nothing to replay on
+		// the next turn, and the plumbing is silently broken. Replay bytes
+		// can ride on three different artifacts across providers:
 		//   - ThinkingRole TYPE_BLOCK  (Anthropic, OpenAI reasoning models)
 		//   - AssistantRole TYPE_BLOCK (Gemini when it attaches a
 		//     thoughtSignature to a visible text part)
-		//   - ToolCall signature on a TYPE_DELTA (Gemini 3.x, which may skip
-		//     visible thinking entirely and anchor the signature on the
+		//   - ToolCall replay on a TYPE_DELTA (Gemini 3.x, which may skip
+		//     visible thinking entirely and anchor the replay on the
 		//     function_call part itself)
 		// Any of the three is valid evidence; zero means the path is broken.
-		signedArtifacts := 0
+		replayArtifacts := 0
 		for i, b := range blocks {
 			switch b.Role {
 			case prompt.ThinkingRole:
 				if b.Thinking != nil && b.Thinking.Redacted {
-					signedArtifacts++
+					replayArtifacts++
 					continue
 				}
-				if len(b.Signature) == 0 {
-					t.Fatalf("thinking block %d emitted without signature", i)
+				if len(b.Replay) == 0 {
+					t.Fatalf("thinking block %d emitted without replay bytes", i)
 				}
-				signedArtifacts++
-				t.Logf("thinking block %d emitted with signature %s", i, b.Signature)
+				replayArtifacts++
+				t.Logf("thinking block %d emitted with replay %s", i, b.Replay)
 			case prompt.AssistantRole:
-				if len(b.Signature) > 0 {
-					signedArtifacts++
-					t.Logf("assistant block %d emitted with signature %s", i, b.Signature)
+				if len(b.Replay) > 0 {
+					replayArtifacts++
+					t.Logf("assistant block %d emitted with replay %s", i, b.Replay)
 				}
 			}
 		}
 		for id, c := range calls {
-			if len(c.Signature) > 0 {
-				signedArtifacts++
-				t.Logf("tool call %s emitted with signature %s", id, c.Signature)
+			if len(c.Replay) > 0 {
+				replayArtifacts++
+				t.Logf("tool call %s emitted with replay %s", id, c.Replay)
 			}
 		}
-		if signedArtifacts == 0 {
-			t.Fatalf("expected at least one signed replay artifact (thinking block, signed assistant block, or signed tool call) when ThinkingParts is enabled; got none (thinking deltas=%d, total blocks=%d, tool calls=%d)", thinkingDeltas, len(blocks), len(calls))
+		if replayArtifacts == 0 {
+			t.Fatalf("expected at least one replay artifact (thinking block, assistant block with replay, or tool call with replay) when ThinkingParts is enabled; got none (thinking deltas=%d, total blocks=%d, tool calls=%d)", thinkingDeltas, len(blocks), len(calls))
 		}
 	}
 }

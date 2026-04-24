@@ -98,7 +98,7 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 		// parallel tool calls.
 		for _, cbResult := range callbackResults {
 			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCallWithSignature(callback.ID, callback.Name, callback.Argument, callback.Signature))
+			prompts = append(prompts, prompt.AsToolCallWithReplay(callback.ID, callback.Name, callback.Argument, callback.Replay))
 		}
 		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
@@ -200,7 +200,7 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 		// parallel tool calls.
 		for _, cbResult := range callbackResults {
 			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCallWithSignature(callback.ID, callback.Name, callback.Argument, callback.Signature))
+			prompts = append(prompts, prompt.AsToolCallWithReplay(callback.ID, callback.Name, callback.Argument, callback.Replay))
 		}
 		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
