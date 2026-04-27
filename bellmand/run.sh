@@ -15,7 +15,5 @@ go run -race . \
   \
   --api-key-json-config='[{"id": "id1", "key": "qwerty"}, {"id": "id2", "key": "12345", "disable_gen": false, "disable_embed": true, "rate_limit": {"burst_tokens": 200, "burst_window": "10s", "sustained_tokens": 400, "sustained_window": "1m"}}]' \
   --prometheus-metrics-basic-auth="user:pass" \
-  --http-port=8089 \
-  --internal-http-port=8088 \
   --log-format=color \
   --log-level=info
