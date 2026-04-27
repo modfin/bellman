@@ -163,6 +163,20 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 							Block: &p,
 						}
 					}
+				case "function_call":
+					p := prompt.AsToolCall(ev.Item.CallID, ev.Item.Name, []byte(ev.Item.Arguments))
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.ToolCallRole,
+						Index: ev.OutputIndex,
+						Block: &p,
+						ToolCall: &tools.Call{
+							ID:       ev.Item.CallID,
+							Name:     ev.Item.Name,
+							Argument: []byte(ev.Item.Arguments),
+							Ref:      reqModel.toolBelt[ev.Item.Name],
+						},
+					}
 				}
 
 			case "response.output_text.delta":
@@ -344,6 +358,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				Argument: []byte(item.Arguments),
 				Ref:      reqModel.toolBelt[item.Name],
 			})
+			res.Turn = append(res.Turn, prompt.AsToolCall(item.CallID, item.Name, []byte(item.Arguments)))
 		case "reasoning":
 			var text string
 			for i, s := range item.Summary {

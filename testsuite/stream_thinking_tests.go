@@ -12,12 +12,6 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-// testStreamThinkingTools exercises the real consumer pattern: a single
-// Stream() call that interleaves text deltas, thinking deltas, and tool-call
-// argument deltas, and that also emits per-chunk metadata. The test accumulates
-// events the same way a production broker would and asserts that the stitched
-// tool-call argument is valid JSON — the one assertion that catches regressions
-// across all provider-specific delta emission strategies.
 func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 	return func(t *testing.T) {
 		type Args struct {
@@ -78,13 +72,6 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 						calls[r.ToolCall.ID] = c
 					}
 					c.Argument = append(c.Argument, r.ToolCall.Argument...)
-					// Some providers (e.g. Gemini) attach replay bytes directly
-					// to the function_call part rather than emitting a separate
-					// thought block. Capture them here so the final assertion
-					// can count them as replay evidence.
-					if len(r.ToolCall.Replay) > 0 {
-						c.Replay = r.ToolCall.Replay
-					}
 				}
 
 			case gen.TYPE_THINKING_DELTA:
@@ -137,46 +124,19 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 			t.Fatalf("expected model name in metadata")
 		}
 
-		// We asked for thinking parts and tools, which means we're exercising
-		// the replay path. Require the stream to hand back at least one
-		// replay artifact — otherwise the consumer has nothing to replay on
-		// the next turn, and the plumbing is silently broken. Replay bytes
-		// can ride on three different artifacts across providers:
-		//   - ThinkingRole TYPE_BLOCK  (Anthropic, OpenAI reasoning models)
-		//   - AssistantRole TYPE_BLOCK (Gemini when it attaches a
-		//     thoughtSignature to a visible text part)
-		//   - ToolCall replay on a TYPE_DELTA (Gemini 3.x, which may skip
-		//     visible thinking entirely and anchor the replay on the
-		//     function_call part itself)
-		// Any of the three is valid evidence; zero means the path is broken.
 		replayArtifacts := 0
 		for i, b := range blocks {
-			switch b.Role {
-			case prompt.ThinkingRole:
-				if b.Thinking != nil && b.Thinking.Redacted {
-					replayArtifacts++
-					continue
-				}
-				if len(b.Replay) == 0 {
-					t.Fatalf("thinking block %d emitted without replay bytes", i)
-				}
+			redacted := b.Role == prompt.ThinkingRole && b.Thinking != nil && b.Thinking.Redacted
+			if len(b.Replay) > 0 || redacted {
 				replayArtifacts++
-				t.Logf("thinking block %d emitted with replay %s", i, b.Replay)
-			case prompt.AssistantRole:
-				if len(b.Replay) > 0 {
-					replayArtifacts++
-					t.Logf("assistant block %d emitted with replay %s", i, b.Replay)
-				}
+				t.Logf("block %d (role=%s) carries replay (len=%d, redacted=%v)", i, b.Role, len(b.Replay), redacted)
 			}
-		}
-		for id, c := range calls {
-			if len(c.Replay) > 0 {
-				replayArtifacts++
-				t.Logf("tool call %s emitted with replay %s", id, c.Replay)
+			if b.Role == prompt.ThinkingRole && !redacted && len(b.Replay) == 0 {
+				t.Fatalf("thinking block %d emitted without replay bytes", i)
 			}
 		}
 		if replayArtifacts == 0 {
-			t.Fatalf("expected at least one replay artifact (thinking block, assistant block with replay, or tool call with replay) when ThinkingParts is enabled; got none (thinking deltas=%d, total blocks=%d, tool calls=%d)", thinkingDeltas, len(blocks), len(calls))
+			t.Fatalf("expected at least one block with replay bytes when ThinkingParts is enabled; got none (thinking deltas=%d, total blocks=%d, tool calls=%d)", thinkingDeltas, len(blocks), len(calls))
 		}
 	}
 }

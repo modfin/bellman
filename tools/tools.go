@@ -75,11 +75,5 @@ type Call struct {
 	Name     string `json:"name"`
 	Argument []byte `json:"argument"`
 
-	// Replay is opaque per-provider bytes attached to this tool call (e.g.
-	// Gemini thoughtSignature). The agent loop moves it onto Prompt.Replay
-	// when replaying the call in conversation history; callers should not
-	// inspect or construct it.
-	Replay []byte `json:"replay,omitempty"`
-
 	Ref *Tool `json:"-"`
 }

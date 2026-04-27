@@ -78,9 +78,17 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		}()
 
 		var role string
+		// Per-content-block state. Anthropic emits content_block_start →
+		// content_block_delta* → content_block_stop for each block in a turn;
+		// we accumulate text/tool_use/thinking across those events and emit a
+		// finalized TYPE_BLOCK on stop so consumers don't reconstruct prompts
+		// from raw deltas. Only one of text/tool/thinking is active at a time.
+		var textActive bool
+		var textBuf string
+		var toolActive bool
 		var toolID string
 		var toolName string
-		// Thinking block accumulation across content_block_start/delta/stop
+		var toolArgsBuf []byte
 		var thinkingActive bool
 		var thinkingRedacted bool
 		var thinkingText string
@@ -181,9 +189,18 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				}
 			}
 			if ss.ContentBlock != nil {
+				if ss.ContentBlock.Type == "text" {
+					textActive = true
+					textBuf = ""
+					if ss.ContentBlock.Text != nil {
+						textBuf = *ss.ContentBlock.Text
+					}
+				}
 				if ss.ContentBlock.Type == "tool_use" && ss.ContentBlock.ID != nil && ss.ContentBlock.Name != nil {
+					toolActive = true
 					toolID = *ss.ContentBlock.ID
 					toolName = *ss.ContentBlock.Name
+					toolArgsBuf = nil
 				}
 				if ss.ContentBlock.Type == "thinking" {
 					thinkingActive = true
@@ -210,7 +227,8 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				}
 			}
 			if ss.Delta != nil {
-				if len(toolID) > 0 && len(toolName) > 0 && ss.Delta.PartialJSON != nil {
+				if toolActive && ss.Delta.PartialJSON != nil {
+					toolArgsBuf = append(toolArgsBuf, []byte(*ss.Delta.PartialJSON)...)
 					stream <- &gen.StreamResponse{
 						Type:  gen.TYPE_DELTA,
 						Role:  prompt.ToolCallRole,
@@ -224,6 +242,9 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 					}
 				}
 				if ss.Delta.Text != nil && len(*ss.Delta.Text) > 0 {
+					if textActive {
+						textBuf += *ss.Delta.Text
+					}
 					stream <- &gen.StreamResponse{
 						Type:    gen.TYPE_DELTA,
 						Role:    prompt.Role(role),
@@ -248,9 +269,30 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				}
 			}
 			if ss.Type == "content_block_stop" {
-				toolID = ""   // Reset tool ID on content block stop
-				toolName = "" // Reset tool name on content block stop
-				if thinkingActive {
+				switch {
+				case textActive:
+					p := prompt.AsAssistant(textBuf)
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.AssistantRole,
+						Index: ss.Index,
+						Block: &p,
+					}
+				case toolActive:
+					p := prompt.AsToolCall(toolID, toolName, toolArgsBuf)
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.ToolCallRole,
+						Index: ss.Index,
+						Block: &p,
+						ToolCall: &tools.Call{
+							ID:       toolID,
+							Name:     toolName,
+							Argument: toolArgsBuf,
+							Ref:      reqModel.toolBelt[toolName],
+						},
+					}
+				case thinkingActive:
 					var p prompt.Prompt
 					if thinkingRedacted {
 						p = prompt.AsRedactedThinking([]byte(thinkingData))
@@ -263,12 +305,18 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 						Index: ss.Index,
 						Block: &p,
 					}
-					thinkingActive = false
-					thinkingRedacted = false
-					thinkingText = ""
-					thinkingSig = ""
-					thinkingData = ""
 				}
+				textActive = false
+				textBuf = ""
+				toolActive = false
+				toolID = ""
+				toolName = ""
+				toolArgsBuf = nil
+				thinkingActive = false
+				thinkingRedacted = false
+				thinkingText = ""
+				thinkingSig = ""
+				thinkingData = ""
 			}
 		}
 	}()
@@ -351,6 +399,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				Argument: arg,
 				Ref:      reqModel.toolBelt[c.Name],
 			})
+			res.Turn = append(res.Turn, prompt.AsToolCall(c.ID, c.Name, arg))
 		}
 	}
 

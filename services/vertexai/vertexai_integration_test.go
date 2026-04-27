@@ -25,14 +25,28 @@ func TestVertexAIIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := client.Generator(gen.WithModel(vertexai.GenModel_gemini_3_1_flash_lite_preview))
 
+	var g *gen.Generator
+
+	g = client.Generator(gen.WithModel(vertexai.GenModel_gemini_3_flash_preview))
 	testsuite.Run(t, g, testsuite.Capabilities{
 		Tools:               true,
 		StructuredOutput:    true,
 		Streaming:           true,
+		Thinking:            true,
 		Agent:               true,
 		StreamThinkingTools: true,
+		StreamAgentMultiHop: true,
+	})
+	g = client.Generator(gen.WithModel(vertexai.GenModel_gemini_2_5_flash_latest))
+	testsuite.Run(t, g, testsuite.Capabilities{
+		Tools:               true,
+		StructuredOutput:    true,
+		Streaming:           true,
+		Thinking:            false,
+		Agent:               true,
+		StreamThinkingTools: true,
+		StreamAgentMultiHop: true,
 	})
 
 	testsuite.RunEmbed(t, client, vertexai.EmbedModel_text_004, testsuite.EmbedCapabilities{

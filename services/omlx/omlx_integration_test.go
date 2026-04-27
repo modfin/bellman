@@ -23,7 +23,9 @@ func TestOmlxIntegration(t *testing.T) {
 		Tools:               true,
 		StructuredOutput:    true,
 		Streaming:           true,
+		Thinking:            true,
 		Agent:               true,
 		StreamThinkingTools: true,
+		StreamAgentMultiHop: true,
 	})
 }

@@ -11,11 +11,18 @@ import (
 // The harness skips subtests whose flag is false so missing coverage surfaces
 // in `go test -v` output instead of being silently elided.
 type Capabilities struct {
-	Tools               bool
-	StructuredOutput    bool
-	Streaming           bool
+	Tools            bool
+	StructuredOutput bool
+	Streaming        bool
+	// Thinking flags whether this model supports extended thinking. When true,
+	// agent tests turn on ThinkingBudget+IncludeThinkingParts so the
+	// signed-turn replay path is exercised; when false, the same tests still
+	// run end-to-end (multi-hop tool calls, BLOCK contract, structured
+	// output) but skip thinking-specific assertions.
+	Thinking            bool
 	Agent               bool // agent.Run[T] — multi-depth tool-calling loop with structured result
-	StreamThinkingTools bool // Stream() interleaving text + thinking + tool-call deltas
+	StreamThinkingTools bool // Stream() interleaving text + thinking + tool-call deltas (single turn) — implies Thinking
+	StreamAgentMultiHop bool // Stream() driven multi-turn agent loop; signature replay assertions gated by Thinking
 }
 
 // EmbedCapabilities declares which embed-side features the model under test
@@ -63,14 +70,14 @@ func Run(t *testing.T, g *gen.Generator, caps Capabilities) {
 			if !caps.Agent {
 				t.Skip("capability Agent not advertised")
 			}
-			testAgentRun(g)(t)
+			testAgentRun(g, caps.Thinking)(t)
 		})
 
 		t.Run("agent/run_multihop", func(t *testing.T) {
 			if !caps.Agent {
 				t.Skip("capability Agent not advertised")
 			}
-			testAgentRunMultiHop(g)(t)
+			testAgentRunMultiHop(g, caps.Thinking)(t)
 		})
 
 		t.Run("stream/thinking_tools", func(t *testing.T) {
@@ -78,6 +85,13 @@ func Run(t *testing.T, g *gen.Generator, caps Capabilities) {
 				t.Skip("capability StreamThinkingTools not advertised")
 			}
 			testStreamThinkingTools(g)(t)
+		})
+
+		t.Run("stream/agent_multihop", func(t *testing.T) {
+			if !caps.StreamAgentMultiHop {
+				t.Skip("capability StreamAgentMultiHop not advertised")
+			}
+			testStreamAgentMultiHop(g, caps.Thinking)(t)
 		})
 	})
 }

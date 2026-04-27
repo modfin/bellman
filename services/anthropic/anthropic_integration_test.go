@@ -16,13 +16,17 @@ func TestAnthropicIntegration(t *testing.T) {
 	}
 
 	client := anthropic.New(key)
-	g := client.Generator(gen.WithModel(anthropic.GenModel_4_5_haiku_latest))
 
+	var g *gen.Generator
+
+	g = client.Generator(gen.WithModel(anthropic.GenModel_4_5_haiku_latest))
 	testsuite.Run(t, g, testsuite.Capabilities{
 		Tools:               true,
 		StructuredOutput:    true,
 		Streaming:           true,
+		Thinking:            true,
 		Agent:               true,
 		StreamThinkingTools: true,
+		StreamAgentMultiHop: true,
 	})
 }

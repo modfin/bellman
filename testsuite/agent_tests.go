@@ -12,7 +12,7 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-func testAgentRun(g *gen.Generator) func(*testing.T) {
+func testAgentRun(g *gen.Generator, withThinking bool) func(*testing.T) {
 	return func(t *testing.T) {
 		type Args struct {
 			Symbol string `json:"symbol" json-description:"the ticker symbol of a stock"`
@@ -37,14 +37,16 @@ func testAgentRun(g *gen.Generator) func(*testing.T) {
 			}),
 		)
 
-		// Force thinking on so the signature round-trip is a required path:
+		// With thinking enabled, the signature round-trip is a required path:
 		// the agent loop must replay the model's signed thinking/reasoning
 		// output alongside the tool_use, or the provider rejects the follow-up.
+		// Without thinking, the same path runs but doesn't exercise signatures.
 		sg := g.
 			System("You look up stock prices using the available tool, then return the result as JSON.").
-			SetTools(priceTool).
-			ThinkingBudget(1024).
-			IncludeThinkingParts(true)
+			SetTools(priceTool)
+		if withThinking {
+			sg = sg.ThinkingBudget(1024).IncludeThinkingParts(true)
+		}
 
 		res, err := agent.Run[Result](5, 1, sg,
 			prompt.AsUser("What is the price of VOLV-B.ST? Use the tool and then return the symbol and price."),
@@ -73,13 +75,7 @@ func testAgentRun(g *gen.Generator) func(*testing.T) {
 	}
 }
 
-// testAgentRunMultiHop forces the agent loop through at least two tool-call
-// rounds. The first hop exercises resp.Turn replay from the initial response;
-// the second hop exercises replay of a follow-up turn that itself contains
-// signed artifacts from the prior replayed context. With thinking enabled,
-// providers that validate signatures will reject the third call if any link
-// in the chain drops a signature.
-func testAgentRunMultiHop(g *gen.Generator) func(*testing.T) {
+func testAgentRunMultiHop(g *gen.Generator, withThinking bool) func(*testing.T) {
 	return func(t *testing.T) {
 		type Args struct {
 			Symbol string `json:"symbol" json-description:"the ticker symbol of a stock"`
@@ -114,9 +110,10 @@ func testAgentRunMultiHop(g *gen.Generator) func(*testing.T) {
 
 		sg := g.
 			System("You compare stock prices. Call the get_stock_price tool once per symbol, then return the ticker of the cheaper stock as JSON.").
-			SetTools(priceTool).
-			ThinkingBudget(1024).
-			IncludeThinkingParts(true)
+			SetTools(priceTool)
+		if withThinking {
+			sg = sg.ThinkingBudget(1024).IncludeThinkingParts(true)
+		}
 
 		res, err := agent.Run[Result](6, 2, sg,
 			prompt.AsUser("Which is cheaper right now — VOLV-B.ST or ERIC-B.ST? Call the tool once per symbol."),

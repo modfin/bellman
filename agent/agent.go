@@ -78,12 +78,12 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 			callbackResults = executeCallbacksParallel(g.Request.Context, callbacks, parallelism)
 		}
 
-		// Replay the assistant-turn artifacts (thinking + any text) before the
-		// tool_use blocks. Providers that validate signatures require the whole
-		// turn to round-trip intact.
+		// Replay the assistant turn verbatim — resp.Turn carries thinking,
+		// text, and tool-call prompts in provider-correct order with any
+		// signatures already attached to Prompt.Replay.
 		prompts = append(prompts, resp.Turn...)
 
-		// Fail fast on any tool error before appending any replay prompts.
+		// Fail fast on any tool error before appending tool responses.
 		for _, cbResult := range callbackResults {
 			if cbResult.Error != nil {
 				callback := callbacks[cbResult.Index]
@@ -91,15 +91,6 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 			}
 		}
 
-		// All tool calls go together, then all tool responses. Interleaving
-		// call/response/call/response splits a single model turn across
-		// multiple contents on providers that group by role (Gemini,
-		// Anthropic), which breaks thinking-signature validation for
-		// parallel tool calls.
-		for _, cbResult := range callbackResults {
-			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCallWithReplay(callback.ID, callback.Name, callback.Argument, callback.Replay))
-		}
 		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 		}
@@ -180,12 +171,12 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 			callbackResults = executeCallbacksParallel(g.Request.Context, callbacks, parallelism)
 		}
 
-		// Replay the assistant-turn artifacts (thinking + any text) before the
-		// tool_use blocks. Providers that validate signatures require the whole
-		// turn to round-trip intact.
+		// Replay the assistant turn verbatim — resp.Turn carries thinking,
+		// text, and tool-call prompts in provider-correct order with any
+		// signatures already attached to Prompt.Replay.
 		prompts = append(prompts, resp.Turn...)
 
-		// Fail fast on any tool error before appending any replay prompts.
+		// Fail fast on any tool error before appending tool responses.
 		for _, cbResult := range callbackResults {
 			if cbResult.Error != nil {
 				callback := callbacks[cbResult.Index]
@@ -193,15 +184,6 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 			}
 		}
 
-		// All tool calls go together, then all tool responses. Interleaving
-		// call/response/call/response splits a single model turn across
-		// multiple contents on providers that group by role (Gemini,
-		// Anthropic), which breaks thinking-signature validation for
-		// parallel tool calls.
-		for _, cbResult := range callbackResults {
-			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCallWithReplay(callback.ID, callback.Name, callback.Argument, callback.Replay))
-		}
 		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 		}

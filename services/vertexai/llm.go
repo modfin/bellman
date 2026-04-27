@@ -71,15 +71,21 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			}
 		}()
 
-		// Track the first tool call of this response. Gemini may emit the
-		// thoughtSignature for a turn in a separate "closure" part (empty
-		// text, no functionCall) arriving in a later SSE chunk; per the
-		// docs only the first functionCall part carries the signature, so
-		// we attach late-arriving closure signatures to the first tool
-		// call's ID so the handler can merge them by ID.
-		var firstToolCallID string
-		var firstToolCallName string
-		var firstToolCallRef *tools.Tool
+		// Tool-call buffer for the current turn. Gemini emits per-part data
+		// piecemeal: function_call args arrive whole on a function_call part,
+		// but the turn's thoughtSignature may show up later on a separate
+		// closure part (empty text, no functionCall) — and per Gemini's docs
+		// the closure signature attaches to the first tool call. We buffer
+		// calls in stream order so the closure sig can be attached, then
+		// flush them as TYPE_BLOCK events at finish_reason / EOF.
+		type pendingCall struct {
+			id, name string
+			args     []byte
+			sig      []byte
+			index    int
+			ref      *tools.Tool
+		}
+		var pending []*pendingCall
 
 		for {
 			line, _, err := reader.ReadLine()
@@ -160,16 +166,16 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						Index:   candidate.Index,
 						Content: *part.Text,
 					}
-					// Gemini may attach a thoughtSignature to plain assistant text
-					// parts too — emit a finalized block so streaming consumers can
-					// capture the signature for replay.
-					if len(sig) > 0 {
-						stream <- &gen.StreamResponse{
-							Type:  gen.TYPE_BLOCK,
-							Role:  role,
-							Index: candidate.Index,
-							Block: new(prompt.AsAssistantWithReplay(*part.Text, sig)),
-						}
+					// Always emit a BLOCK for plain assistant text so the
+					// consumer has a replay-ready prompt regardless of whether
+					// Gemini attached a thoughtSignature (it does for thinking
+					// models; non-thinking models still need their text turns
+					// replayed in multi-turn conversations).
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  role,
+						Index: candidate.Index,
+						Block: new(prompt.AsAssistantWithReplay(*part.Text, sig)),
 					}
 				}
 				if part.FunctionCall != nil {
@@ -184,11 +190,14 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 					}
 					id := fmt.Sprintf("%d-%d", t, idx)
 					ref := model.toolBelt[f.Name]
-					if firstToolCallID == "" {
-						firstToolCallID = id
-						firstToolCallName = f.Name
-						firstToolCallRef = ref
-					}
+					pending = append(pending, &pendingCall{
+						id:    id,
+						name:  f.Name,
+						args:  arg,
+						sig:   sig,
+						index: candidate.Index,
+						ref:   ref,
+					})
 					stream <- &gen.StreamResponse{
 						Type:  gen.TYPE_DELTA,
 						Role:  prompt.ToolCallRole,
@@ -197,7 +206,6 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 							Name:     f.Name,
 							Argument: arg,
 							ID:       id,
-							Replay:   sig,
 							Ref:      ref,
 						},
 					}
@@ -206,23 +214,13 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 
 				// Closure signature part: Gemini may return the turn's
 				// thoughtSignature in a later part with empty text and no
-				// functionCall. Attach it to the first tool call of this turn
-				// via a second delta that the handler merges by ID, or (if the
-				// turn had no tool call) preserve it as a thinking block.
+				// functionCall. Attach it to the first buffered tool call so
+				// it gets emitted with the call's TYPE_BLOCK on flush — or, if
+				// the turn had no tool call, preserve it as a thinking block.
 				textIsEmpty := part.Text == nil || *part.Text == ""
 				if textIsEmpty && part.FunctionCall == nil && len(sig) > 0 {
-					if firstToolCallID != "" {
-						stream <- &gen.StreamResponse{
-							Type:  gen.TYPE_DELTA,
-							Role:  prompt.ToolCallRole,
-							Index: candidate.Index,
-							ToolCall: &tools.Call{
-								Name:   firstToolCallName,
-								ID:     firstToolCallID,
-								Replay: sig,
-								Ref:    firstToolCallRef,
-							},
-						}
+					if len(pending) > 0 {
+						pending[0].sig = sig
 					} else {
 						stream <- &gen.StreamResponse{
 							Type:  gen.TYPE_BLOCK,
@@ -253,6 +251,21 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 				break
 			}
 
+		}
+		
+		for _, pc := range pending {
+			stream <- &gen.StreamResponse{
+				Type:  gen.TYPE_BLOCK,
+				Role:  prompt.ToolCallRole,
+				Index: pc.index,
+				Block: new(prompt.AsToolCallWithReplay(pc.id, pc.name, pc.args, pc.sig)),
+				ToolCall: &tools.Call{
+					ID:       pc.id,
+					Name:     pc.name,
+					Argument: pc.args,
+					Ref:      pc.ref,
+				},
+			}
 		}
 
 	}()
@@ -341,10 +354,9 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 				res.Tools = append(res.Tools, tools.Call{
 					Name:     f.Name,
 					Argument: arg,
-					Replay:   sig,
 					Ref:      model.toolBelt[f.Name],
 				})
-
+				res.Turn = append(res.Turn, prompt.AsToolCallWithReplay("", f.Name, arg, sig))
 			}
 
 		}
