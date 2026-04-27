@@ -2,7 +2,6 @@ package testsuite
 
 import (
 	"context"
-	"testing"
 
 	"github.com/modfin/bellman/models/embed"
 )
@@ -13,8 +12,8 @@ var embedManyTexts = []string{
 	"Sphinx of black quartz, judge my vow.",
 }
 
-func testEmbedSingle(e embed.Embeder, m embed.Model) func(*testing.T) {
-	return func(t *testing.T) {
+func testEmbedSingle(e embed.Embeder, m embed.Model) func(tester) {
+	return func(t tester) {
 		res, err := e.Embed(embed.NewSingleRequest(context.Background(), m, "text"))
 		if err != nil {
 			t.Fatalf("Embed() error = %v", err)
@@ -34,8 +33,8 @@ func testEmbedSingle(e embed.Embeder, m embed.Model) func(*testing.T) {
 	}
 }
 
-func testEmbedMany(e embed.Embeder, m embed.Model) func(*testing.T) {
-	return func(t *testing.T) {
+func testEmbedMany(e embed.Embeder, m embed.Model) func(tester) {
+	return func(t tester) {
 		res, err := e.Embed(embed.NewManyRequest(context.Background(), m, embedManyTexts))
 		if err != nil {
 			t.Fatalf("Embed() error = %v", err)
@@ -55,8 +54,8 @@ func testEmbedMany(e embed.Embeder, m embed.Model) func(*testing.T) {
 	}
 }
 
-func testEmbedDocument(e embed.Embeder, m embed.Model) func(*testing.T) {
-	return func(t *testing.T) {
+func testEmbedDocument(e embed.Embeder, m embed.Model) func(tester) {
+	return func(t tester) {
 		res, err := e.EmbedDocument(embed.NewDocumentRequest(context.Background(), m, embedManyTexts))
 		if err != nil {
 			t.Fatalf("EmbedDocument() error = %v", err)

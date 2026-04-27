@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"testing"
 
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
@@ -12,8 +11,8 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
-	return func(t *testing.T) {
+func testStreamThinkingTools(g *gen.Generator) func(tester) {
+	return func(t tester) {
 		type Args struct {
 			City string `json:"city" json-description:"the city to fetch the weather for"`
 		}

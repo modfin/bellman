@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
-	"testing"
 
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
@@ -13,8 +12,8 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-func testHello(g *gen.Generator) func(*testing.T) {
-	return func(t *testing.T) {
+func testHello(g *gen.Generator) func(tester) {
+	return func(t tester) {
 		res, err := g.Prompt(prompt.AsUser("Say 'Hello, World!'"))
 		if err != nil {
 			t.Fatalf("Prompt() error = %v", err)
@@ -32,8 +31,8 @@ func testHello(g *gen.Generator) func(*testing.T) {
 	}
 }
 
-func testTool(g *gen.Generator) func(*testing.T) {
-	return func(t *testing.T) {
+func testTool(g *gen.Generator) func(tester) {
+	return func(t tester) {
 		type Args struct {
 			Name string `json:"name" json-description:"the name of a person" json-enum:"Othello,Macbeth,Juliet"`
 			Len  int    `json:"len" json-description:"the length of the quote"`
@@ -72,8 +71,8 @@ func testTool(g *gen.Generator) func(*testing.T) {
 	}
 }
 
-func testOutputSimple(g *gen.Generator) func(*testing.T) {
-	return func(t *testing.T) {
+func testOutputSimple(g *gen.Generator) func(tester) {
+	return func(t tester) {
 		type Quote struct {
 			CharacterName string `json:"character_name" json-enum:"Hamlet,Romeo,Juliet"`
 			Quote         string `json:"quote"`
@@ -109,8 +108,8 @@ func testOutputSimple(g *gen.Generator) func(*testing.T) {
 	}
 }
 
-func testStreamCount(g *gen.Generator) func(*testing.T) {
-	return func(t *testing.T) {
+func testStreamCount(g *gen.Generator) func(tester) {
+	return func(t tester) {
 		stream, err := g.Stream(prompt.AsUser("Count to ten, and spell it out. Example 'one, two, ... ten'"))
 		if err != nil {
 			t.Fatalf("Stream() error = %v", err)

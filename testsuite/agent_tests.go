@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"testing"
 
 	"github.com/modfin/bellman/agent"
 	"github.com/modfin/bellman/models/gen"
@@ -12,8 +11,8 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-func testAgentRun(g *gen.Generator, withThinking bool) func(*testing.T) {
-	return func(t *testing.T) {
+func testAgentRun(g *gen.Generator, withThinking bool) func(tester) {
+	return func(t tester) {
 		type Args struct {
 			Symbol string `json:"symbol" json-description:"the ticker symbol of a stock"`
 		}
@@ -75,8 +74,8 @@ func testAgentRun(g *gen.Generator, withThinking bool) func(*testing.T) {
 	}
 }
 
-func testAgentRunMultiHop(g *gen.Generator, withThinking bool) func(*testing.T) {
-	return func(t *testing.T) {
+func testAgentRunMultiHop(g *gen.Generator, withThinking bool) func(tester) {
+	return func(t tester) {
 		type Args struct {
 			Symbol string `json:"symbol" json-description:"the ticker symbol of a stock"`
 		}
