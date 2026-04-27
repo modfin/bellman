@@ -16,14 +16,25 @@ func TestOpenAIIntegration(t *testing.T) {
 	}
 
 	client := openai.New(key)
-	g := client.Generator(gen.WithModel(openai.GenModel_gpt5_4_mini_latest))
+	var g *gen.Generator
 
+	g = client.Generator(gen.WithModel(openai.GenModel_gpt5_4_mini_latest))
+	testsuite.Run(t, g, testsuite.Capabilities{
+		Tools:               true,
+		StructuredOutput:    true,
+		Streaming:           true,
+		Thinking:            true,
+		Agent:               true,
+		StreamThinkingTools: true,
+		StreamAgentMultiHop: true,
+	})
+	g = client.Generator(gen.WithModel(openai.GenModel_gpt4_1_mini_latest))
 	testsuite.Run(t, g, testsuite.Capabilities{
 		Tools:               true,
 		StructuredOutput:    true,
 		Streaming:           true,
 		Agent:               true,
-		StreamThinkingTools: true,
+		StreamAgentMultiHop: true,
 	})
 
 	testsuite.RunEmbed(t, client, openai.EmbedModel_text3_small, testsuite.EmbedCapabilities{

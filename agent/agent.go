@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
-	"sync"
 )
 
 // Run will prompt until the llm responds with no tool calls, or until maxDepth is reached. Unless Output is already
@@ -77,15 +78,20 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 			callbackResults = executeCallbacksParallel(g.Request.Context, callbacks, parallelism)
 		}
 
-		// Process results and check for errors
-		for _, cbResult := range callbackResults {
-			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCall(callback.ID, callback.Name, callback.Argument))
+		// Replay the assistant turn verbatim — resp.Turn carries thinking,
+		// text, and tool-call prompts in provider-correct order with any
+		// signatures already attached to Prompt.Replay.
+		prompts = append(prompts, resp.Turn...)
 
+		// Fail fast on any tool error before appending tool responses.
+		for _, cbResult := range callbackResults {
 			if cbResult.Error != nil {
+				callback := callbacks[cbResult.Index]
 				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)
 			}
+		}
 
+		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 		}
 
@@ -165,15 +171,20 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 			callbackResults = executeCallbacksParallel(g.Request.Context, callbacks, parallelism)
 		}
 
-		// Process results and check for errors
-		for _, cbResult := range callbackResults {
-			callback := callbacks[cbResult.Index]
-			prompts = append(prompts, prompt.AsToolCall(callback.ID, callback.Name, callback.Argument))
+		// Replay the assistant turn verbatim — resp.Turn carries thinking,
+		// text, and tool-call prompts in provider-correct order with any
+		// signatures already attached to Prompt.Replay.
+		prompts = append(prompts, resp.Turn...)
 
+		// Fail fast on any tool error before appending tool responses.
+		for _, cbResult := range callbackResults {
 			if cbResult.Error != nil {
+				callback := callbacks[cbResult.Index]
 				return nil, fmt.Errorf("tool %s failed: %w, arg: %s", cbResult.Name, cbResult.Error, callback.Argument)
 			}
+		}
 
+		for _, cbResult := range callbackResults {
 			prompts = append(prompts, prompt.AsToolResponse(cbResult.ID, cbResult.Name, cbResult.Response))
 		}
 	}

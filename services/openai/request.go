@@ -41,6 +41,19 @@ type functionCallOutputItem struct {
 
 func (functionCallOutputItem) isInputItem() {}
 
+// reasoningInputItem is used to replay a reasoning item returned from a prior
+// turn back into the Responses API. Carrying the ID and (optionally) the
+// encrypted_content preserves the model's reasoning state across turns when
+// operating in stateless mode (store=false).
+type reasoningInputItem struct {
+	Type             string                   `json:"type"` // "reasoning"
+	ID               string                   `json:"id"`
+	Summary          []outputReasoningSummary `json:"summary"`
+	EncryptedContent *string                  `json:"encrypted_content,omitempty"`
+}
+
+func (reasoningInputItem) isInputItem() {}
+
 // ReasoningEffort is a string that can be "minimal", "low", "medium", "high", or "none" (model-dependent).
 type ReasoningEffort string
 
@@ -103,6 +116,7 @@ type genRequest struct {
 	ServiceTier *ServiceTier `json:"service_tier,omitempty"`
 	Stream      bool         `json:"stream,omitempty"`
 	Store       *bool        `json:"store,omitempty"`
+	Include     []string     `json:"include,omitempty"` // e.g. ["reasoning.encrypted_content"]
 
 	toolBelt map[string]*tools.Tool
 }

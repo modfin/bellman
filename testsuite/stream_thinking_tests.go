@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"testing"
 
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
@@ -12,14 +11,8 @@ import (
 	"github.com/modfin/bellman/tools"
 )
 
-// testStreamThinkingTools exercises the real consumer pattern: a single
-// Stream() call that interleaves text deltas, thinking deltas, and tool-call
-// argument deltas, and that also emits per-chunk metadata. The test accumulates
-// events the same way a production broker would and asserts that the stitched
-// tool-call argument is valid JSON — the one assertion that catches regressions
-// across all provider-specific delta emission strategies.
-func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
-	return func(t *testing.T) {
+func testStreamThinkingTools(g *gen.Generator) func(tester) {
+	return func(t tester) {
 		type Args struct {
 			City string `json:"city" json-description:"the city to fetch the weather for"`
 		}
@@ -35,6 +28,7 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 		sg := g.
 			System("You are a helpful assistant. You MUST call the get_weather tool exactly once to answer any weather question. Think briefly before calling the tool.").
 			SetTools(weatherTool).
+			ThinkingBudget(1024).
 			IncludeThinkingParts(true)
 
 		stream, err := sg.Stream(prompt.AsUser("Think briefly about which city is warmer this time of year — Stockholm or Madrid — then call get_weather for the warmer one."))
@@ -46,6 +40,7 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 		calls := map[string]*tools.Call{}
 		var thinkingBuf strings.Builder
 		var metadata models.Metadata
+		var blocks []prompt.Prompt
 		textDeltas := 0
 		thinkingDeltas := 0
 
@@ -81,6 +76,11 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 			case gen.TYPE_THINKING_DELTA:
 				thinkingDeltas++
 				thinkingBuf.WriteString(r.Content)
+
+			case gen.TYPE_BLOCK:
+				if r.Block != nil {
+					blocks = append(blocks, *r.Block)
+				}
 
 			case gen.TYPE_METADATA:
 				if r.Metadata != nil {
@@ -121,6 +121,21 @@ func testStreamThinkingTools(g *gen.Generator) func(*testing.T) {
 		}
 		if metadata.Model == "" {
 			t.Fatalf("expected model name in metadata")
+		}
+
+		replayArtifacts := 0
+		for i, b := range blocks {
+			redacted := b.Role == prompt.ThinkingRole && b.Thinking != nil && b.Thinking.Redacted
+			if len(b.Replay) > 0 || redacted {
+				replayArtifacts++
+				t.Logf("block %d (role=%s) carries replay (len=%d, redacted=%v)", i, b.Role, len(b.Replay), redacted)
+			}
+			if b.Role == prompt.ThinkingRole && !redacted && len(b.Replay) == 0 {
+				t.Fatalf("thinking block %d emitted without replay bytes", i)
+			}
+		}
+		if replayArtifacts == 0 {
+			t.Fatalf("expected at least one block with replay bytes when ThinkingParts is enabled; got none (thinking deltas=%d, total blocks=%d, tool calls=%d)", thinkingDeltas, len(blocks), len(calls))
 		}
 	}
 }

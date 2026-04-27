@@ -424,7 +424,7 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: h}
 	go func() {
 		logger.Info("Start", "action", "starting server", "port", cfg.HttpPort)
-		err = server.ListenAndServe()
+		err := server.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("http server error", "err", err)
 			os.Exit(1)
@@ -436,7 +436,7 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 	internalServer := &http.Server{Addr: fmt.Sprintf(":%d", cfg.InternalHttpPort), Handler: internalH}
 	go func() {
 		logger.Info("Start", "action", "starting internal server", "port", cfg.InternalHttpPort)
-		err = internalServer.ListenAndServe()
+		err := internalServer.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("http internal server error", "err", err)
 		}

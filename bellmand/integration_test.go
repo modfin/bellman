@@ -43,8 +43,10 @@ func TestBellmandIntegration(t *testing.T) {
 			Tools:               true,
 			StructuredOutput:    true,
 			Streaming:           true,
+			Thinking:            true,
 			Agent:               true,
 			StreamThinkingTools: true,
+			StreamAgentMultiHop: true,
 		})
 	testsuite.RunEmbed(t, c, openai.EmbedModel_text3_small,
 		testsuite.EmbedCapabilities{Single: true, Many: true})

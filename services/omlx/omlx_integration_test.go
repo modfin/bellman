@@ -1,25 +1,24 @@
-package anthropic_test
+package omlx_test
 
 import (
 	"os"
 	"testing"
 
 	"github.com/modfin/bellman/models/gen"
-	"github.com/modfin/bellman/services/anthropic"
+	"github.com/modfin/bellman/services/omlx"
 	"github.com/modfin/bellman/testsuite"
 )
 
-func TestAnthropicIntegration(t *testing.T) {
-	key := os.Getenv("ANTHROPIC_API_KEY")
-	if key == "" {
-		t.Skip("ANTHROPIC_API_KEY not set")
+func TestOmlxIntegration(t *testing.T) {
+	url := os.Getenv("OMLX_URL")
+	key := os.Getenv("OMLX_API_KEY")
+	if url == "" || key == "" {
+		t.Skip("OMLX_API_KEY/OMLX_URL not set")
 	}
 
-	client := anthropic.New(key)
+	client := omlx.New(url, key)
+	g := client.Generator(gen.WithModel(omlx.GenModel_gemma4_26b_a4b_it_5bit))
 
-	var g *gen.Generator
-
-	g = client.Generator(gen.WithModel(anthropic.GenModel_4_5_haiku_latest))
 	testsuite.Run(t, g, testsuite.Capabilities{
 		Tools:               true,
 		StructuredOutput:    true,

@@ -31,6 +31,11 @@ type Model struct {
 
 	SupportTools            bool `json:"support_tools,omitempty"`
 	SupportStructuredOutput bool `json:"support_structured_output,omitempty"`
+
+	// UsesAdaptiveThinking indicates the model reasons automatically and
+	// rejects any reasoning_effort / thinking-budget config. When true,
+	// bellman omits the reasoning block from the request.
+	UsesAdaptiveThinking bool `json:"uses_adaptive_thinking,omitempty"`
 }
 
 func (m Model) FQN() string {

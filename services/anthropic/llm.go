@@ -78,8 +78,22 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		}()
 
 		var role string
+		// Per-content-block state. Anthropic emits content_block_start →
+		// content_block_delta* → content_block_stop for each block in a turn;
+		// we accumulate text/tool_use/thinking across those events and emit a
+		// finalized TYPE_BLOCK on stop so consumers don't reconstruct prompts
+		// from raw deltas. Only one of text/tool/thinking is active at a time.
+		var textActive bool
+		var textBuf string
+		var toolActive bool
 		var toolID string
 		var toolName string
+		var toolArgsBuf []byte
+		var thinkingActive bool
+		var thinkingRedacted bool
+		var thinkingText string
+		var thinkingSig string
+		var thinkingData string
 		for {
 			line, _, err := reader.ReadLine()
 			if err != nil {
@@ -175,13 +189,46 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				}
 			}
 			if ss.ContentBlock != nil {
+				if ss.ContentBlock.Type == "text" {
+					textActive = true
+					textBuf = ""
+					if ss.ContentBlock.Text != nil {
+						textBuf = *ss.ContentBlock.Text
+					}
+				}
 				if ss.ContentBlock.Type == "tool_use" && ss.ContentBlock.ID != nil && ss.ContentBlock.Name != nil {
+					toolActive = true
 					toolID = *ss.ContentBlock.ID
 					toolName = *ss.ContentBlock.Name
+					toolArgsBuf = nil
+				}
+				if ss.ContentBlock.Type == "thinking" {
+					thinkingActive = true
+					thinkingRedacted = false
+					thinkingText = ""
+					thinkingSig = ""
+					thinkingData = ""
+					if ss.ContentBlock.Thinking != nil {
+						thinkingText = *ss.ContentBlock.Thinking
+					}
+					if ss.ContentBlock.Signature != nil {
+						thinkingSig = *ss.ContentBlock.Signature
+					}
+				}
+				if ss.ContentBlock.Type == "redacted_thinking" {
+					thinkingActive = true
+					thinkingRedacted = true
+					thinkingText = ""
+					thinkingSig = ""
+					thinkingData = ""
+					if ss.ContentBlock.Data != nil {
+						thinkingData = *ss.ContentBlock.Data
+					}
 				}
 			}
 			if ss.Delta != nil {
-				if len(toolID) > 0 && len(toolName) > 0 && ss.Delta.PartialJSON != nil {
+				if toolActive && ss.Delta.PartialJSON != nil {
+					toolArgsBuf = append(toolArgsBuf, []byte(*ss.Delta.PartialJSON)...)
 					stream <- &gen.StreamResponse{
 						Type:  gen.TYPE_DELTA,
 						Role:  prompt.ToolCallRole,
@@ -195,6 +242,9 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 					}
 				}
 				if ss.Delta.Text != nil && len(*ss.Delta.Text) > 0 {
+					if textActive {
+						textBuf += *ss.Delta.Text
+					}
 					stream <- &gen.StreamResponse{
 						Type:    gen.TYPE_DELTA,
 						Role:    prompt.Role(role),
@@ -203,6 +253,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 					}
 				}
 				if ss.Delta.Thinking != nil && len(*ss.Delta.Thinking) > 0 {
+					thinkingText += *ss.Delta.Thinking
 					stream <- &gen.StreamResponse{
 						Type:    gen.TYPE_THINKING_DELTA,
 						Role:    prompt.AssistantRole,
@@ -210,10 +261,62 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 						Content: *ss.Delta.Thinking,
 					}
 				}
+				if ss.Delta.Signature != nil && len(*ss.Delta.Signature) > 0 {
+					thinkingSig += *ss.Delta.Signature
+				}
+				if ss.Delta.Data != nil && len(*ss.Delta.Data) > 0 {
+					thinkingData += *ss.Delta.Data
+				}
 			}
 			if ss.Type == "content_block_stop" {
-				toolID = ""   // Reset tool ID on content block stop
-				toolName = "" // Reset tool name on content block stop
+				switch {
+				case textActive:
+					p := prompt.AsAssistant(textBuf)
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.AssistantRole,
+						Index: ss.Index,
+						Block: &p,
+					}
+				case toolActive:
+					p := prompt.AsToolCall(toolID, toolName, toolArgsBuf)
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.ToolCallRole,
+						Index: ss.Index,
+						Block: &p,
+						ToolCall: &tools.Call{
+							ID:       toolID,
+							Name:     toolName,
+							Argument: toolArgsBuf,
+							Ref:      reqModel.toolBelt[toolName],
+						},
+					}
+				case thinkingActive:
+					var p prompt.Prompt
+					if thinkingRedacted {
+						p = prompt.AsRedactedThinking([]byte(thinkingData))
+					} else {
+						p = prompt.AsThinking(thinkingText, []byte(thinkingSig), "")
+					}
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.AssistantRole,
+						Index: ss.Index,
+						Block: &p,
+					}
+				}
+				textActive = false
+				textBuf = ""
+				toolActive = false
+				toolID = ""
+				toolName = ""
+				toolArgsBuf = nil
+				thinkingActive = false
+				thinkingRedacted = false
+				thinkingText = ""
+				thinkingSig = ""
+				thinkingData = ""
 			}
 		}
 	}()
@@ -276,14 +379,16 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		},
 	}
 	for _, c := range respModel.Content {
-		if c.Type == "text" { // Not Tools
+		switch c.Type {
+		case "text":
 			res.Texts = append(res.Texts, c.Text)
-		}
-		if c.Type == "thinking" {
+			res.Turn = append(res.Turn, prompt.AsAssistant(c.Text))
+		case "thinking":
 			res.Thinking = append(res.Thinking, c.Thinking)
-		}
-
-		if c.Type == "tool_use" {
+			res.Turn = append(res.Turn, prompt.AsThinking(c.Thinking, []byte(c.Signature), ""))
+		case "redacted_thinking":
+			res.Turn = append(res.Turn, prompt.AsRedactedThinking([]byte(c.Data)))
+		case "tool_use":
 			arg, err := json.Marshal(c.Input)
 			if err != nil {
 				return nil, fmt.Errorf("could not marshal tool arguments, %w", err)
@@ -294,6 +399,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				Argument: arg,
 				Ref:      reqModel.toolBelt[c.Name],
 			})
+			res.Turn = append(res.Turn, prompt.AsToolCall(c.ID, c.Name, arg))
 		}
 	}
 
@@ -377,21 +483,29 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 		}
 	}
 
+	// appendBlock appends a content block to the last message when it already
+	// has the given role, otherwise starts a new message. This lets consecutive
+	// assistant-turn prompts (thinking, text, tool_use) collapse into a single
+	// assistant message — required when replaying extended thinking + tool use.
+	appendBlock := func(role string, c reqContent) {
+		if n := len(model.Messages); n > 0 && model.Messages[n-1].Role == role {
+			model.Messages[n-1].Content = append(model.Messages[n-1].Content, c)
+			return
+		}
+		model.Messages = append(model.Messages, reqMessages{Role: role, Content: []reqContent{c}})
+	}
+
 	for _, t := range conversation {
-		var message reqMessages
 		switch t.Role {
 		case prompt.ToolResponseRole:
 			if t.ToolResponse == nil {
 				return nil, model, fmt.Errorf("ToolResponse is required for role tool response")
 			}
-			message = reqMessages{
-				Role: "user",
-				Content: []reqContent{{
-					Type:      "tool_result",
-					ToolUseID: t.ToolResponse.ToolCallID,
-					Content:   t.ToolResponse.Response,
-				}},
-			}
+			appendBlock("user", reqContent{
+				Type:      "tool_result",
+				ToolUseID: t.ToolResponse.ToolCallID,
+				Content:   t.ToolResponse.Response,
+			})
 		case prompt.ToolCallRole:
 			if t.ToolCall == nil {
 				return nil, model, fmt.Errorf("ToolCall is required for role tool call")
@@ -401,29 +515,45 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 			if err != nil {
 				return nil, model, fmt.Errorf("ToolCall.Arguments is not map[string]any: %v", err)
 			}
-			message = reqMessages{
-				Role: "assistant",
-				Content: []reqContent{{
-					Type:  "tool_use",
-					ID:    t.ToolCall.ToolCallID,
-					Name:  t.ToolCall.Name,
-					Input: jsonArguments,
-				}},
+			appendBlock("assistant", reqContent{
+				Type:  "tool_use",
+				ID:    t.ToolCall.ToolCallID,
+				Name:  t.ToolCall.Name,
+				Input: jsonArguments,
+			})
+		case prompt.ThinkingRole:
+			if t.Thinking == nil || len(t.Replay) == 0 {
+				continue
 			}
-		default: // prompt.UserRole, prompt.AssistantRole
-			message = reqMessages{
-				Role:    string(t.Role),
-				Content: []reqContent{},
+			if t.Thinking.Redacted {
+				appendBlock("assistant", reqContent{
+					Type: "redacted_thinking",
+					Data: string(t.Replay),
+				})
+				continue
 			}
+			appendBlock("assistant", reqContent{
+				Type:      "thinking",
+				Thinking:  t.Thinking.Text,
+				Signature: string(t.Replay),
+			})
+		case prompt.AssistantRole:
 			if t.Text != "" {
-				message.Content = append(message.Content, reqContent{
+				appendBlock("assistant", reqContent{
+					Type: "text",
+					Text: t.Text,
+				})
+			}
+		default: // prompt.UserRole
+			if t.Text != "" {
+				appendBlock("user", reqContent{
 					Type: "text",
 					Text: t.Text,
 				})
 			}
 			if t.Payload != nil {
 				if t.Payload.Mime == "application/pdf" {
-					message.Content = append(message.Content, reqContent{
+					appendBlock("user", reqContent{
 						Type: "document",
 						Source: &reqContentSource{
 							Type:      "base64",
@@ -433,9 +563,8 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 					})
 					pdfBeta = true
 				}
-
 				if strings.HasPrefix(t.Payload.Mime, "image/") {
-					message.Content = append(message.Content, reqContent{
+					appendBlock("user", reqContent{
 						Type: "image",
 						Source: &reqContentSource{
 							Type:      "base64",
@@ -446,8 +575,6 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 				}
 			}
 		}
-
-		model.Messages = append(model.Messages, message)
 	}
 
 	reqdata, err := json.Marshal(model)

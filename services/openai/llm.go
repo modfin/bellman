@@ -60,7 +60,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not post openai request, %w", err)
+		return nil, fmt.Errorf("could not post %s request, %w", g.openai.provider, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -123,6 +123,59 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 					functionCalls[ev.OutputIndex] = streamingFunctionCall{
 						CallID: ev.Item.CallID,
 						Name:   ev.Item.Name,
+					}
+				}
+
+			case "response.output_item.done":
+				if ev.Item == nil {
+					continue
+				}
+				switch ev.Item.Type {
+				case "reasoning":
+					var text string
+					for i, s := range ev.Item.Summary {
+						if i > 0 {
+							text += "\n"
+						}
+						text += s.Text
+					}
+					var sig []byte
+					if ev.Item.EncryptedContent != nil {
+						sig = []byte(*ev.Item.EncryptedContent)
+					}
+					p := prompt.AsThinking(text, sig, ev.Item.ID)
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.AssistantRole,
+						Index: ev.OutputIndex,
+						Block: &p,
+					}
+				case "message":
+					for _, c := range ev.Item.Content {
+						if c.Type != "output_text" || c.Text == "" {
+							continue
+						}
+						p := prompt.AsAssistant(c.Text)
+						stream <- &gen.StreamResponse{
+							Type:  gen.TYPE_BLOCK,
+							Role:  prompt.AssistantRole,
+							Index: ev.OutputIndex,
+							Block: &p,
+						}
+					}
+				case "function_call":
+					p := prompt.AsToolCall(ev.Item.CallID, ev.Item.Name, []byte(ev.Item.Arguments))
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  prompt.ToolCallRole,
+						Index: ev.OutputIndex,
+						Block: &p,
+						ToolCall: &tools.Call{
+							ID:       ev.Item.CallID,
+							Name:     ev.Item.Name,
+							Argument: []byte(ev.Item.Arguments),
+							Ref:      reqModel.toolBelt[ev.Item.Name],
+						},
 					}
 				}
 
@@ -210,7 +263,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 
 			default:
 				// Ignore: response.created, response.in_progress, response.queued,
-				// response.content_part.*, response.output_text.done, response.output_item.done,
+				// response.content_part.*, response.output_text.done,
 				// response.function_call_arguments.done, response.refusal.*, reasoning_summary_part.*,
 				// MCP/web_search/file_search/code_interpreter/image_generation/audio events.
 			}
@@ -253,12 +306,12 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not post openai request, %w", err)
+		return nil, fmt.Errorf("could not post %s request, %w", g.openai.provider, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not read openai response, %w", err)
+		return nil, fmt.Errorf("could not read %s response, %w", g.openai.provider, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code, %d: err %s", resp.StatusCode, string(body))
@@ -267,17 +320,17 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	var respModel openaiResponse
 	err = json.Unmarshal(body, &respModel)
 	if err != nil {
-		return nil, fmt.Errorf("could not decode openai response, %w", err)
+		return nil, fmt.Errorf("could not decode %s response, %w", g.openai.provider, err)
 	}
 
 	if respModel.Status != "" && respModel.Status != "completed" {
 		if respModel.Error != nil && respModel.Error.Message != "" {
-			return nil, fmt.Errorf("openai response status %s: %s", respModel.Status, respModel.Error.Message)
+			return nil, fmt.Errorf("%s response status %s: %s", g.openai.provider, respModel.Status, respModel.Error.Message)
 		}
 		if respModel.IncompleteDetails != nil && respModel.IncompleteDetails.Reason != "" {
-			return nil, fmt.Errorf("openai response status %s: %s", respModel.Status, respModel.IncompleteDetails.Reason)
+			return nil, fmt.Errorf("%s response status %s: %s", g.openai.provider, respModel.Status, respModel.IncompleteDetails.Reason)
 		}
-		return nil, fmt.Errorf("openai response status %s", respModel.Status)
+		return nil, fmt.Errorf("%s response status %s", g.openai.provider, respModel.Status)
 	}
 
 	res := &gen.Response{
@@ -295,6 +348,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 			for _, c := range item.Content {
 				if c.Type == "output_text" && c.Text != "" {
 					res.Texts = append(res.Texts, c.Text)
+					res.Turn = append(res.Turn, prompt.AsAssistant(c.Text))
 				}
 			}
 		case "function_call":
@@ -304,13 +358,25 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 				Argument: []byte(item.Arguments),
 				Ref:      reqModel.toolBelt[item.Name],
 			})
+			res.Turn = append(res.Turn, prompt.AsToolCall(item.CallID, item.Name, []byte(item.Arguments)))
 		case "reasoning":
-			if g.request.ThinkingParts == nil || !*g.request.ThinkingParts {
-				continue
+			var text string
+			for i, s := range item.Summary {
+				if i > 0 {
+					text += "\n"
+				}
+				text += s.Text
 			}
-			for _, s := range item.Summary {
-				if s.Text != "" {
-					res.Thinking = append(res.Thinking, s.Text)
+			var sig []byte
+			if item.EncryptedContent != nil {
+				sig = []byte(*item.EncryptedContent)
+			}
+			res.Turn = append(res.Turn, prompt.AsThinking(text, sig, item.ID))
+			if g.request.ThinkingParts != nil && *g.request.ThinkingParts {
+				for _, s := range item.Summary {
+					if s.Text != "" {
+						res.Thinking = append(res.Thinking, s.Text)
+					}
 				}
 			}
 		}
@@ -422,7 +488,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		}
 	}
 
-	if g.request.ThinkingBudget != nil {
+	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingBudget != nil {
 		var reffort ReasoningEffort
 		switch true {
 		case *g.request.ThinkingBudget == 0:
@@ -436,11 +502,17 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		}
 		reqModel.Reasoning = &reasoningConfig{Effort: &reffort}
 	}
-	if g.request.ThinkingParts != nil && *g.request.ThinkingParts {
+	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingParts != nil && *g.request.ThinkingParts {
 		if reqModel.Reasoning == nil {
 			reqModel.Reasoning = &reasoningConfig{}
 		}
 		reqModel.Reasoning.Summary = new("auto")
+	}
+	// Request encrypted reasoning content so reasoning items can be replayed
+	// on the next turn in stateless (store=false) mode — required for tool-use
+	// chains with reasoning.
+	if reqModel.Reasoning != nil || g.request.Model.UsesAdaptiveThinking {
+		reqModel.Include = append(reqModel.Include, "reasoning.encrypted_content")
 	}
 
 	if g.request.SystemPrompt != "" {
@@ -473,6 +545,18 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 				Name:      c.ToolCall.Name,
 				Arguments: string(c.ToolCall.Arguments),
 			})
+		case prompt.ThinkingRole:
+			if c.Thinking == nil || c.Thinking.ID == "" {
+				continue
+			}
+			reqItem := reasoningInputItem{Type: "reasoning", ID: c.Thinking.ID, Summary: []outputReasoningSummary{}}
+			if c.Thinking.Text != "" {
+				reqItem.Summary = []outputReasoningSummary{{Type: "summary_text", Text: c.Thinking.Text}}
+			}
+			if len(c.Replay) > 0 {
+				reqItem.EncryptedContent = new(string(c.Replay))
+			}
+			input = append(input, reqItem)
 		default: // prompt.UserRole, prompt.AssistantRole
 			contentType := "input_text"
 			if c.Role == prompt.AssistantRole {
@@ -497,7 +581,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 
 	body, err := json.Marshal(reqModel)
 	if err != nil {
-		return nil, reqModel, fmt.Errorf("could not marshal open ai request, %w", err)
+		return nil, reqModel, fmt.Errorf("could not marshal %s request, %w", g.openai.provider, err)
 	}
 
 	u, err := url.JoinPath(g.openai.getBaseURL(g.request.Model.Name), "/v1/responses")
@@ -511,7 +595,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	if err != nil {
-		return nil, reqModel, fmt.Errorf("could not create openai request, %w", err)
+		return nil, reqModel, fmt.Errorf("could not create %s request, %w", g.openai.provider, err)
 	}
 	if g.openai.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+g.openai.apiKey)

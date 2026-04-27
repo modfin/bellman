@@ -5,6 +5,7 @@ go run -race . \
   --openai-key="$(cat ./credentials/openai-api-key.txt)" \
   --anthropic-key="$(cat ./credentials/anthropic-api-key.txt)" \
   --voyageai-key="$(cat ./credentials/voyageai-api-key.txt)" \
+  --xai-key="$(cat ./credentials/xai-api-key.txt)" \
   \
   --google-project=modular-finance \
   --google-region=global \

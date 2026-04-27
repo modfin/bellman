@@ -71,6 +71,22 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			}
 		}()
 
+		// Tool-call buffer for the current turn. Gemini emits per-part data
+		// piecemeal: function_call args arrive whole on a function_call part,
+		// but the turn's thoughtSignature may show up later on a separate
+		// closure part (empty text, no functionCall) — and per Gemini's docs
+		// the closure signature attaches to the first tool call. We buffer
+		// calls in stream order so the closure sig can be attached, then
+		// flush them as TYPE_BLOCK events at finish_reason / EOF.
+		type pendingCall struct {
+			id, name string
+			args     []byte
+			sig      []byte
+			index    int
+			ref      *tools.Tool
+		}
+		var pending []*pendingCall
+
 		for {
 			line, _, err := reader.ReadLine()
 			if err != nil {
@@ -117,13 +133,30 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			}
 			t := time.Now().UnixNano()
 			for idx, part := range candidate.Content.Parts {
-				if part.Text != nil {
+				var sig []byte
+				if part.ThoughtSignature != nil && *part.ThoughtSignature != "" {
+					sig = []byte(*part.ThoughtSignature)
+				}
+				// Only process parts with actual visible text content here.
+				// Empty-text parts (part.Text == "" or nil) fall through to the
+				// closure-signature handler below, which attaches any signature
+				// to the first tool call of the turn — empty assistant text
+				// parts sent on replay are rejected by the API.
+				if part.Text != nil && *part.Text != "" {
 					if part.Thought != nil && *part.Thought {
 						stream <- &gen.StreamResponse{
 							Type:    gen.TYPE_THINKING_DELTA,
 							Role:    role,
 							Index:   candidate.Index,
 							Content: *part.Text,
+						}
+						if len(sig) > 0 {
+							stream <- &gen.StreamResponse{
+								Type:  gen.TYPE_BLOCK,
+								Role:  role,
+								Index: candidate.Index,
+								Block: new(prompt.AsThinking(*part.Text, sig, "")),
+							}
 						}
 						continue
 					}
@@ -132,6 +165,17 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						Role:    role,
 						Index:   candidate.Index,
 						Content: *part.Text,
+					}
+					// Always emit a BLOCK for plain assistant text so the
+					// consumer has a replay-ready prompt regardless of whether
+					// Gemini attached a thoughtSignature (it does for thinking
+					// models; non-thinking models still need their text turns
+					// replayed in multi-turn conversations).
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  role,
+						Index: candidate.Index,
+						Block: new(prompt.AsAssistantWithReplay(*part.Text, sig)),
 					}
 				}
 				if part.FunctionCall != nil {
@@ -144,6 +188,16 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						}
 						continue
 					}
+					id := fmt.Sprintf("%d-%d", t, idx)
+					ref := model.toolBelt[f.Name]
+					pending = append(pending, &pendingCall{
+						id:    id,
+						name:  f.Name,
+						args:  arg,
+						sig:   sig,
+						index: candidate.Index,
+						ref:   ref,
+					})
 					stream <- &gen.StreamResponse{
 						Type:  gen.TYPE_DELTA,
 						Role:  prompt.ToolCallRole,
@@ -151,9 +205,29 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						ToolCall: &tools.Call{
 							Name:     f.Name,
 							Argument: arg,
-							ID:       fmt.Sprintf("%d-%d", t, idx),
-							Ref:      model.toolBelt[f.Name],
+							ID:       id,
+							Ref:      ref,
 						},
+					}
+					continue
+				}
+
+				// Closure signature part: Gemini may return the turn's
+				// thoughtSignature in a later part with empty text and no
+				// functionCall. Attach it to the first buffered tool call so
+				// it gets emitted with the call's TYPE_BLOCK on flush — or, if
+				// the turn had no tool call, preserve it as a thinking block.
+				textIsEmpty := part.Text == nil || *part.Text == ""
+				if textIsEmpty && part.FunctionCall == nil && len(sig) > 0 {
+					if len(pending) > 0 {
+						pending[0].sig = sig
+					} else {
+						stream <- &gen.StreamResponse{
+							Type:  gen.TYPE_BLOCK,
+							Role:  role,
+							Index: candidate.Index,
+							Block: new(prompt.AsThinking("", sig, "")),
+						}
 					}
 				}
 
@@ -177,6 +251,21 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 				break
 			}
 
+		}
+		
+		for _, pc := range pending {
+			stream <- &gen.StreamResponse{
+				Type:  gen.TYPE_BLOCK,
+				Role:  prompt.ToolCallRole,
+				Index: pc.index,
+				Block: new(prompt.AsToolCallWithReplay(pc.id, pc.name, pc.args, pc.sig)),
+				ToolCall: &tools.Call{
+					ID:       pc.id,
+					Name:     pc.name,
+					Argument: pc.args,
+					Ref:      pc.ref,
+				},
+			}
 		}
 
 	}()
@@ -238,12 +327,22 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	res.Metadata.TotalTokens = respModel.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens
 	for _, c := range respModel.Candidates {
 		for _, p := range c.Content.Parts {
+			var sig []byte
+			if p.ThoughtSignature != nil && *p.ThoughtSignature != "" {
+				sig = []byte(*p.ThoughtSignature)
+			}
 			if p.Thought != nil && *p.Thought {
 				res.Thinking = append(res.Thinking, p.Text)
+				res.Turn = append(res.Turn, prompt.AsThinking(p.Text, sig, ""))
 				continue
 			}
 			if len(p.Text) > 0 {
 				res.Texts = append(res.Texts, p.Text)
+				// Gemini may attach thoughtSignature to plain assistant text parts
+				// too (the "save state" on the final visible output). Emit the
+				// part as its own assistant prompt so the signature travels with
+				// the text that was signed.
+				res.Turn = append(res.Turn, prompt.AsAssistantWithReplay(p.Text, sig))
 			}
 
 			if len(p.Text) == 0 && len(p.FunctionCall.Name) > 0 { // Tool calls
@@ -257,7 +356,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 					Argument: arg,
 					Ref:      model.toolBelt[f.Name],
 				})
-
+				res.Turn = append(res.Turn, prompt.AsToolCallWithReplay("", f.Name, arg, sig))
 			}
 
 		}
@@ -364,17 +463,25 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		model.GenerationConfig.ThinkingConfig.IncludeThoughts = g.request.ThinkingParts
 	}
 
-	for _, p := range prompts {
-		content := genRequestContent{
-			Parts: []genRequestContentPart{},
+	// Append a part into the current Content of the given role, merging with
+	// the previous Content when it already has the same role. Gemini requires
+	// thinking/text/functionCall parts from one model turn to live under a
+	// single `model` Content so thoughtSignature validation can match them up.
+	appendPart := func(role string, part genRequestContentPart) {
+		if n := len(model.Contents); n > 0 && model.Contents[n-1].Role == role {
+			model.Contents[n-1].Parts = append(model.Contents[n-1].Parts, part)
+			return
 		}
+		model.Contents = append(model.Contents, genRequestContent{Role: role, Parts: []genRequestContentPart{part}})
+	}
+
+	for _, p := range prompts {
 		switch p.Role {
 		case prompt.ToolResponseRole:
 			if p.ToolResponse == nil {
 				return nil, model, fmt.Errorf("ToolResponse is required for role tool response")
 			}
-			content.Role = "tool"
-			content.Parts = append(content.Parts, genRequestContentPart{
+			appendPart("tool", genRequestContentPart{
 				FunctionResponse: &functionResponse{
 					Name: p.ToolResponse.Name,
 					Response: struct {
@@ -387,21 +494,39 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 			if p.ToolCall == nil {
 				return nil, model, fmt.Errorf("ToolCall is required for role tool call")
 			}
-			content.Role = "model"
 			var jsonArguments map[string]any
 			err := json.Unmarshal(p.ToolCall.Arguments, &jsonArguments)
 			if err != nil {
 				return nil, model, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
 			}
-			content.Parts = append(content.Parts, genRequestContentPart{
+			part := genRequestContentPart{
 				FunctionCall: &functionCall{Name: p.ToolCall.Name, Args: jsonArguments},
-			})
+			}
+			if len(p.Replay) > 0 {
+				part.ThoughtSignature = string(p.Replay)
+			}
+			appendPart("model", part)
+		case prompt.ThinkingRole:
+			if p.Thinking == nil {
+				continue
+			}
+			part := genRequestContentPart{
+				Text:    p.Thinking.Text,
+				Thought: true,
+			}
+			if len(p.Replay) > 0 {
+				part.ThoughtSignature = string(p.Replay)
+			}
+			appendPart("model", part)
 		default: // prompt.UserRole, prompt.AssistantRole
-			content.Role = "user"
+			role := "user"
 			if p.Role == prompt.AssistantRole {
-				content.Role = "model"
+				role = "model"
 			}
 			part := genRequestContentPart{Text: p.Text}
+			if p.Role == prompt.AssistantRole && len(p.Replay) > 0 {
+				part.ThoughtSignature = string(p.Replay)
+			}
 			if p.Payload != nil {
 				if len(p.Payload.Data) > 0 {
 					part.InlineData = &inlineData{
@@ -417,9 +542,8 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 					}
 				}
 			}
-			content.Parts = append(content.Parts, part)
+			appendPart(role, part)
 		}
-		model.Contents = append(model.Contents, content)
 	}
 
 	region := g.google.config.Region

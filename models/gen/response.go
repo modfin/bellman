@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/tools"
@@ -13,6 +14,7 @@ type StreamingResponseType string
 
 const TYPE_DELTA StreamingResponseType = "delta"
 const TYPE_THINKING_DELTA StreamingResponseType = "thinking_delta"
+const TYPE_BLOCK StreamingResponseType = "block" // a finalized replay-ready prompt (thinking or assistant-text with signature); Role tells which
 const TYPE_METADATA StreamingResponseType = "metadata"
 const TYPE_EOF StreamingResponseType = "EOF"
 const TYPE_ERROR StreamingResponseType = "ERROR"
@@ -30,6 +32,11 @@ type StreamResponse struct {
 	Content  string                `json:"content"`
 	ToolCall *tools.Call           `json:"tool_call,omitempty"` // Only for TYPE_DELTA
 
+	// Block is a finalized replay-ready prompt (the streaming analog of a
+	// Response.Turn entry). Only set for TYPE_BLOCK events — Role tells you
+	// what kind of block it is (ThinkingRole, AssistantRole, ...).
+	Block *prompt.Prompt `json:"block,omitempty"`
+
 	Metadata *models.Metadata `json:"metadata,omitempty"`
 }
 
@@ -42,8 +49,15 @@ func (r StreamResponse) Error() error {
 
 type Response struct {
 	Texts    []string     `json:"texts,omitempty"`
-	Thinking []string     `json:"thinking,omitempty"` // Thinking parts, if any
+	Thinking []string     `json:"thinking,omitempty"` // visible thinking text (back-compat)
 	Tools    []tools.Call `json:"tools,omitempty"`
+
+	// Turn is the assistant side of this exchange in replay-ready form:
+	// thinking blocks first, then (if present) the final assistant text with
+	// any signature, in the order the provider produced them. Append it
+	// directly to your prompts slice on the next call to preserve the
+	// provider's chain-of-thought signatures.
+	Turn []prompt.Prompt `json:"turn,omitempty"`
 
 	Metadata models.Metadata `json:"metadata,omitempty"`
 }

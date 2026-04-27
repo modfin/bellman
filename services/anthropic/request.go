@@ -63,7 +63,7 @@ type reqTool struct {
 }
 
 type reqContent struct {
-	Type      string            `json:"type"` // eg text, image
+	Type      string            `json:"type"` // text | image | thinking | redacted_thinking | tool_use | tool_result
 	Text      string            `json:"text,omitempty"`
 	Source    *reqContentSource `json:"source,omitempty"`
 	ID        string            `json:"id,omitempty"`
@@ -71,6 +71,9 @@ type reqContent struct {
 	Name      string            `json:"name,omitempty"`
 	Input     any               `json:"input,omitempty"`
 	Content   any               `json:"content,omitempty"`
+	Thinking  string            `json:"thinking,omitempty"`  // thinking block text
+	Signature string            `json:"signature,omitempty"` // thinking block signature
+	Data      string            `json:"data,omitempty"`      // redacted_thinking opaque payload
 }
 
 // https://docs.anthropic.com/en/api/messages-examples#vision

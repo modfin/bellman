@@ -16,9 +16,10 @@ type geminiStreamingResponse struct {
 		Content struct {
 			Role  string `json:"role"`
 			Parts []struct {
-				Text         *string       `json:"text"`
-				Thought      *bool         `json:"thought,omitempty"`
-				FunctionCall *functionCall `json:"functionCall,omitempty"`
+				Text             *string       `json:"text"`
+				Thought          *bool         `json:"thought,omitempty"`
+				ThoughtSignature *string       `json:"thoughtSignature,omitempty"`
+				FunctionCall     *functionCall `json:"functionCall,omitempty"`
 			} `json:"parts"`
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`
@@ -48,9 +49,10 @@ type geminiResponse struct {
 		Content struct {
 			Role  string `json:"role"`
 			Parts []struct {
-				Text         string       `json:"text"`
-				Thought      *bool        `json:"thought,omitempty"`
-				FunctionCall functionCall `json:"functionCall"`
+				Text             string       `json:"text"`
+				Thought          *bool        `json:"thought,omitempty"`
+				ThoughtSignature *string      `json:"thoughtSignature,omitempty"`
+				FunctionCall     functionCall `json:"functionCall"`
 			} `json:"parts"`
 		} `json:"content"`
 		FinishReason  string `json:"finishReason"`
