@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-semantic=$(git describe | cut -f1 -d'-')
-version=$(git describe | cut -f1,2 -d'-')
+semantic=$(git describe --tags | cut -f1 -d'-')
+version=$(git describe --tags | cut -f1,2 -d'-')
 
 BUILDER=$(docker buildx create) || exit 1
 
