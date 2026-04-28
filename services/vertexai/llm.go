@@ -57,7 +57,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}, for url: {%s} ", resp.StatusCode, string(b), model.url), err)
 	}
 
-	reader := bufio.NewReader(resp.Body)
+	reader := bufio.NewReaderSize(resp.Body, 1<<20)
 
 	stream := make(chan *gen.StreamResponse)
 
@@ -70,6 +70,27 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 				Type: gen.TYPE_EOF,
 			}
 		}()
+
+		// readLine reassembles SSE lines longer than the bufio buffer.
+		// bufio.Reader.ReadLine returns isPrefix=true when a line exceeds
+		// the buffer; ignoring it silently truncates the line and breaks
+		// json.Unmarshal on long tool-call/delta chunks.
+		readLine := func() ([]byte, error) {
+			var buf []byte
+			for {
+				chunk, isPrefix, err := reader.ReadLine()
+				if err != nil {
+					return nil, err
+				}
+				if !isPrefix {
+					if buf == nil {
+						return chunk, nil
+					}
+					return append(buf, chunk...), nil
+				}
+				buf = append(buf, chunk...)
+			}
+		}
 
 		// Tool-call buffer for the current turn. Gemini emits per-part data
 		// piecemeal: function_call args arrive whole on a function_call part,
@@ -87,8 +108,50 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 		}
 		var pending []*pendingCall
 
+		// Active text/thinking block accumulator. Gemini's stream sends one
+		// part per SSE chunk, so emitting TYPE_BLOCK per part produces one
+		// BLOCK per delta. Instead, accumulate same-kind text parts and emit
+		// a single finalized TYPE_BLOCK when the kind changes, a closure
+		// signature arrives, or the stream ends.
+		type activeBlock struct {
+			kind  string // "text" | "thinking"
+			role  prompt.Role
+			index int
+			text  string
+			sig   []byte
+		}
+		var active *activeBlock
+
+		flushActive := func() {
+			if active == nil {
+				return
+			}
+			switch active.kind {
+			case "thinking":
+				// Without a signature a thinking block can't be replayed, so
+				// skip it — the consumer already got the text via
+				// TYPE_THINKING_DELTA events.
+				if len(active.sig) > 0 {
+					stream <- &gen.StreamResponse{
+						Type:  gen.TYPE_BLOCK,
+						Role:  active.role,
+						Index: active.index,
+						Block: new(prompt.AsThinking(active.text, active.sig, "")),
+					}
+				}
+			case "text":
+				stream <- &gen.StreamResponse{
+					Type:  gen.TYPE_BLOCK,
+					Role:  active.role,
+					Index: active.index,
+					Block: new(prompt.AsAssistantWithReplay(active.text, active.sig)),
+				}
+			}
+			active = nil
+		}
+
 		for {
-			line, _, err := reader.ReadLine()
+			line, err := readLine()
 			if err != nil {
 				// If there's an error, check if it's EOF (end of stream)
 				if errors.Is(err, http.ErrBodyReadAfterClose) {
@@ -143,20 +206,34 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 				// to the first tool call of the turn — empty assistant text
 				// parts sent on replay are rejected by the API.
 				if part.Text != nil && *part.Text != "" {
-					if part.Thought != nil && *part.Thought {
+					isThought := part.Thought != nil && *part.Thought
+					kind := "text"
+					if isThought {
+						kind = "thinking"
+					}
+					// Transition: a different kind of text part closes the
+					// previous accumulated block.
+					if active != nil && active.kind != kind {
+						flushActive()
+					}
+					if active == nil {
+						active = &activeBlock{
+							kind:  kind,
+							role:  role,
+							index: candidate.Index,
+						}
+					}
+					active.text += *part.Text
+					if len(sig) > 0 {
+						active.sig = sig
+					}
+
+					if isThought {
 						stream <- &gen.StreamResponse{
 							Type:    gen.TYPE_THINKING_DELTA,
 							Role:    role,
 							Index:   candidate.Index,
 							Content: *part.Text,
-						}
-						if len(sig) > 0 {
-							stream <- &gen.StreamResponse{
-								Type:  gen.TYPE_BLOCK,
-								Role:  role,
-								Index: candidate.Index,
-								Block: new(prompt.AsThinking(*part.Text, sig, "")),
-							}
 						}
 						continue
 					}
@@ -166,19 +243,12 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						Index:   candidate.Index,
 						Content: *part.Text,
 					}
-					// Always emit a BLOCK for plain assistant text so the
-					// consumer has a replay-ready prompt regardless of whether
-					// Gemini attached a thoughtSignature (it does for thinking
-					// models; non-thinking models still need their text turns
-					// replayed in multi-turn conversations).
-					stream <- &gen.StreamResponse{
-						Type:  gen.TYPE_BLOCK,
-						Role:  role,
-						Index: candidate.Index,
-						Block: new(prompt.AsAssistantWithReplay(*part.Text, sig)),
-					}
+					continue
 				}
 				if part.FunctionCall != nil {
+					// Tool call boundary — finalize any accumulated text block
+					// before emitting the call.
+					flushActive()
 					f := part.FunctionCall
 					arg, err := json.Marshal(f.Args)
 					if err != nil {
@@ -214,14 +284,19 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 
 				// Closure signature part: Gemini may return the turn's
 				// thoughtSignature in a later part with empty text and no
-				// functionCall. Attach it to the first buffered tool call so
-				// it gets emitted with the call's TYPE_BLOCK on flush — or, if
-				// the turn had no tool call, preserve it as a thinking block.
+				// functionCall. Per Gemini's docs the closure signature
+				// attaches to the first tool call of the turn; otherwise,
+				// fall back to the active text/thinking block, or emit a
+				// standalone thinking block to preserve the bytes.
 				textIsEmpty := part.Text == nil || *part.Text == ""
 				if textIsEmpty && part.FunctionCall == nil && len(sig) > 0 {
-					if len(pending) > 0 {
+					switch {
+					case len(pending) > 0:
 						pending[0].sig = sig
-					} else {
+					case active != nil:
+						active.sig = sig
+						flushActive()
+					default:
 						stream <- &gen.StreamResponse{
 							Type:  gen.TYPE_BLOCK,
 							Role:  role,
@@ -252,7 +327,11 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			}
 
 		}
-		
+
+		// End of stream: flush any text/thinking block we were still
+		// accumulating, then emit the buffered tool-call blocks.
+		flushActive()
+
 		for _, pc := range pending {
 			stream <- &gen.StreamResponse{
 				Type:  gen.TYPE_BLOCK,

@@ -400,7 +400,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		return nil, g.handleStreamingError(fmt.Errorf("unexpected status code, %d, err: {%s}", res.StatusCode, string(b)), reqc)
 	}
 
-	reader := bufio.NewReader(res.Body)
+	reader := bufio.NewReaderSize(res.Body, 1<<20)
 	stream := make(chan *gen.StreamResponse, 100)
 
 	go func() {
@@ -418,6 +418,22 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		if ctx == nil {
 			ctx = context.Background()
 		}
+		readLine := func() ([]byte, error) {
+			var buf []byte
+			for {
+				chunk, isPrefix, err := reader.ReadLine()
+				if err != nil {
+					return nil, err
+				}
+				if !isPrefix {
+					if buf == nil {
+						return chunk, nil
+					}
+					return append(buf, chunk...), nil
+				}
+				buf = append(buf, chunk...)
+			}
+		}
 
 		for {
 			// Check for context cancellation
@@ -433,7 +449,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				// Continue processing
 			}
 
-			line, _, err := reader.ReadLine()
+			line, err := readLine()
 			if err != nil {
 				// If there's an error, check if it's EOF (end of stream)
 				if errors.Is(err, http.ErrBodyReadAfterClose) {

@@ -64,7 +64,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		return nil, errors.Join(fmt.Errorf("unexpected status code, %d, err: {%s}", resp.StatusCode, string(b)), err)
 	}
 
-	reader := bufio.NewReader(resp.Body)
+	reader := bufio.NewReaderSize(resp.Body, 1<<20)
 	stream := make(chan *gen.StreamResponse)
 
 	go func() {
@@ -76,6 +76,27 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				Type: gen.TYPE_EOF,
 			}
 		}()
+
+		// readLine reassembles SSE lines longer than the bufio buffer.
+		// bufio.Reader.ReadLine returns isPrefix=true when a line exceeds
+		// the buffer; ignoring it silently truncates the line and breaks
+		// json.Unmarshal on long tool-call/delta chunks.
+		readLine := func() ([]byte, error) {
+			var buf []byte
+			for {
+				chunk, isPrefix, err := reader.ReadLine()
+				if err != nil {
+					return nil, err
+				}
+				if !isPrefix {
+					if buf == nil {
+						return chunk, nil
+					}
+					return append(buf, chunk...), nil
+				}
+				buf = append(buf, chunk...)
+			}
+		}
 
 		var role string
 		// Per-content-block state. Anthropic emits content_block_start →
@@ -95,7 +116,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		var thinkingSig string
 		var thinkingData string
 		for {
-			line, _, err := reader.ReadLine()
+			line, err := readLine()
 			if err != nil {
 				// If there's an error, check if it's EOF (end of stream)
 				if errors.Is(err, http.ErrBodyReadAfterClose) {
