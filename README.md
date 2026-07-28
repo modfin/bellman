@@ -442,6 +442,42 @@ answer, err := res.AsText()
 fmt.Println(answer, err)
 ```
 
+## Prompt Caching
+
+Every turn of a conversation resends the whole history, so the same system prompt,
+tool definitions and prior turns get processed again and again. `PromptCache(true)`
+asks the provider to cache that reusable prefix.
+
+```go
+llm := anthropic.New(apiKey).Generator().
+    Model(anthropic.GenModel_4_5_sonnet_latest).
+    System(longRuleBook). // the expensive, unchanging part of every request
+    SetTools(getQuote, getStock).
+    PromptCache(true)
+
+res, err := llm.Prompt(prompt.AsUser("Get me the price of Volvo B"))
+if err != nil {
+    log.Fatalf("Prompt() error = %v", err)
+}
+
+fmt.Println(res.Metadata.CachedTokens, res.Metadata.CacheWriteTokens)
+// 6312 0
+```
+
+Providers differ in what the flag does. Anthropic needs explicit cache breakpoints,
+and bellman places them (on the tool definitions, the system prompt and the end of
+the conversation) only when this is enabled. OpenAI and VertexAI cache eligible
+prefixes automatically, so the flag changes nothing for them.
+
+Either way the accounting is reported the same way, as a subset of the input tokens:
+
+- `Metadata.CachedTokens` - input served from cache, billed at a discount
+- `Metadata.CacheWriteTokens` - input written to the cache, billed at a premium
+
+Caching only kicks in above a model dependent minimum prefix length (roughly 1-2k
+tokens) and entries are evicted after a few minutes of inactivity. Below that, the
+request behaves as if caching were off.
+
 ## Provider specific config
 Some providers have specific configuration that is not supported by the common interface.
 You can set these options manually on the `gen.Model.Config` struct.

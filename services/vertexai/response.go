@@ -25,12 +25,13 @@ type geminiStreamingResponse struct {
 		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
 	UsageMetadata struct {
-		PromptTokenCount     int    `json:"promptTokenCount"`
-		CandidatesTokenCount int    `json:"candidatesTokenCount"`
-		ThoughtsTokenCount   int    `json:"thoughtsTokenCount"`
-		TotalTokenCount      int    `json:"totalTokenCount"`
-		TrafficType          string `json:"trafficType"`
-		PromptTokensDetails  []struct {
+		PromptTokenCount        int    `json:"promptTokenCount"`
+		CandidatesTokenCount    int    `json:"candidatesTokenCount"`
+		ThoughtsTokenCount      int    `json:"thoughtsTokenCount"`
+		TotalTokenCount         int    `json:"totalTokenCount"`
+		CachedContentTokenCount int    `json:"cachedContentTokenCount"`
+		TrafficType             string `json:"trafficType"`
+		PromptTokensDetails     []struct {
 			Modality   string `json:"modality"`
 			TokenCount int    `json:"tokenCount"`
 		} `json:"promptTokensDetails"`
@@ -69,5 +70,7 @@ type geminiResponse struct {
 		CandidatesTokenCount int `json:"candidatesTokenCount"`
 		ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
 		TotalTokenCount      int `json:"totalTokenCount"`
+		// CachedContentTokenCount is the cached part of PromptTokenCount.
+		CachedContentTokenCount int `json:"cachedContentTokenCount"`
 	} `json:"usageMetadata"`
 }

@@ -17,8 +17,7 @@ type request struct {
 
 	StopSequences []string `json:"stop_sequences,omitempty"`
 
-	// System, System.type must be "text"
-	System string `json:"system,omitempty"`
+	System []reqSystemBlock `json:"system,omitempty"`
 
 	Tool  *reqToolChoice `json:"tool_choice,omitempty"`
 	Tools []reqTool      `json:"tools,omitempty"`
@@ -48,6 +47,23 @@ type reqMessages struct {
 	Content []reqContent `json:"content"`
 }
 
+type reqSystemBlock struct {
+	Type         string           `json:"type"` // must be "text"
+	Text         string           `json:"text"`
+	CacheControl *reqCacheControl `json:"cache_control,omitempty"`
+}
+
+// reqCacheControl marks a prompt-cache breakpoint: everything in the request up
+// to and including the block it sits on becomes a cacheable prefix.
+// https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+type reqCacheControl struct {
+	Type string `json:"type"` // "ephemeral"
+}
+
+func ephemeralCache() *reqCacheControl {
+	return &reqCacheControl{Type: "ephemeral"}
+}
+
 type reqToolChoice struct {
 	// "auto, any, tool"
 	Type string `json:"type"`
@@ -57,9 +73,10 @@ type reqToolChoice struct {
 }
 
 type reqTool struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	InputSchema *JSONSchema `json:"input_schema,omitempty"`
+	Name         string           `json:"name"`
+	Description  string           `json:"description,omitempty"`
+	InputSchema  *JSONSchema      `json:"input_schema,omitempty"`
+	CacheControl *reqCacheControl `json:"cache_control,omitempty"`
 }
 
 type reqContent struct {
@@ -74,6 +91,8 @@ type reqContent struct {
 	Thinking  string            `json:"thinking,omitempty"`  // thinking block text
 	Signature string            `json:"signature,omitempty"` // thinking block signature
 	Data      string            `json:"data,omitempty"`      // redacted_thinking opaque payload
+
+	CacheControl *reqCacheControl `json:"cache_control,omitempty"`
 }
 
 // https://docs.anthropic.com/en/api/messages-examples#vision

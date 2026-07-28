@@ -22,6 +22,11 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 		g = g.Output(schema.From(result))
 	}
 
+	// Own the history. prompts... aliases the caller's backing array, and the
+	// loop below appends to it - without a copy those appends write into the
+	// caller's spare capacity.
+	prompts = append([]prompt.Prompt{}, prompts...)
+
 	promptMetadata := models.Metadata{Model: g.Request.Model.Name}
 	for i := 0; i < maxDepth; i++ {
 		resp, err := g.Prompt(prompts...)
@@ -32,8 +37,15 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 		promptMetadata.ThinkingTokens += resp.Metadata.ThinkingTokens
 		promptMetadata.OutputTokens += resp.Metadata.OutputTokens
 		promptMetadata.TotalTokens += resp.Metadata.TotalTokens
+		promptMetadata.CachedTokens += resp.Metadata.CachedTokens
+		promptMetadata.CacheWriteTokens += resp.Metadata.CacheWriteTokens
 
 		if !resp.IsTools() {
+			// Replay-ready record of the turn that produced the result, so
+			// Result.Prompts is a complete conversation the caller can extend
+			// with a new user prompt.
+			prompts = append(prompts, resp.Turn...)
+
 			// Check if T is string type and handle directly
 			if resultIsString {
 				text, err := resp.AsText()
@@ -125,6 +137,9 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 	})
 	g = g.SetToolConfig(tools.RequiredTool)
 
+	// Own the history, see Run.
+	prompts = append([]prompt.Prompt{}, prompts...)
+
 	promptMetadata := models.Metadata{Model: g.Request.Model.Name}
 	for i := 0; i < maxDepth; i++ {
 		resp, err := g.Prompt(prompts...)
@@ -135,6 +150,8 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 		promptMetadata.ThinkingTokens += resp.Metadata.ThinkingTokens
 		promptMetadata.OutputTokens += resp.Metadata.OutputTokens
 		promptMetadata.TotalTokens += resp.Metadata.TotalTokens
+		promptMetadata.CachedTokens += resp.Metadata.CachedTokens
+		promptMetadata.CacheWriteTokens += resp.Metadata.CacheWriteTokens
 
 		callbacks, err := resp.AsTools()
 		if err != nil {
@@ -148,6 +165,16 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 				err = json.Unmarshal(callback.Argument, &finalResult)
 				if err != nil {
 					return nil, fmt.Errorf("could not unmarshal final result: %w, at depth %d", err, i)
+				}
+				// Only the assistant text of the final turn is replay-safe. The
+				// synthetic result tool call never gets a tool response, and any
+				// provider signature on the turn is validated against the tool
+				// call that we drop - so neither is part of the returned
+				// conversation.
+				for _, p := range resp.Turn {
+					if p.Role == prompt.AssistantRole && p.Text != "" {
+						prompts = append(prompts, p)
+					}
 				}
 				return &Result[T]{
 					Prompts:  prompts,
@@ -192,6 +219,10 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 }
 
 type Result[T any] struct {
+	// Prompts is the full conversation of the run in replay-ready form: the
+	// prompts it was called with, every assistant turn (including thinking and
+	// tool calls with their provider signatures) and every tool response.
+	// Append a new user prompt to it to continue the conversation.
 	Prompts  []prompt.Prompt
 	Result   T
 	Metadata models.Metadata
