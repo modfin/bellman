@@ -20,6 +20,7 @@ type Capabilities struct {
 	Agent               bool // agent.Run[T] — multi-depth tool-calling loop with structured result
 	StreamThinkingTools bool // Stream() interleaving text + thinking + tool-call deltas (single turn) — implies Thinking
 	StreamAgentMultiHop bool // Stream() driven multi-turn agent loop; signature replay assertions gated by Thinking
+	PromptCache         bool // PromptCache(true) produces cache writes and reads reported in Metadata
 }
 
 // EmbedCapabilities declares which embed-side features the model under test
@@ -84,6 +85,13 @@ func Run(t *testing.T, g *gen.Generator, caps Capabilities) {
 				t.Skip("capability StreamThinkingTools not advertised")
 			}
 			withRetry(t, retryAttempts, testStreamThinkingTools(g))
+		})
+
+		t.Run("prompt_cache", func(t *testing.T) {
+			if !caps.PromptCache {
+				t.Skip("capability PromptCache not advertised")
+			}
+			withRetry(t, retryAttempts, testPromptCache(g))
 		})
 
 		t.Run("stream/agent_multihop", func(t *testing.T) {

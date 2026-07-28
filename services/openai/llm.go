@@ -406,6 +406,9 @@ func responseToMetadata(r *openaiResponse) *models.Metadata {
 		OutputTokens:   output,
 		ThinkingTokens: thinking,
 		TotalTokens:    r.Usage.TotalTokens,
+		// /v1/responses caches eligible prefixes automatically; input_tokens
+		// already includes the cached part, so this is reported as a subset.
+		CachedTokens: r.Usage.InputTokensDetails.CachedTokens,
 	}
 	if r.ServiceTier != nil {
 		m.Other = map[string]any{"service_tier": *r.ServiceTier}

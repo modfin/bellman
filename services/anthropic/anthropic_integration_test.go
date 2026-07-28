@@ -28,5 +28,9 @@ func TestAnthropicIntegration(t *testing.T) {
 		Agent:               true,
 		StreamThinkingTools: true,
 		StreamAgentMultiHop: true,
+		// Anthropic is the only provider where bellman has to place the cache
+		// breakpoints itself. OpenAI and VertexAI cache automatically and
+		// best-effort, which is too flaky to assert on.
+		PromptCache: true,
 	})
 }

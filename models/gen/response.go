@@ -15,6 +15,10 @@ type StreamingResponseType string
 const TYPE_DELTA StreamingResponseType = "delta"
 const TYPE_THINKING_DELTA StreamingResponseType = "thinking_delta"
 const TYPE_BLOCK StreamingResponseType = "block" // a finalized replay-ready prompt (thinking or assistant-text with signature); Role tells which
+// TYPE_METADATA carries the token accounting of the stream so far. Each frame is
+// a complete running total, not a delta, so a consumer can simply keep the last
+// frame it saw - providers that receive usage piecemeal must accumulate rather
+// than forward the piece that changed.
 const TYPE_METADATA StreamingResponseType = "metadata"
 const TYPE_EOF StreamingResponseType = "EOF"
 const TYPE_ERROR StreamingResponseType = "ERROR"

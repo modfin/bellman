@@ -11,20 +11,43 @@ type anthropicResponse struct {
 		ID        string `json:"id"`
 		Input     any    `json:"input"`
 	} `json:"content"`
-	ID           string `json:"id"`
-	Model        string `json:"model"`
-	Role         string `json:"role"`
-	StopReason   string `json:"stop_reason"`
-	StopSequence any    `json:"stop_sequence"`
-	Type         string `json:"type"`
-	Usage        struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
-	} `json:"usage"`
-	Error struct {
+	ID           string         `json:"id"`
+	Model        string         `json:"model"`
+	Role         string         `json:"role"`
+	StopReason   string         `json:"stop_reason"`
+	StopSequence any            `json:"stop_sequence"`
+	Type         string         `json:"type"`
+	Usage        anthropicUsage `json:"usage"`
+	Error        struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// anthropicUsage reports input_tokens exclusive of the cache counters, so the
+// full input of a request is input + cache_read + cache_creation.
+type anthropicUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+}
+
+// inputTokens is the total input of the request, cached parts included.
+func (u anthropicUsage) inputTokens() int {
+	return u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+}
+
+// mergeMax folds a usage frame into u. A stream reports usage in pieces - the
+// input and cache counters on message_start, where output_tokens is only a
+// placeholder, and the final output count on message_delta - and each counter
+// only grows within a message, so keeping the larger value per field yields the
+// running total for the message so far.
+func (u *anthropicUsage) mergeMax(o anthropicUsage) {
+	u.InputTokens = max(u.InputTokens, o.InputTokens)
+	u.OutputTokens = max(u.OutputTokens, o.OutputTokens)
+	u.CacheReadInputTokens = max(u.CacheReadInputTokens, o.CacheReadInputTokens)
+	u.CacheCreationInputTokens = max(u.CacheCreationInputTokens, o.CacheCreationInputTokens)
 }
 
 type anthropicStreamResponse struct {
@@ -35,10 +58,7 @@ type anthropicStreamResponse struct {
 	Delta        *anthropicStreamContentBlock `json:"delta,omitempty"`         // Only for content_block_delta and message_delta
 	ContentBlock *anthropicStreamContentBlock `json:"content_block,omitempty"` // Only for content_block_delta and message_delta
 
-	Usage *struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
-	} `json:"usage"`
+	Usage *anthropicUsage `json:"usage"`
 }
 
 type anthropicStreamContentBlock struct {

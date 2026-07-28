@@ -24,6 +24,12 @@ type Request struct {
 	ThinkingBudget *int  `json:"thinking_budget,omitempty"`
 	ThinkingParts  *bool `json:"thinking_parts,omitempty"`
 
+	// PromptCache asks the provider to cache the reusable prefix of this
+	// request - system prompt, tool definitions and the conversation so far -
+	// so replaying a growing conversation does not pay full price for the
+	// history on every turn. See Generator.PromptCache.
+	PromptCache bool `json:"prompt_cache,omitempty"`
+
 	TopP             *float64 `json:"top_p,omitempty"`
 	TopK             *int     `json:"top_k,omitempty"`
 	Temperature      *float64 `json:"temperature,omitempty"`

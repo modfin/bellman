@@ -99,6 +99,22 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		}
 
 		var role string
+		// Running usage for the message. Every metadata frame carries the total
+		// so far rather than the piece that just changed, so a consumer that
+		// keeps the last frame it saw (or stops reading early) still gets a
+		// complete and consistent picture.
+		var usage anthropicUsage
+		var usageModel string
+		emitUsage := func() {
+			model := usageModel
+			if model == "" {
+				model = g.request.Model.Name
+			}
+			stream <- &gen.StreamResponse{
+				Type:     gen.TYPE_METADATA,
+				Metadata: usageToMetadata(model, usage),
+			}
+		}
 		// Per-content-block state. Anthropic emits content_block_start →
 		// content_block_delta* → content_block_stop for each block in a turn;
 		// we accumulate text/tool_use/thinking across those events and emit a
@@ -160,32 +176,18 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				return
 			}
 
-			if ss.Usage != nil {
-				totalTokens := ss.Usage.InputTokens + ss.Usage.OutputTokens
-				stream <- &gen.StreamResponse{
-					Type: gen.TYPE_METADATA,
-					Metadata: &models.Metadata{
-						Model:          g.request.Model.Name,
-						InputTokens:    ss.Usage.InputTokens,
-						OutputTokens:   ss.Usage.OutputTokens,
-						ThinkingTokens: 0,
-						TotalTokens:    totalTokens,
-					},
-				}
-
+			// message_start names the model the request resolved to, which is
+			// more precise than the requested name (aliases like "-latest").
+			if ss.Message != nil && ss.Message.Model != "" {
+				usageModel = ss.Message.Model
 			}
-			if ss.Message != nil && (ss.Message.Usage.InputTokens != 0 || ss.Message.Usage.OutputTokens != 0) {
-				totalTokens := ss.Message.Usage.InputTokens + ss.Message.Usage.OutputTokens
-				stream <- &gen.StreamResponse{
-					Type: gen.TYPE_METADATA,
-					Metadata: &models.Metadata{
-						Model:          ss.Message.Model,
-						InputTokens:    ss.Message.Usage.InputTokens,
-						OutputTokens:   ss.Message.Usage.OutputTokens,
-						ThinkingTokens: 0,
-						TotalTokens:    totalTokens,
-					},
-				}
+			if ss.Usage != nil {
+				usage.mergeMax(*ss.Usage)
+				emitUsage()
+			}
+			if ss.Message != nil && (ss.Message.Usage.inputTokens() != 0 || ss.Message.Usage.OutputTokens != 0) {
+				usage.mergeMax(ss.Message.Usage)
+				emitUsage()
 			}
 
 			if ss.Message != nil {
@@ -392,11 +394,13 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	res := &gen.Response{
 		Metadata: models.Metadata{
-			Model:          g.request.Model.FQN(),
-			InputTokens:    respModel.Usage.InputTokens,
-			OutputTokens:   respModel.Usage.OutputTokens,
-			ThinkingTokens: 0,
-			TotalTokens:    respModel.Usage.InputTokens + respModel.Usage.OutputTokens,
+			Model:            g.request.Model.FQN(),
+			InputTokens:      respModel.Usage.inputTokens(),
+			OutputTokens:     respModel.Usage.OutputTokens,
+			ThinkingTokens:   0,
+			CachedTokens:     respModel.Usage.CacheReadInputTokens,
+			CacheWriteTokens: respModel.Usage.CacheCreationInputTokens,
+			TotalTokens:      respModel.Usage.inputTokens() + respModel.Usage.OutputTokens,
 		},
 	}
 	for _, c := range respModel.Content {
@@ -434,6 +438,45 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 
 	return res, nil
 }
+func usageToMetadata(model string, usage anthropicUsage) *models.Metadata {
+	return &models.Metadata{
+		Model:            model,
+		InputTokens:      usage.inputTokens(),
+		OutputTokens:     usage.OutputTokens,
+		ThinkingTokens:   0,
+		CachedTokens:     usage.CacheReadInputTokens,
+		CacheWriteTokens: usage.CacheCreationInputTokens,
+		TotalTokens:      usage.inputTokens() + usage.OutputTokens,
+	}
+}
+
+// setCacheBreakpoints marks the reusable prefix of the request for caching.
+// Anthropic caches everything up to an explicit breakpoint, in the request order
+// tools → system → messages, so one breakpoint at the end of each of those three
+// segments (of the four allowed) covers the whole prefix. The breakpoint on the
+// conversation moves with it, which is what makes a growing conversation cheap:
+// each turn reads the prefix cached by the previous turn and extends it.
+func setCacheBreakpoints(model *request) {
+	if n := len(model.Tools); n > 0 {
+		model.Tools[n-1].CacheControl = ephemeralCache()
+	}
+	if n := len(model.System); n > 0 {
+		model.System[n-1].CacheControl = ephemeralCache()
+	}
+	if n := len(model.Messages); n > 0 {
+		// cache_control is not accepted on thinking blocks, so anchor the
+		// breakpoint on the last block of the turn that can carry one.
+		content := model.Messages[n-1].Content
+		for i := len(content) - 1; i >= 0; i-- {
+			if content[i].Type == "thinking" || content[i].Type == "redacted_thinking" {
+				continue
+			}
+			content[i].CacheControl = ephemeralCache()
+			break
+		}
+	}
+}
+
 func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, request, error) {
 	var pdfBeta bool
 
@@ -446,9 +489,12 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 		Temperature:   g.request.Temperature,
 		TopP:          g.request.TopP,
 		TopK:          g.request.TopK,
-		System:        g.request.SystemPrompt,
 		StopSequences: g.request.StopSequences,
 		toolBelt:      make(map[string]*tools.Tool),
+	}
+
+	if g.request.SystemPrompt != "" {
+		model.System = []reqSystemBlock{{Type: "text", Text: g.request.SystemPrompt}}
 	}
 
 	if g.request.MaxTokens != nil && *g.request.MaxTokens > 0 {
@@ -596,6 +642,10 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 				}
 			}
 		}
+	}
+
+	if g.request.PromptCache {
+		setCacheBreakpoints(&model)
 	}
 
 	reqdata, err := json.Marshal(model)

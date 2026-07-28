@@ -211,6 +211,28 @@ func (b *Generator) IncludeThinkingParts(thinkingParts bool) *Generator {
 	return bb
 }
 
+// PromptCache asks the provider to cache the reusable prefix of the request -
+// system prompt, tool definitions and the conversation so far - which makes
+// multi-turn and tool-calling loops substantially cheaper, since each turn
+// resends the whole history.
+//
+// Providers differ in what this does. Anthropic requires explicit cache
+// breakpoints, so bellman places them (on the tool definitions, the system
+// prompt and the end of the conversation) only when this is enabled. OpenAI and
+// VertexAI cache eligible prefixes automatically, so enabling it changes
+// nothing for them. Either way, cache hits are reported as
+// Metadata.CachedTokens and cache writes as Metadata.CacheWriteTokens.
+//
+// Providers only cache prefixes above a model-dependent minimum length and
+// evict them after a few minutes of inactivity; below that the request behaves
+// as if caching were off.
+func (b *Generator) PromptCache(promptCache bool) *Generator {
+	bb := b.clone()
+	bb.Request.PromptCache = promptCache
+
+	return bb
+}
+
 type Option func(generator *Generator) *Generator
 
 func WithRequest(req Request) Option {
@@ -306,5 +328,11 @@ func WithThinkingBudget(thinkingBudget int) Option {
 func WithThinkingParts(thinkingParts bool) Option {
 	return func(g *Generator) *Generator {
 		return g.IncludeThinkingParts(thinkingParts)
+	}
+}
+
+func WithPromptCache(promptCache bool) Option {
+	return func(g *Generator) *Generator {
+		return g.PromptCache(promptCache)
 	}
 }

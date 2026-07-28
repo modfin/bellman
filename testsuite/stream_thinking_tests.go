@@ -84,13 +84,9 @@ func testStreamThinkingTools(g *gen.Generator) func(tester) {
 
 			case gen.TYPE_METADATA:
 				if r.Metadata != nil {
-					metadata.InputTokens += r.Metadata.InputTokens
-					metadata.OutputTokens += r.Metadata.OutputTokens
-					metadata.ThinkingTokens += r.Metadata.ThinkingTokens
-					metadata.TotalTokens += r.Metadata.TotalTokens
-					if r.Metadata.Model != "" {
-						metadata.Model = r.Metadata.Model
-					}
+					// Frames are running totals rather than deltas, so the last
+					// one is the complete accounting for the stream.
+					metadata = *r.Metadata
 				}
 
 			case gen.TYPE_ERROR:
@@ -118,6 +114,11 @@ func testStreamThinkingTools(g *gen.Generator) func(tester) {
 
 		if metadata.OutputTokens == 0 && metadata.TotalTokens == 0 {
 			t.Fatalf("expected non-zero output/total tokens in metadata, got %+v", metadata)
+		}
+		// The final frame must account for the whole stream, input included.
+		// Providers that receive usage piecemeal have to accumulate it.
+		if metadata.InputTokens == 0 {
+			t.Fatalf("expected the final metadata frame to report input tokens, got %+v", metadata)
 		}
 		if metadata.Model == "" {
 			t.Fatalf("expected model name in metadata")

@@ -627,6 +627,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"token-input", response.Metadata.InputTokens,
 				"token-thinking", response.Metadata.ThinkingTokens,
 				"token-output", response.Metadata.OutputTokens,
+				"token-cached", response.Metadata.CachedTokens,
+				"token-cache-write", response.Metadata.CacheWriteTokens,
 				"token-total", response.Metadata.TotalTokens,
 			)
 
@@ -636,6 +638,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "input").Add(float64(response.Metadata.InputTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "thinking").Add(float64(response.Metadata.ThinkingTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "output").Add(float64(response.Metadata.OutputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "cached").Add(float64(response.Metadata.CachedTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "cache_write").Add(float64(response.Metadata.CacheWriteTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -774,6 +778,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"token-input", tokenMetadata.InputTokens,
 				"token-thinking", tokenMetadata.ThinkingTokens,
 				"token-output", tokenMetadata.OutputTokens,
+				"token-cached", tokenMetadata.CachedTokens,
+				"token-cache-write", tokenMetadata.CacheWriteTokens,
 				"token-total", totalTokens,
 			)
 
@@ -783,6 +789,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "input").Add(float64(tokenMetadata.InputTokens))
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "thinking").Add(float64(tokenMetadata.ThinkingTokens))
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "output").Add(float64(tokenMetadata.OutputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "cached").Add(float64(tokenMetadata.CachedTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "cache_write").Add(float64(tokenMetadata.CacheWriteTokens))
 		})
 	}
 }

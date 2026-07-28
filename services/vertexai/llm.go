@@ -317,6 +317,7 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 						InputTokens:    ss.UsageMetadata.PromptTokenCount,
 						OutputTokens:   outputTokens,
 						ThinkingTokens: thinkingTokens,
+						CachedTokens:   ss.UsageMetadata.CachedContentTokenCount,
 						TotalTokens:    ss.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens,
 					},
 				}
@@ -403,16 +404,28 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	res.Metadata.InputTokens = respModel.UsageMetadata.PromptTokenCount
 	res.Metadata.OutputTokens = outputTokens
 	res.Metadata.ThinkingTokens = thinkingTokens
+	res.Metadata.CachedTokens = respModel.UsageMetadata.CachedContentTokenCount
 	res.Metadata.TotalTokens = respModel.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens
+	callIDBase := time.Now().UnixNano()
 	for _, c := range respModel.Candidates {
-		for _, p := range c.Content.Parts {
+		// Indexes into res.Turn for this candidate's first tool call and most
+		// recent text/thinking block, so a trailing closure signature can be
+		// attached to the right block. Mirrors the handling in Stream().
+		firstCall := -1
+		lastBlock := -1
+		for idx, p := range c.Content.Parts {
 			var sig []byte
 			if p.ThoughtSignature != nil && *p.ThoughtSignature != "" {
 				sig = []byte(*p.ThoughtSignature)
 			}
 			if p.Thought != nil && *p.Thought {
 				res.Thinking = append(res.Thinking, p.Text)
-				res.Turn = append(res.Turn, prompt.AsThinking(p.Text, sig, ""))
+				// Without a signature a thinking block can't be replayed, so it
+				// is reported as visible thinking but kept out of Turn.
+				if len(sig) > 0 {
+					res.Turn = append(res.Turn, prompt.AsThinking(p.Text, sig, ""))
+					lastBlock = len(res.Turn) - 1
+				}
 				continue
 			}
 			if len(p.Text) > 0 {
@@ -422,22 +435,49 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 				// part as its own assistant prompt so the signature travels with
 				// the text that was signed.
 				res.Turn = append(res.Turn, prompt.AsAssistantWithReplay(p.Text, sig))
+				lastBlock = len(res.Turn) - 1
+				continue
 			}
 
-			if len(p.Text) == 0 && len(p.FunctionCall.Name) > 0 { // Tool calls
+			if len(p.FunctionCall.Name) > 0 { // Tool calls
 				f := p.FunctionCall
 				arg, err := json.Marshal(f.Args)
 				if err != nil {
 					return nil, fmt.Errorf("could not marshal google request, %w", err)
 				}
+				// Gemini does not hand out tool call ids; synthesize one so a
+				// tool response can be paired with the call it answers even when
+				// the same tool is called twice in one turn.
+				id := fmt.Sprintf("%d-%d", callIDBase, idx)
 				res.Tools = append(res.Tools, tools.Call{
+					ID:       id,
 					Name:     f.Name,
 					Argument: arg,
 					Ref:      model.toolBelt[f.Name],
 				})
-				res.Turn = append(res.Turn, prompt.AsToolCallWithReplay("", f.Name, arg, sig))
+				res.Turn = append(res.Turn, prompt.AsToolCallWithReplay(id, f.Name, arg, sig))
+				if firstCall < 0 {
+					firstCall = len(res.Turn) - 1
+				}
+				continue
 			}
 
+			// Closure signature part: Gemini may return the turn's
+			// thoughtSignature in a part with empty text and no functionCall.
+			// Per Gemini's docs the closure signature attaches to the first tool
+			// call of the turn; otherwise, fall back to the last text/thinking
+			// block, or keep the bytes as a standalone thinking block.
+			if len(sig) == 0 {
+				continue
+			}
+			switch {
+			case firstCall >= 0:
+				res.Turn[firstCall].Replay = sig
+			case lastBlock >= 0:
+				res.Turn[lastBlock].Replay = sig
+			default:
+				res.Turn = append(res.Turn, prompt.AsThinking("", sig, ""))
+			}
 		}
 	}
 
@@ -586,17 +626,16 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 			}
 			appendPart("model", part)
 		case prompt.ThinkingRole:
-			if p.Thinking == nil {
+			// A thought part the API can't validate against a signature is not
+			// replayable, so drop it rather than send it back.
+			if p.Thinking == nil || len(p.Replay) == 0 {
 				continue
 			}
-			part := genRequestContentPart{
-				Text:    p.Thinking.Text,
-				Thought: true,
-			}
-			if len(p.Replay) > 0 {
-				part.ThoughtSignature = string(p.Replay)
-			}
-			appendPart("model", part)
+			appendPart("model", genRequestContentPart{
+				Text:             p.Thinking.Text,
+				Thought:          true,
+				ThoughtSignature: string(p.Replay),
+			})
 		default: // prompt.UserRole, prompt.AssistantRole
 			role := "user"
 			if p.Role == prompt.AssistantRole {
