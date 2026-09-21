@@ -340,24 +340,26 @@ var GenModel_gpt4_0613 = gen.Model{
 
 // https://platform.openai.com/docs/models#embeddings
 
+// OpenAI's current embedding generation is the text-embedding-3 series; no
+// newer embedding model has been released (checked September 2026).
 var EmbedModel_text3_small = embed.Model{
 	Provider:         Provider,
 	Name:             "text-embedding-3-small",
-	Description:      "Most capable embedding Model for both english and non-english tasks",
+	Description:      "Small, cost-efficient third-generation embedding model with increased performance over text-embedding-ada-002; supports shortening the output dimensions",
 	InputMaxTokens:   8191,
 	OutputDimensions: 1536,
 }
 var EmbedModel_text3_large = embed.Model{
 	Provider:         Provider,
 	Name:             "text-embedding-3-large",
-	Description:      "Increased performance over 2nd generation ada embedding Model",
+	Description:      "Most capable embedding model for both English and non-English tasks; supports shortening the output dimensions",
 	InputMaxTokens:   8191,
 	OutputDimensions: 3072,
 }
 var EmbedModel_text_ada_002 = embed.Model{
 	Provider:         Provider,
 	Name:             "text-embedding-ada-002",
-	Description:      "Most capable 2nd generation embedding Model, replacing 16 first generation models",
+	Description:      "Legacy second-generation embedding model; prefer text-embedding-3-small or text-embedding-3-large",
 	InputMaxTokens:   8191,
 	OutputDimensions: 1536,
 }

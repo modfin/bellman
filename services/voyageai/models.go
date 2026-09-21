@@ -11,6 +11,15 @@ const Provider = "VoyageAI"
 
 // https://docs.voyageai.com/docs/embeddings
 
+// https://docs.voyageai.com/docs/contextualized-chunk-embeddings
+var EmbedModel_voyage_context_4 = embed.Model{
+	Provider:         Provider,
+	Name:             "voyage-context-4",
+	InputMaxTokens:   32000,
+	OutputDimensions: 1024,
+	Description:      "Contextualized chunk embeddings, used with EmbedDocument. Successor of voyage-context-3 with higher retrieval quality; 32k tokens per chunk, 120k tokens per document.",
+}
+
 var EmbedModel_voyage_context_3 = embed.Model{
 	Provider:         Provider,
 	Name:             "voyage-context-3",
@@ -140,6 +149,13 @@ var EmbedModel_voyage_2 = embed.Model{
 }
 
 var EmbedModels = map[string]embed.Model{
+	EmbedModel_voyage_context_4.Name:      EmbedModel_voyage_context_4,
+	EmbedModel_voyage_context_3.Name:      EmbedModel_voyage_context_3,
+	EmbedModel_voyage_4_large.Name:        EmbedModel_voyage_4_large,
+	EmbedModel_voyage_4.Name:              EmbedModel_voyage_4,
+	EmbedModel_voyage_4_lite.Name:         EmbedModel_voyage_4_lite,
+	EmbedModel_voyage_3_5.Name:            EmbedModel_voyage_3_5,
+	EmbedModel_voyage_3_5_lite.Name:       EmbedModel_voyage_3_5_lite,
 	EmbedModel_voyage_3_large.Name:        EmbedModel_voyage_3_large,
 	EmbedModel_voyage_3.Name:              EmbedModel_voyage_3,
 	EmbedModel_voyage_3_lite.Name:         EmbedModel_voyage_3_lite,
