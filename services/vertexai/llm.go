@@ -313,11 +313,12 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 				stream <- &gen.StreamResponse{
 					Type: gen.TYPE_METADATA,
 					Metadata: &models.Metadata{
-						Model:          ss.ModelVersion,
-						InputTokens:    ss.UsageMetadata.PromptTokenCount,
-						OutputTokens:   outputTokens,
-						ThinkingTokens: thinkingTokens,
-						TotalTokens:    ss.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens,
+						Model:                ss.ModelVersion,
+						InputTokens:          ss.UsageMetadata.PromptTokenCount,
+						CacheReadInputTokens: ss.UsageMetadata.CachedContentTokenCount,
+						OutputTokens:         outputTokens,
+						ThinkingTokens:       thinkingTokens,
+						TotalTokens:          ss.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens,
 					},
 				}
 			}
@@ -401,6 +402,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 	thinkingTokens := respModel.UsageMetadata.ThoughtsTokenCount
 	outputTokens := respModel.UsageMetadata.CandidatesTokenCount
 	res.Metadata.InputTokens = respModel.UsageMetadata.PromptTokenCount
+	res.Metadata.CacheReadInputTokens = respModel.UsageMetadata.CachedContentTokenCount
 	res.Metadata.OutputTokens = outputTokens
 	res.Metadata.ThinkingTokens = thinkingTokens
 	res.Metadata.TotalTokens = respModel.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens
@@ -445,6 +447,8 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"token-input", res.Metadata.InputTokens,
+		"token-cache-read-input", res.Metadata.CacheReadInputTokens,
+		"token-cache-creation-input", res.Metadata.CacheCreationInputTokens,
 		"token-output", res.Metadata.OutputTokens,
 		"token-thinking", res.Metadata.ThinkingTokens,
 		"token-total", res.Metadata.TotalTokens,

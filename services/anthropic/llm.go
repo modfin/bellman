@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/tools"
@@ -99,6 +98,8 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		}
 
 		var role string
+		var usage anthropicUsage
+		usageModel := g.request.Model.Name
 		// Per-content-block state. Anthropic emits content_block_start →
 		// content_block_delta* → content_block_stop for each block in a turn;
 		// we accumulate text/tool_use/thinking across those events and emit a
@@ -160,32 +161,16 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				return
 			}
 
-			if ss.Usage != nil {
-				totalTokens := ss.Usage.InputTokens + ss.Usage.OutputTokens
-				stream <- &gen.StreamResponse{
-					Type: gen.TYPE_METADATA,
-					Metadata: &models.Metadata{
-						Model:          g.request.Model.Name,
-						InputTokens:    ss.Usage.InputTokens,
-						OutputTokens:   ss.Usage.OutputTokens,
-						ThinkingTokens: 0,
-						TotalTokens:    totalTokens,
-					},
+			if ss.Message != nil || ss.Usage != nil {
+				if ss.Message != nil {
+					usage.merge(ss.Message.Usage)
+					usageModel = ss.Message.Model
 				}
-
-			}
-			if ss.Message != nil && (ss.Message.Usage.InputTokens != 0 || ss.Message.Usage.OutputTokens != 0) {
-				totalTokens := ss.Message.Usage.InputTokens + ss.Message.Usage.OutputTokens
-				stream <- &gen.StreamResponse{
-					Type: gen.TYPE_METADATA,
-					Metadata: &models.Metadata{
-						Model:          ss.Message.Model,
-						InputTokens:    ss.Message.Usage.InputTokens,
-						OutputTokens:   ss.Message.Usage.OutputTokens,
-						ThinkingTokens: 0,
-						TotalTokens:    totalTokens,
-					},
+				if ss.Usage != nil {
+					usage.merge(*ss.Usage)
 				}
+				metadata := usage.metadata(usageModel)
+				stream <- &gen.StreamResponse{Type: gen.TYPE_METADATA, Metadata: &metadata}
 			}
 
 			if ss.Message != nil {
@@ -391,13 +376,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 	}
 
 	res := &gen.Response{
-		Metadata: models.Metadata{
-			Model:          g.request.Model.FQN(),
-			InputTokens:    respModel.Usage.InputTokens,
-			OutputTokens:   respModel.Usage.OutputTokens,
-			ThinkingTokens: 0,
-			TotalTokens:    respModel.Usage.InputTokens + respModel.Usage.OutputTokens,
-		},
+		Metadata: respModel.Usage.metadata(g.request.Model.FQN()),
 	}
 	for _, c := range respModel.Content {
 		switch c.Type {
@@ -428,6 +407,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"token-input", res.Metadata.InputTokens,
+		"token-cache-read-input", res.Metadata.CacheReadInputTokens,
+		"token-cache-creation-input", res.Metadata.CacheCreationInputTokens,
 		"token-output", res.Metadata.OutputTokens,
 		"token-total", res.Metadata.TotalTokens,
 	)

@@ -386,6 +386,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"token-input", res.Metadata.InputTokens,
+		"token-cache-read-input", res.Metadata.CacheReadInputTokens,
+		"token-cache-creation-input", res.Metadata.CacheCreationInputTokens,
 		"token-output", res.Metadata.OutputTokens,
 		"token-thinking", res.Metadata.ThinkingTokens,
 		"token-total", res.Metadata.TotalTokens,
@@ -401,11 +403,12 @@ func responseToMetadata(r *openaiResponse) *models.Metadata {
 		output = 0
 	}
 	m := &models.Metadata{
-		Model:          r.Model,
-		InputTokens:    r.Usage.InputTokens,
-		OutputTokens:   output,
-		ThinkingTokens: thinking,
-		TotalTokens:    r.Usage.TotalTokens,
+		Model:                r.Model,
+		InputTokens:          r.Usage.InputTokens,
+		CacheReadInputTokens: r.Usage.InputTokensDetails.CachedTokens,
+		OutputTokens:         output,
+		ThinkingTokens:       thinking,
+		TotalTokens:          r.Usage.TotalTokens,
 	}
 	if r.ServiceTier != nil {
 		m.Other = map[string]any{"service_tier": *r.ServiceTier}

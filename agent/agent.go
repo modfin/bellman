@@ -29,6 +29,8 @@ func Run[T any](maxDepth int, parallelism int, g *gen.Generator, prompts ...prom
 			return nil, fmt.Errorf("failed to prompt: %w, at depth %d", err, i)
 		}
 		promptMetadata.InputTokens += resp.Metadata.InputTokens
+		promptMetadata.CacheReadInputTokens += resp.Metadata.CacheReadInputTokens
+		promptMetadata.CacheCreationInputTokens += resp.Metadata.CacheCreationInputTokens
 		promptMetadata.ThinkingTokens += resp.Metadata.ThinkingTokens
 		promptMetadata.OutputTokens += resp.Metadata.OutputTokens
 		promptMetadata.TotalTokens += resp.Metadata.TotalTokens
@@ -132,6 +134,8 @@ func RunWithToolsOnly[T any](maxDepth int, parallelism int, g *gen.Generator, pr
 			return nil, fmt.Errorf("failed to prompt: %w, at depth %d", err, i)
 		}
 		promptMetadata.InputTokens += resp.Metadata.InputTokens
+		promptMetadata.CacheReadInputTokens += resp.Metadata.CacheReadInputTokens
+		promptMetadata.CacheCreationInputTokens += resp.Metadata.CacheCreationInputTokens
 		promptMetadata.ThinkingTokens += resp.Metadata.ThinkingTokens
 		promptMetadata.OutputTokens += resp.Metadata.OutputTokens
 		promptMetadata.TotalTokens += resp.Metadata.TotalTokens

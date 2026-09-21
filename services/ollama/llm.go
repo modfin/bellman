@@ -205,6 +205,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"request", reqc,
 		"model", g.request.Model.FQN(),
 		"token-input", res.Metadata.InputTokens,
+		"token-cache-read-input", res.Metadata.CacheReadInputTokens,
+		"token-cache-creation-input", res.Metadata.CacheCreationInputTokens,
 		"token-output", res.Metadata.OutputTokens,
 		"token-total", res.Metadata.TotalTokens,
 	)

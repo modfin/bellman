@@ -543,7 +543,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 	var tokensCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:        "bellman_gen_token_count",
-			Help:        "Number of token processed by model and key",
+			Help:        "Number of tokens processed by model and key; cache_read_input and cache_creation_input are subsets of input",
 			ConstLabels: nil,
 		},
 		[]string{"model", "key_id", "key_name", "type"},
@@ -561,7 +561,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 	var streamTokensCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:        "bellman_gen_stream_token_count",
-			Help:        "Number of token processed by model and key in streaming mode",
+			Help:        "Number of tokens processed by model and key in streaming mode; cache_read_input and cache_creation_input are subsets of input",
 			ConstLabels: nil,
 		},
 		[]string{"model", "key_id", "key_name", "type"},
@@ -625,6 +625,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"key", keyName,
 				"model", req.Model.FQN(),
 				"token-input", response.Metadata.InputTokens,
+				"token-cache-read-input", response.Metadata.CacheReadInputTokens,
+				"token-cache-creation-input", response.Metadata.CacheCreationInputTokens,
 				"token-thinking", response.Metadata.ThinkingTokens,
 				"token-output", response.Metadata.OutputTokens,
 				"token-total", response.Metadata.TotalTokens,
@@ -634,6 +636,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "total").Add(float64(response.Metadata.TotalTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "input").Add(float64(response.Metadata.InputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "cache_read_input").Add(float64(response.Metadata.CacheReadInputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "cache_creation_input").Add(float64(response.Metadata.CacheCreationInputTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "thinking").Add(float64(response.Metadata.ThinkingTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "output").Add(float64(response.Metadata.OutputTokens))
 
@@ -772,6 +776,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"key", keyName,
 				"model", req.Model.FQN(),
 				"token-input", tokenMetadata.InputTokens,
+				"token-cache-read-input", tokenMetadata.CacheReadInputTokens,
+				"token-cache-creation-input", tokenMetadata.CacheCreationInputTokens,
 				"token-thinking", tokenMetadata.ThinkingTokens,
 				"token-output", tokenMetadata.OutputTokens,
 				"token-total", totalTokens,
@@ -781,6 +787,8 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			streamReqCounter.WithLabelValues(modelName, apiKeyId, keyName).Inc()
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "total").Add(float64(totalTokens))
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "input").Add(float64(tokenMetadata.InputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "cache_read_input").Add(float64(tokenMetadata.CacheReadInputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "cache_creation_input").Add(float64(tokenMetadata.CacheCreationInputTokens))
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "thinking").Add(float64(tokenMetadata.ThinkingTokens))
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "output").Add(float64(tokenMetadata.OutputTokens))
 		})
