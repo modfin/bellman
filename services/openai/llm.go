@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"sync/atomic"
 
+	"github.com/modfin/bellman/internal/sse"
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
@@ -89,23 +90,26 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		for scanner.Scan() {
 			line := scanner.Bytes()
 
-			if len(line) == 0 {
+			kind, payload := sse.Classify(line)
+			if kind == sse.KindIgnore {
 				continue
 			}
-			if bytes.HasPrefix(line, []byte("event: ")) {
-				continue
-			}
-			if bytes.HasPrefix(line, []byte(":")) {
-				continue
-			}
-			if !bytes.HasPrefix(line, []byte("data: ")) {
+			if kind == sse.KindForeign {
+				// The scanner owns the buffered body, so collect the rest of
+				// the foreign document line by line.
+				body := append(append([]byte(nil), line...), '\n')
+				for len(body) < sse.MaxForeignBody && scanner.Scan() {
+					body = append(append(body, scanner.Bytes()...), '\n')
+				}
+				msg := sse.Describe(body)
+				log.Printf("non-sse content in stream: %s", msg)
 				stream <- &gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
-					Content: "expected 'data' header from sse",
+					Content: msg,
 				}
 				break
 			}
-			line = line[6:]
+			line = payload
 
 			if bytes.Equal(line, []byte("[DONE]")) {
 				break

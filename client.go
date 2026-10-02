@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"sync/atomic"
 
+	"github.com/modfin/bellman/internal/sse"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
@@ -470,17 +471,24 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				break // Exit the loop on any other error
 			}
 
-			if len(line) == 0 {
+			kind, payload := sse.Classify(line)
+			if kind == sse.KindIgnore {
 				continue
 			}
-			if !bytes.HasPrefix(line, []byte("data: ")) {
+			if kind == sse.KindForeign {
+				// bellmand only ever writes data events, so anything else
+				// comes from a proxy or load balancer between us (an HTML
+				// 502 page, a raw error document). Drain it so the message
+				// says what arrived rather than just that it was not SSE.
+				msg := sse.Describe(sse.Drain(line, reader))
+				g.bellman.log("[gen] non-sse content in stream", "request", reqc, "error", msg)
 				stream <- &gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
-					Content: "expected 'data' header from sse",
+					Content: msg,
 				}
 				break
 			}
-			line = line[6:] // removing header
+			line = payload
 
 			if bytes.Equal(line, []byte("[DONE]")) {
 				g.bellman.log("[gen] stream completed", "request", reqc)

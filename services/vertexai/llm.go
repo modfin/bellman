@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/modfin/bellman/internal/sse"
 	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
@@ -150,43 +151,103 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 			active = nil
 		}
 
+		// emitUsage forwards the usageMetadata frame. Gemini may send it on
+		// a chunk of its own with no candidates, so it is handled before the
+		// candidate checks below.
+		emitUsage := func(ss *geminiStreamingResponse) {
+			if ss.UsageMetadata.TotalTokenCount == 0 {
+				return
+			}
+			thinkingTokens := ss.UsageMetadata.ThoughtsTokenCount
+			outputTokens := ss.UsageMetadata.CandidatesTokenCount
+			stream <- &gen.StreamResponse{
+				Type: gen.TYPE_METADATA,
+				Metadata: &models.Metadata{
+					Model:                ss.ModelVersion,
+					InputTokens:          ss.UsageMetadata.PromptTokenCount,
+					CacheReadInputTokens: ss.UsageMetadata.CachedContentTokenCount,
+					OutputTokens:         outputTokens,
+					ThinkingTokens:       thinkingTokens,
+					TotalTokens:          ss.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens,
+				},
+			}
+		}
+
 		for {
 			line, err := readLine()
 			if err != nil {
-				// If there's an error, check if it's EOF (end of stream)
 				if errors.Is(err, http.ErrBodyReadAfterClose) {
 					log.Println("SSE stream closed by server (Read after close).")
 					break
 				}
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				// A connection cut mid-stream (unexpected EOF, reset) must not
+				// pass as a complete answer: the consumer would otherwise keep
+				// the truncated text.
 				log.Printf("Error reading from stream: %v", err)
-				break // Exit the loop on any other error
-			}
-
-			if len(line) == 0 {
-				continue
-			}
-			if !bytes.HasPrefix(line, []byte("data: ")) {
 				stream <- &gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
-					Content: "expected 'data' header from sse",
+					Content: fmt.Sprintf("error reading stream: %v", err),
 				}
 				break
 			}
-			line = line[6:] // removing header
 
-			//fmt.Println("line", string(line))
+			kind, payload := sse.Classify(line)
+			if kind == sse.KindIgnore {
+				continue
+			}
+			if kind == sse.KindForeign {
+				// Not SSE: Gemini writes a raw, usually pretty-printed,
+				// {"error": {...}} document into the stream when it fails
+				// mid-response. Collect the rest so the message names the
+				// actual status instead of a bare framing complaint.
+				msg := sse.Describe(sse.Drain(line, reader))
+				log.Printf("non-sse content in stream: %s", msg)
+				stream <- &gen.StreamResponse{
+					Type:    gen.TYPE_ERROR,
+					Content: msg,
+				}
+				break
+			}
+			line = payload
+
 			var ss geminiStreamingResponse
 			err = json.Unmarshal(line, &ss)
 			if err != nil {
 				log.Printf("could not unmarshal chunk, %v", err)
+				stream <- &gen.StreamResponse{
+					Type:    gen.TYPE_ERROR,
+					Content: fmt.Sprintf("could not unmarshal stream chunk: %v", err),
+				}
 				break
 			}
 
-			if len(ss.Candidates) == 0 {
+			if ss.Error != nil {
 				stream <- &gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
-					Content: "there where no candidates in response",
+					Content: fmt.Sprintf("upstream error %d %s: %s", ss.Error.Code, ss.Error.Status, ss.Error.Message),
 				}
+				break
+			}
+
+			emitUsage(&ss)
+
+			if len(ss.Candidates) == 0 {
+				if ss.PromptFeedback != nil && ss.PromptFeedback.BlockReason != "" {
+					msg := "prompt blocked: " + ss.PromptFeedback.BlockReason
+					if ss.PromptFeedback.BlockReasonMessage != "" {
+						msg += ": " + ss.PromptFeedback.BlockReasonMessage
+					}
+					stream <- &gen.StreamResponse{
+						Type:    gen.TYPE_ERROR,
+						Content: msg,
+					}
+					break
+				}
+				// Usage-only or otherwise empty chunk; nothing to render.
+				continue
 			}
 			candidate := ss.Candidates[0]
 
@@ -306,21 +367,6 @@ func (g *generator) Stream(prompts ...prompt.Prompt) (<-chan *gen.StreamResponse
 					}
 				}
 
-			}
-			if ss.UsageMetadata.TotalTokenCount > 0 {
-				thinkingTokens := ss.UsageMetadata.ThoughtsTokenCount
-				outputTokens := ss.UsageMetadata.CandidatesTokenCount
-				stream <- &gen.StreamResponse{
-					Type: gen.TYPE_METADATA,
-					Metadata: &models.Metadata{
-						Model:                ss.ModelVersion,
-						InputTokens:          ss.UsageMetadata.PromptTokenCount,
-						CacheReadInputTokens: ss.UsageMetadata.CachedContentTokenCount,
-						OutputTokens:         outputTokens,
-						ThinkingTokens:       thinkingTokens,
-						TotalTokens:          ss.UsageMetadata.PromptTokenCount + outputTokens + thinkingTokens,
-					},
-				}
 			}
 
 			if len(candidate.FinishReason) > 0 {

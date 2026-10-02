@@ -19,10 +19,70 @@ const Provider = "OpenAI"
 //		"owned_by": "system"
 //		}, ....
 
+var GenModel_gpt6_1_sol_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-6.1-sol",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt6_astra_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-6-astra",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt6_sol_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-6-sol",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt6_luna_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-6-luna",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_6_sol_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.6-sol",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_6_terra_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.6-terra",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_6_luna_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.6-luna",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_5_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.5",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_5_pro_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.5-pro",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_4_pro_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.4-pro",
+	InputMaxToken:  1_050_000,
+	OutputMaxToken: 128_000,
+}
 var GenModel_gpt5_4_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.4",
-	InputMaxToken:  1_000_000,
+	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
 }
 var GenModel_gpt5_4_mini_latest = gen.Model{
@@ -43,15 +103,63 @@ var GenModel_gpt5_3_codex_latest = gen.Model{
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
 }
+var GenModel_gpt5_2_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.2",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_2_pro_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.2-pro",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_2_codex_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.2-codex",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
 var GenModel_gpt5_1_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.1",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
 }
+var GenModel_gpt5_1_codex_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.1-codex",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_1_codex_max_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.1-codex-max",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_1_codex_mini_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5.1-codex-mini",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
 var GenModel_gpt5_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 128_000,
+}
+var GenModel_gpt5_pro_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5-pro",
+	InputMaxToken:  400_000,
+	OutputMaxToken: 272_000,
+}
+var GenModel_gpt5_codex_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gpt-5-codex",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
 }
@@ -221,6 +329,24 @@ var GenModel_o1_mini_240912 = gen.Model{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
+var GenModel_o4_mini_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "o4-mini",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 100_000,
+}
+var GenModel_o3_pro_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "o3-pro",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 100_000,
+}
+var GenModel_o3_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "o3",
+	InputMaxToken:  200_000,
+	OutputMaxToken: 100_000,
+}
 var GenModel_o4_mini_250416 = gen.Model{
 	Provider: Provider,
 	Name:     "o4-mini-2025-04-16",
@@ -371,21 +497,53 @@ var EmbedModels = map[string]embed.Model{
 }
 
 var GenModels = map[string]gen.Model{
-	GenModel_gpt4o_latest.Name:       GenModel_gpt4o_latest,
-	GenModel_gpt4o.Name:              GenModel_gpt4o,
-	GenModel_gpt4o_240806.Name:       GenModel_gpt4o_240806,
-	GenModel_gpt4o_240513.Name:       GenModel_gpt4o_240513,
-	GenModel_gpt4o_mini.Name:         GenModel_gpt4o_mini,
-	GenModel_gpt4o_mini_240718.Name:  GenModel_gpt4o_mini_240718,
-	GenModel_o1_preview.Name:         GenModel_o1_preview,
-	GenModel_o1_preview_240912.Name:  GenModel_o1_preview_240912,
-	GenModel_o1_mini.Name:            GenModel_o1_mini,
-	GenModel_o1_mini_240912.Name:     GenModel_o1_mini_240912,
-	GenModel_gpt4_turbo.Name:         GenModel_gpt4_turbo,
-	GenModel_gpt4_turbo_240409.Name:  GenModel_gpt4_turbo_240409,
-	GenModel_gpt4_turbo_preview.Name: GenModel_gpt4_turbo_preview,
-	GenModel_gpt4_preview_0125.Name:  GenModel_gpt4_preview_0125,
-	GenModel_gpt4_preview_1106.Name:  GenModel_gpt4_preview_1106,
-	GenModel_gpt4.Name:               GenModel_gpt4,
-	GenModel_gpt4_0613.Name:          GenModel_gpt4_0613,
+	GenModel_gpt6_1_sol_latest.Name:        GenModel_gpt6_1_sol_latest,
+	GenModel_gpt6_astra_latest.Name:        GenModel_gpt6_astra_latest,
+	GenModel_gpt6_sol_latest.Name:          GenModel_gpt6_sol_latest,
+	GenModel_gpt6_luna_latest.Name:         GenModel_gpt6_luna_latest,
+	GenModel_gpt5_6_sol_latest.Name:        GenModel_gpt5_6_sol_latest,
+	GenModel_gpt5_6_terra_latest.Name:      GenModel_gpt5_6_terra_latest,
+	GenModel_gpt5_6_luna_latest.Name:       GenModel_gpt5_6_luna_latest,
+	GenModel_gpt5_5_latest.Name:            GenModel_gpt5_5_latest,
+	GenModel_gpt5_5_pro_latest.Name:        GenModel_gpt5_5_pro_latest,
+	GenModel_gpt5_4_latest.Name:            GenModel_gpt5_4_latest,
+	GenModel_gpt5_4_pro_latest.Name:        GenModel_gpt5_4_pro_latest,
+	GenModel_gpt5_4_mini_latest.Name:       GenModel_gpt5_4_mini_latest,
+	GenModel_gpt5_4_nano_latest.Name:       GenModel_gpt5_4_nano_latest,
+	GenModel_gpt5_3_codex_latest.Name:      GenModel_gpt5_3_codex_latest,
+	GenModel_gpt5_2_latest.Name:            GenModel_gpt5_2_latest,
+	GenModel_gpt5_2_pro_latest.Name:        GenModel_gpt5_2_pro_latest,
+	GenModel_gpt5_2_codex_latest.Name:      GenModel_gpt5_2_codex_latest,
+	GenModel_gpt5_1_latest.Name:            GenModel_gpt5_1_latest,
+	GenModel_gpt5_1_codex_latest.Name:      GenModel_gpt5_1_codex_latest,
+	GenModel_gpt5_1_codex_max_latest.Name:  GenModel_gpt5_1_codex_max_latest,
+	GenModel_gpt5_1_codex_mini_latest.Name: GenModel_gpt5_1_codex_mini_latest,
+	GenModel_gpt5_latest.Name:              GenModel_gpt5_latest,
+	GenModel_gpt5_pro_latest.Name:          GenModel_gpt5_pro_latest,
+	GenModel_gpt5_codex_latest.Name:        GenModel_gpt5_codex_latest,
+	GenModel_gpt5_mini_latest.Name:         GenModel_gpt5_mini_latest,
+	GenModel_gpt5_nano_latest.Name:         GenModel_gpt5_nano_latest,
+	GenModel_gpt4_1_latest.Name:            GenModel_gpt4_1_latest,
+	GenModel_gpt4_1_mini_latest.Name:       GenModel_gpt4_1_mini_latest,
+	GenModel_gpt4_1_nano_latest.Name:       GenModel_gpt4_1_nano_latest,
+	GenModel_o4_mini_latest.Name:           GenModel_o4_mini_latest,
+	GenModel_o3_pro_latest.Name:            GenModel_o3_pro_latest,
+	GenModel_o3_latest.Name:                GenModel_o3_latest,
+	GenModel_gpt4o_latest.Name:             GenModel_gpt4o_latest,
+	GenModel_gpt4o.Name:                    GenModel_gpt4o,
+	GenModel_gpt4o_240806.Name:             GenModel_gpt4o_240806,
+	GenModel_gpt4o_240513.Name:             GenModel_gpt4o_240513,
+	GenModel_gpt4o_mini.Name:               GenModel_gpt4o_mini,
+	GenModel_gpt4o_mini_240718.Name:        GenModel_gpt4o_mini_240718,
+	GenModel_o1_preview.Name:               GenModel_o1_preview,
+	GenModel_o1_preview_240912.Name:        GenModel_o1_preview_240912,
+	GenModel_o1_mini.Name:                  GenModel_o1_mini,
+	GenModel_o1_mini_240912.Name:           GenModel_o1_mini_240912,
+	GenModel_gpt4_turbo.Name:               GenModel_gpt4_turbo,
+	GenModel_gpt4_turbo_240409.Name:        GenModel_gpt4_turbo_240409,
+	GenModel_gpt4_turbo_preview.Name:       GenModel_gpt4_turbo_preview,
+	GenModel_gpt4_preview_0125.Name:        GenModel_gpt4_preview_0125,
+	GenModel_gpt4_preview_1106.Name:        GenModel_gpt4_preview_1106,
+	GenModel_gpt4.Name:                     GenModel_gpt4,
+	GenModel_gpt4_0613.Name:                GenModel_gpt4_0613,
 }

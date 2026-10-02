@@ -9,6 +9,42 @@ import (
 
 const Provider = "VertexAI"
 
+var GenModel_gemini_3_8_flash_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.8-flash",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_3_7_flash_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.7-flash",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_3_6_flash_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.6-flash",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_3_5_flash_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.5-flash",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_3_5_flash_lite_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.5-flash-lite",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
+var GenModel_gemini_3_1_flash_lite_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-3.1-flash-lite",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+}
 var GenModel_gemini_2_5_pro_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-2.5-pro",
@@ -28,6 +64,8 @@ var GenModel_gemini_2_5_flash_lite_latest = gen.Model{
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
 }
+
+// Deprecated: gemini-3-pro-preview has been shut down; use GenModel_gemini_3_1_pro_preview.
 var GenModel_gemini_3_pro_preview = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-3-pro-preview",
@@ -128,6 +166,15 @@ var EmbedModels = map[string]embed.Model{
 }
 
 var GenModels = map[string]gen.Model{
-	GenModel_gemini_2_5_pro_latest.Name:   GenModel_gemini_2_5_pro_latest,
-	GenModel_gemini_2_5_flash_latest.Name: GenModel_gemini_2_5_flash_latest,
+	GenModel_gemini_2_5_pro_latest.Name:        GenModel_gemini_2_5_pro_latest,
+	GenModel_gemini_2_5_flash_latest.Name:      GenModel_gemini_2_5_flash_latest,
+	GenModel_gemini_2_5_flash_lite_latest.Name: GenModel_gemini_2_5_flash_lite_latest,
+	GenModel_gemini_3_1_pro_preview.Name:       GenModel_gemini_3_1_pro_preview,
+	GenModel_gemini_3_flash_preview.Name:       GenModel_gemini_3_flash_preview,
+	GenModel_gemini_3_1_flash_lite_latest.Name: GenModel_gemini_3_1_flash_lite_latest,
+	GenModel_gemini_3_5_flash_latest.Name:      GenModel_gemini_3_5_flash_latest,
+	GenModel_gemini_3_5_flash_lite_latest.Name: GenModel_gemini_3_5_flash_lite_latest,
+	GenModel_gemini_3_6_flash_latest.Name:      GenModel_gemini_3_6_flash_latest,
+	GenModel_gemini_3_7_flash_latest.Name:      GenModel_gemini_3_7_flash_latest,
+	GenModel_gemini_3_8_flash_latest.Name:      GenModel_gemini_3_8_flash_latest,
 }

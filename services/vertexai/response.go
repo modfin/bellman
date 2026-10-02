@@ -43,6 +43,21 @@ type geminiStreamingResponse struct {
 	ModelVersion string    `json:"modelVersion"`
 	CreateTime   time.Time `json:"createTime"`
 	ResponseID   string    `json:"responseId"`
+
+	// PromptFeedback is set, without candidates, when the prompt itself was
+	// blocked (safety, recitation, prohibited content).
+	PromptFeedback *struct {
+		BlockReason        string `json:"blockReason"`
+		BlockReasonMessage string `json:"blockReasonMessage"`
+	} `json:"promptFeedback,omitempty"`
+
+	// Error is set when the API reports a failure inside a data event
+	// instead of aborting the HTTP response.
+	Error *struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+	} `json:"error,omitempty"`
 }
 
 type geminiResponse struct {

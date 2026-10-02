@@ -32,7 +32,7 @@ var GenModel_4_0_sonnet_20250514 = gen.Model{
 var GenModel_4_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
 	Description:             "Our smartest model for complex agents and coding",
-	Name:                    "claude-4-5-sonnet",
+	Name:                    "claude-sonnet-4-5",
 	InputMaxToken:           200_000,
 	OutputMaxToken:          64_000,
 	SupportTools:            true,
@@ -52,7 +52,25 @@ var GenModel_4_6_sonnet_latest = gen.Model{
 	Name:                    "claude-sonnet-4-6",
 	Description:             "The best combination of speed and intelligence",
 	InputMaxToken:           1_000_000,
-	OutputMaxToken:          64_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_5_0_sonnet_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-sonnet-5",
+	Description:             "Near-Opus quality on coding and agentic work",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_5_5_sonnet_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-sonnet-5-5",
+	Description:             "Speed and capability for everyday coding, agent, and enterprise work",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
 }
@@ -148,6 +166,24 @@ var GenModel_4_1_opus_20250805 = gen.Model{
 	SupportTools:            false,
 	SupportStructuredOutput: false,
 }
+var GenModel_4_5_opus_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-4-5",
+	Description:             "Premium model combining maximum intelligence with practical performance",
+	InputMaxToken:           200_000,
+	OutputMaxToken:          64_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_4_5_opus_20251101 = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-4-5-20251101",
+	Description:             "Premium model combining maximum intelligence with practical performance",
+	InputMaxToken:           200_000,
+	OutputMaxToken:          64_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
 var GenModel_4_6_opus_latest = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-opus-4-6",
@@ -167,6 +203,52 @@ var GenModel_4_7_opus_latest = gen.Model{
 	SupportStructuredOutput: true,
 }
 
+var GenModel_4_8_opus_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-4-8",
+	Description:             "The most intelligent model for building agents and coding",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_5_0_opus_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-5",
+	Description:             "For complex agentic coding and enterprise work",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_5_5_opus_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-opus-5-5",
+	Description:             "Long-running agentic coding and knowledge work",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_5_0_fable_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-fable-5",
+	Description:             "Most capable tier for the most demanding reasoning and long-horizon agentic work",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+var GenModel_5_1_fable_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-fable-5-1",
+	Description:             "Most capable tier for the most demanding reasoning and long-horizon agentic work",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+}
+
 var GenModels = map[string]gen.Model{
 	GenModel_3_5_sonnet_latest.Name:   GenModel_3_5_sonnet_latest,
 	GenModel_3_5_sonnet_20241022.Name: GenModel_3_5_sonnet_20241022,
@@ -174,4 +256,15 @@ var GenModels = map[string]gen.Model{
 	GenModel_3_5_haiku_20241022.Name:  GenModel_3_5_haiku_20241022,
 	GenModel_4_6_opus_latest.Name:     GenModel_4_6_opus_latest,
 	GenModel_4_6_sonnet_latest.Name:   GenModel_4_6_sonnet_latest,
+	GenModel_4_5_haiku_latest.Name:    GenModel_4_5_haiku_latest,
+	GenModel_4_5_sonnet_latest.Name:   GenModel_4_5_sonnet_latest,
+	GenModel_4_5_opus_latest.Name:     GenModel_4_5_opus_latest,
+	GenModel_4_7_opus_latest.Name:     GenModel_4_7_opus_latest,
+	GenModel_4_8_opus_latest.Name:     GenModel_4_8_opus_latest,
+	GenModel_5_0_sonnet_latest.Name:   GenModel_5_0_sonnet_latest,
+	GenModel_5_5_sonnet_latest.Name:   GenModel_5_5_sonnet_latest,
+	GenModel_5_0_opus_latest.Name:     GenModel_5_0_opus_latest,
+	GenModel_5_5_opus_latest.Name:     GenModel_5_5_opus_latest,
+	GenModel_5_0_fable_latest.Name:    GenModel_5_0_fable_latest,
+	GenModel_5_1_fable_latest.Name:    GenModel_5_1_fable_latest,
 }

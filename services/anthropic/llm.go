@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/modfin/bellman/internal/sse"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/tools"
@@ -128,20 +129,20 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				break // Exit the loop on any other error
 			}
 
-			if len(line) == 0 {
+			kind, payload := sse.Classify(line)
+			if kind == sse.KindIgnore {
 				continue
 			}
-			if bytes.HasPrefix(line, []byte("event: ")) {
-				continue
-			}
-			if !bytes.HasPrefix(line, []byte("data: ")) {
+			if kind == sse.KindForeign {
+				msg := sse.Describe(sse.Drain(line, reader))
+				log.Printf("non-sse content in stream: %s", msg)
 				stream <- &gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
-					Content: "expected 'data' header from sse",
+					Content: msg,
 				}
 				break
 			}
-			line = line[6:] // removing header
+			line = payload
 			if bytes.Equal(line, []byte("[DONE]")) {
 				break // Exit the loop on any other error
 			}
