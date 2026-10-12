@@ -159,6 +159,11 @@ func main() {
 			},
 
 			&cli.StringFlag{
+				Name:    "typesafe-key",
+				EnvVars: []string{"BELLMAN_TYPESAFE_KEY"},
+			},
+
+			&cli.StringFlag{
 				Name:    "omlx-url",
 				EnvVars: []string{"BELLMAN_OMLX_URL"},
 				Usage:   `The url of the oMLX service, eg http://localhost:8000`,
@@ -176,6 +181,10 @@ func main() {
 			&cli.BoolFlag{
 				Name:    "disable-embed-models",
 				EnvVars: []string{"BELLMAN_DISABLE_EMBED_MODELS"},
+			},
+			&cli.BoolFlag{
+				Name:    "disable-decide-models",
+				EnvVars: []string{"BELLMAN_DISABLE_DECIDE_MODELS"},
 			},
 
 			&cli.StringFlag{

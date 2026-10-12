@@ -176,18 +176,27 @@ func (g *OpenAI) Decide(request *decide.Request) (*decide.Response, error) {
 		response.Metadata.Other = map[string]any{"resolved_model": respModel.Model}
 	}
 
+	questions := make(map[string]decide.Question, len(request.Questions))
+	for _, q := range request.Questions {
+		questions[q.Name] = q
+	}
 	for i, da := range respModel.Answers {
 		name := da.Name
 		if name == "" && i < len(request.Questions) {
 			name = request.Questions[i].Name
 		}
+		q, ok := questions[name]
+		if !ok {
+			return nil, fmt.Errorf("answer for unknown question %q in %s response", name, g.provider)
+		}
+		if da.Type != "refusal" && da.Type != string(q.Type) {
+			return nil, fmt.Errorf("answer for %s question %q has type %q", q.Type, name, da.Type)
+		}
 		a := decide.Answer{Name: name}
 		switch da.Type {
 		case "refusal":
 			a.Refused = true
-			if i < len(request.Questions) {
-				a.Type = request.Questions[i].Type
-			}
+			a.Type = q.Type
 		case "predicate":
 			a.Type = decide.TypePredicate
 			if da.Probability != nil {

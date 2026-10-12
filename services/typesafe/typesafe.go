@@ -119,10 +119,9 @@ func (t *TypeSafe) Decide(request *decide.Request) (*decide.Response, error) {
 		Questions: make(map[string]systemOneQuestion, len(request.Questions)),
 	}
 	for _, q := range request.Questions {
-		sq := systemOneQuestion{Instructions: q.Instructions}
+		sq := systemOneQuestion{Type: systemOneType(q.Type), Instructions: q.Instructions}
 		switch q.Type {
 		case decide.TypePredicate:
-			sq.Type = "noul"
 			if q.True != "" || q.False != "" {
 				criteria := map[string]string{}
 				if q.True != "" {
@@ -134,7 +133,6 @@ func (t *TypeSafe) Decide(request *decide.Request) (*decide.Response, error) {
 				sq.Criteria = criteria
 			}
 		case decide.TypeChoice:
-			sq.Type = "choice"
 			criteria := make(map[string]*string, len(q.Options))
 			for _, o := range q.Options {
 				if o.Description == "" {
@@ -146,7 +144,6 @@ func (t *TypeSafe) Decide(request *decide.Request) (*decide.Response, error) {
 			}
 			sq.Criteria = criteria
 		case decide.TypeScore:
-			sq.Type = "score"
 			criteria := make([]string, 0, len(q.Levels))
 			for _, l := range q.Levels {
 				criteria = append(criteria, l.Text())
@@ -218,8 +215,13 @@ func (t *TypeSafe) Decide(request *decide.Request) (*decide.Response, error) {
 		if !ok {
 			return nil, fmt.Errorf("no answer for question %q in %s response", q.Name, Provider)
 		}
+		if sa.Type != "refusal" && sa.Type != systemOneType(q.Type) {
+			return nil, fmt.Errorf("answer for %s question %q has type %q", q.Type, q.Name, sa.Type)
+		}
 		a := decide.Answer{Name: q.Name, Type: q.Type}
 		switch sa.Type {
+		case "refusal":
+			a.Refused = true
 		case "noul":
 			if sa.Noul != nil {
 				a.Probability = *sa.Noul
@@ -254,6 +256,14 @@ func (t *TypeSafe) Decide(request *decide.Request) (*decide.Response, error) {
 	)
 
 	return response, nil
+}
+
+// systemOneType maps a bellman question type to its System One wire name.
+func systemOneType(t decide.QuestionType) string {
+	if t == decide.TypePredicate {
+		return "noul"
+	}
+	return string(t)
 }
 
 // stateOf forwards a lone JSON part as an object so questions can refer to
