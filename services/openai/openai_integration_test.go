@@ -41,4 +41,12 @@ func TestOpenAIIntegration(t *testing.T) {
 		Single: true,
 		Many:   true,
 	})
+
+	testsuite.RunDecide(t, client, openai.DecideModel_gpt6_luna, testsuite.DecideCapabilities{
+		Predicate: true,
+		Choice:    true,
+		Score:     true,
+		JSONState: true,
+		Images:    true,
+	})
 }

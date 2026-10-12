@@ -5,14 +5,15 @@
 It tries to be a unified interface to interact with LLMs and embedding models.
 In particular, it seeks to make it easier to switch between models and vendors
 while lowering the barrier to get started.
-Bellman supports `VertexAI/Gemini`, `OpenAI`, `Anthropic`, `VoyageAI`, `Ollama`, and `vLLM`.
+Bellman supports `VertexAI/Gemini`, `OpenAI`, `Anthropic`, `VoyageAI`, `Ollama`, `vLLM` and `TypeSafe`.
 
 Bellman consists of two parts. The library and the service.
 The go library enables you to interact with the different LLM vendors directly while the service,
 `bellmand` creates a proxy service that lets you connect to all providers with one api key.
 
 Bellman supports the common things that we expect in modern LLM models.
-Chat, Structured, Tools and binary input.
+Chat, Structured, Tools and binary input. It also covers embeddings and
+decision models (typed questions answered with probabilities instead of text).
 
 ## Why
 
@@ -33,7 +34,7 @@ The easiest way to get started is to simply run it as a docker service.
 ### Prerequisite
 
 - Docker being installed
-- API Keys to Anthropic, OpenAI, VertexAI(Google Gemini) and/or VoyageAI
+- API Keys to Anthropic, OpenAI, VertexAI(Google Gemini), VoyageAI and/or TypeSafe
 - Installing Ollama, https://ollama.com/ (very cool project imho)
 - (Optional) Running vLLM, if you want to proxy self-hosted OpenAI-compatible models
 
@@ -52,6 +53,7 @@ docker run --rm -d modfin/bellman \
   --openai-key="$(cat ./credentials/openai-api-key.txt)" \
   --anthropic-key="$(cat ./credentials/anthropic-api-key.txt)" \
   --voyageai-key="$(cat ./credentials/voyageai-api-key.txt)" \
+  --typesafe-key="$(cat ./credentials/typesafe-api-key.txt)" \
   --google-credential="$(cat ./credentials/google-service-account.json)" \
   --google-project=your-google-project \
   --google-region=europe-north1 \
@@ -70,9 +72,9 @@ go get github.com/modfin/bellman
 
 ## Usage
 
-The library provides clients for Anthropic, Ollama, OpenAI, VertexAI, VoyageAI, vLLM and Bellman itself.
+The library provides clients for Anthropic, Ollama, OpenAI, VertexAI, VoyageAI, vLLM, TypeSafe and Bellman itself.
 
-All provider clients implement `gen.Gen` and/or `embed.Embeder`,
+All provider clients implement `gen.Gen`, `embed.Embeder` and/or `decide.Decider`,
 and can therefore be used interchangeably.
 
 ```go
@@ -87,6 +89,7 @@ if err != nil {
     panic(err)
 }
 voyageClient := voyageai.New("VOYAGEAI_API_KEY")
+typesafeClient := typesafe.New("TYPESAFE_API_KEY")
 vllmClient := vllm.New([]string{"http://localhost:8000"}, []string{"*"})
 bellmanClient := bellman.New("http://localhost:8080", bellman.Key{Name: "test", Token: "BELLMAN_TOKEN"})
 
@@ -100,6 +103,7 @@ Model examples in this README are intentionally short. Source of truth for model
 - `services/ollama/models.go`
 - `services/vllm/models.go`
 - `services/voyageai/models.go`
+- `services/typesafe/models.go`
 
 You can always define your own model as well.
 
@@ -587,6 +591,70 @@ and [VoyageAI](https://docs.voyageai.com/docs/embeddings)
 The API allows you to define what type of text you are sending.
 For example `embed.TypeDocument` for initial embedding and `embed.TypeQuery`
 for getting a vector that is to be compared
+
+## Decisions
+
+Decision models are the third model type in bellman, next to generation and embeddings.
+They do not write text. You hand them a shared *state* and a set of typed *questions*,
+and get one answer per question with a probability distribution instead of prose.
+That makes them a good fit for classification, routing, scoring and guardrails,
+where they are faster, cheaper (input tokens only) and easier to threshold than a chat model.
+
+Supported providers are OpenAI (`/v1/decisions`, `gpt-6-luna`, accepts images) and
+TypeSafe (`/v1/systemone`, Jev, accepts JSON state). Anthropic and Google have no
+equivalent API, so they are not available as deciders.
+
+There are three question types:
+
+| Type        | Ask                                   | Answer                                                                  |
+|-------------|---------------------------------------|-------------------------------------------------------------------------|
+| `Predicate` | a yes/no condition                    | `Probability`, P(true)                                                  |
+| `Choice`    | pick one of 2–255 unordered options   | `Choice`, `Probabilities` per option value, `Confidence`                |
+| `Score`     | place on 2–10 ordered levels          | `Score` (weighted level index), `Probabilities` per index, `Confidence` |
+
+`Confidence` only says how peaked the distribution is. It is not a calibrated measure of
+correctness, so pick your own thresholds from labelled examples.
+
+```go
+client := openai.New(apiKey) // or typesafe.New(apiKey), or bellman.New(...)
+
+req := decide.NewRequest(ctx, openai.DecideModel_gpt6_luna,
+    decide.Text("I was charged twice for order #4411 and need the extra charge refunded today."),
+).Ask(
+    decide.Predicate("refund", "Is the customer asking for money back?").
+        WithCriteria("The customer wants a charge reversed.", "No refund is requested."),
+    decide.Choice("department", "Which team should handle this?",
+        decide.NewOption("billing", "Charges, invoices and refunds."),
+        decide.NewOption("shipping", "Delivery and lost packages."),
+        decide.NewOption("other", "Anything else."),
+    ),
+    decide.Score("urgency", "How urgent is this?",
+        decide.NewLevel("low", "No deadline."),
+        decide.NewLevel("medium", "Wants it done, no deadline today."),
+        decide.NewLevel("high", "Losing money or a deadline today."),
+    ),
+)
+
+res, err := client.Decide(req)
+if err != nil {
+    log.Fatalf("Decide() error = %v", err)
+}
+
+p, _ := res.Probability("refund")      // 0.97
+team, _ := res.Choice("department")    // "billing"
+urgency, _ := res.Score("urgency")     // 1.9, i.e. between medium and high
+
+a, _ := res.Answer("department")
+fmt.Println(a.Probabilities, a.Confidence)
+// map[billing:0.95 other:0.03 shipping:0.02] 0.93
+```
+
+State can be made of several parts. `decide.JSON(v)` sends a structured object (TypeSafe
+forwards a lone JSON part as-is so questions can refer to its fields) and `decide.Image(mime, data)`
+adds an inline image (OpenAI only). `decide.Model` advertises `SupportImages` and `SupportJSONState`.
+
+Through `bellmand` the same request is served at `POST /decide`, gated by the
+`disable_decide` api-key flag and the `--disable-decide-models` server flag.
 
 ## License
 

@@ -25,6 +25,7 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/modfin/bellman"
 	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/decide"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/services/anthropic"
@@ -32,6 +33,7 @@ import (
 	"github.com/modfin/bellman/services/ollama"
 	"github.com/modfin/bellman/services/omlx"
 	"github.com/modfin/bellman/services/openai"
+	"github.com/modfin/bellman/services/typesafe"
 	"github.com/modfin/bellman/services/vertexai"
 	"github.com/modfin/bellman/services/vllm"
 	"github.com/modfin/bellman/services/voyageai"
@@ -157,6 +159,11 @@ func main() {
 			},
 
 			&cli.StringFlag{
+				Name:    "typesafe-key",
+				EnvVars: []string{"BELLMAN_TYPESAFE_KEY"},
+			},
+
+			&cli.StringFlag{
 				Name:    "omlx-url",
 				EnvVars: []string{"BELLMAN_OMLX_URL"},
 				Usage:   `The url of the oMLX service, eg http://localhost:8000`,
@@ -174,6 +181,10 @@ func main() {
 			&cli.BoolFlag{
 				Name:    "disable-embed-models",
 				EnvVars: []string{"BELLMAN_DISABLE_EMBED_MODELS"},
+			},
+			&cli.BoolFlag{
+				Name:    "disable-decide-models",
+				EnvVars: []string{"BELLMAN_DISABLE_DECIDE_MODELS"},
 			},
 
 			&cli.StringFlag{
@@ -292,8 +303,9 @@ type Config struct {
 	HttpPort         int `cli:"http-port"`
 	InternalHttpPort int `cli:"internal-http-port"`
 
-	DisableGenModels   bool `cli:"disable-gen-models"`
-	DisableEmbedModels bool `cli:"disable-embed-models"`
+	DisableGenModels    bool `cli:"disable-gen-models"`
+	DisableEmbedModels  bool `cli:"disable-embed-models"`
+	DisableDecideModels bool `cli:"disable-decide-models"`
 
 	AnthropicKey string `cli:"anthropic-key"`
 	OpenAiKey    string `cli:"openai-key"`
@@ -304,6 +316,7 @@ type Config struct {
 	VLLMModel    []string `cli:"vllm-model"`
 	FireworksKey string   `cli:"fireworks-key"`
 	XAiKey       string   `cli:"xai-key"`
+	TypeSafeKey  string   `cli:"typesafe-key"`
 	OMLXURL      string   `cli:"omlx-url"`
 	OMLXKey      string   `cli:"omlx-key"`
 
@@ -311,18 +324,20 @@ type Config struct {
 }
 
 type ApiKeyConfig struct {
-	Id           string           `json:"id"`
-	Key          string           `json:"key"`
-	DisableGen   bool             `json:"disable_gen"`
-	DisableEmbed bool             `json:"disable_embed"`
-	RateLimit    *RateLimitConfig `json:"rate_limit"`
+	Id            string           `json:"id"`
+	Key           string           `json:"key"`
+	DisableGen    bool             `json:"disable_gen"`
+	DisableEmbed  bool             `json:"disable_embed"`
+	DisableDecide bool             `json:"disable_decide"`
+	RateLimit     *RateLimitConfig `json:"rate_limit"`
 }
 
 type featureType string
 
 const (
-	featureTypeGen   featureType = "gen"
-	featureTypeEmbed featureType = "embed"
+	featureTypeGen    featureType = "gen"
+	featureTypeEmbed  featureType = "embed"
+	featureTypeDecide featureType = "decide"
 )
 
 func auth(apiKeyConfigs map[string]ApiKeyConfig, feature featureType) func(next http.Handler) http.Handler {
@@ -361,6 +376,10 @@ func auth(apiKeyConfigs map[string]ApiKeyConfig, feature featureType) func(next 
 			}
 			if feature == featureTypeEmbed && apiKeyConfig.DisableEmbed {
 				httpErr(w, fmt.Errorf("embedding feature is disabled for this api key"), http.StatusForbidden)
+				return
+			}
+			if feature == featureTypeDecide && apiKeyConfig.DisableDecide {
+				httpErr(w, fmt.Errorf("decision feature is disabled for this api key"), http.StatusForbidden)
 				return
 			}
 
@@ -419,6 +438,9 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 	}
 	if !cfg.DisableGenModels {
 		r.Route("/gen", Gen(proxy, apiKeyConfigs, rateLimiter))
+	}
+	if !cfg.DisableDecideModels {
+		r.Route("/decide", Decide(proxy, apiKeyConfigs, rateLimiter))
 	}
 
 	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: h}
@@ -795,6 +817,102 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 	}
 }
 
+func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimiter *RateLimiter) func(r chi.Router) {
+
+	var reqCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:        "bellman_decide_request_count",
+			Help:        "Number of decision requests per key",
+			ConstLabels: nil,
+		},
+		[]string{"model", "key_id", "key_name"},
+	)
+
+	var questionCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:        "bellman_decide_question_count",
+			Help:        "Number of questions answered by model and key",
+			ConstLabels: nil,
+		},
+		[]string{"model", "key_id", "key_name"},
+	)
+
+	var tokensCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:        "bellman_decide_token_count",
+			Help:        "Number of tokens processed by model and key",
+			ConstLabels: nil,
+		},
+		[]string{"model", "key_id", "key_name", "type"},
+	)
+	prometheus.MustRegister(reqCounter, questionCounter, tokensCounter)
+
+	return func(r chi.Router) {
+		r.Use(auth(apiKeyConfigs, featureTypeDecide))
+
+		r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+			var req decide.Request
+			err := json.NewDecoder(r.Body).Decode(&req)
+			if err != nil {
+				err = fmt.Errorf("could not decode request, %w", err)
+				httpErr(w, err, http.StatusBadRequest)
+				return
+			}
+			req.Ctx = r.Context()
+
+			if err := req.Validate(); err != nil {
+				err = fmt.Errorf("invalid request, %w", err)
+				httpErr(w, err, http.StatusBadRequest)
+				return
+			}
+
+			apiKeyId := r.Context().Value("api-key-id").(string)
+			keyName := r.Context().Value("api-key-name").(string)
+
+			if !rateLimiter.HasCapacity(apiKeyId) {
+				logger.Warn("rate limit exceeded (pre-check)",
+					"apiKeyId", apiKeyId,
+					"key", keyName,
+					"model", req.Model.FQN(),
+				)
+				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
+				return
+			}
+
+			response, err := proxy.Decide(&req)
+			if err != nil {
+				logger.Error("decide request", "err", err, "apiKeyId", apiKeyId, "key", keyName)
+				err = fmt.Errorf("could not decide, %w", err)
+				httpErr(w, err, http.StatusInternalServerError)
+				return
+			}
+
+			rateLimiter.Consume(apiKeyId, response.Metadata.TotalTokens)
+
+			logger.Info("decide request",
+				"apiKeyId", apiKeyId,
+				"key", keyName,
+				"model", req.Model.FQN(),
+				"questions", len(req.Questions),
+				"token-input", response.Metadata.InputTokens,
+				"token-output", response.Metadata.OutputTokens,
+				"token-total", response.Metadata.TotalTokens,
+			)
+
+			// Taking some metrics...
+			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName).Inc()
+			questionCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName).Add(float64(len(req.Questions)))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "total").Add(float64(response.Metadata.TotalTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "input").Add(float64(response.Metadata.InputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "output").Add(float64(response.Metadata.OutputTokens))
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(response)
+		})
+	}
+}
+
 func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimiter *RateLimiter) func(r chi.Router) {
 
 	var reqCounter = prometheus.NewCounterVec(
@@ -936,8 +1054,16 @@ func setupProxy(cfg Config) (*bellman.Proxy, error) {
 
 		proxy.RegisterGen(client)
 		proxy.RegisterEmbeder(client)
+		proxy.RegisterDecider(client)
 		logger.Info("Start", "action", "[gen] adding provider", "provider", client.Provider())
 		logger.Info("Start", "action", "[embed] adding provider", "provider", client.Provider())
+		logger.Info("Start", "action", "[decide] adding provider", "provider", client.Provider())
+	}
+
+	if cfg.TypeSafeKey != "" {
+		client := typesafe.New(cfg.TypeSafeKey)
+		proxy.RegisterDecider(client)
+		logger.Info("Start", "action", "[decide] adding provider", "provider", client.Provider())
 	}
 
 	if cfg.Google.Region != "" && cfg.Google.Project != "" {

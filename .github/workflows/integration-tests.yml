@@ -14,6 +14,7 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
       VERTEXAI_CREDENTIALS: ${{ secrets.VERTEXAI_CREDENTIALS }}
       VERTEXAI_PROJECT: ${{ secrets.VERTEXAI_PROJECT }}

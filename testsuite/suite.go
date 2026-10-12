@@ -3,6 +3,7 @@ package testsuite
 import (
 	"testing"
 
+	"github.com/modfin/bellman/models/decide"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 )
@@ -20,6 +21,16 @@ type Capabilities struct {
 	Agent               bool // agent.Run[T] — multi-depth tool-calling loop with structured result
 	StreamThinkingTools bool // Stream() interleaving text + thinking + tool-call deltas (single turn) — implies Thinking
 	StreamAgentMultiHop bool // Stream() driven multi-turn agent loop; signature replay assertions gated by Thinking
+}
+
+// DecideCapabilities declares which decide-side features the model under test
+// supports.
+type DecideCapabilities struct {
+	Predicate bool
+	Choice    bool
+	Score     bool
+	JSONState bool // a lone JSON part is forwarded as a structured object
+	Images    bool // inline image parts in the state
 }
 
 // EmbedCapabilities declares which embed-side features the model under test
@@ -123,6 +134,59 @@ func RunEmbed(t *testing.T, e embed.Embeder, m embed.Model, caps EmbedCapabiliti
 				t.Skip("capability Document not advertised")
 			}
 			withRetry(t, retryAttempts, testEmbedDocument(e, m))
+		})
+	})
+}
+
+func RunDecide(t *testing.T, d decide.Decider, m decide.Model, caps DecideCapabilities) {
+	t.Helper()
+
+	name := m.Name
+	if name == "" {
+		t.Fatal("model name is required")
+	}
+
+	t.Run(name, func(t *testing.T) {
+		t.Run("decide/predicate", func(t *testing.T) {
+			if !caps.Predicate {
+				t.Skip("capability Predicate not advertised")
+			}
+			withRetry(t, retryAttempts, testDecidePredicate(d, m))
+		})
+
+		t.Run("decide/choice", func(t *testing.T) {
+			if !caps.Choice {
+				t.Skip("capability Choice not advertised")
+			}
+			withRetry(t, retryAttempts, testDecideChoice(d, m))
+		})
+
+		t.Run("decide/score", func(t *testing.T) {
+			if !caps.Score {
+				t.Skip("capability Score not advertised")
+			}
+			withRetry(t, retryAttempts, testDecideScore(d, m))
+		})
+
+		t.Run("decide/mixed", func(t *testing.T) {
+			if !caps.Predicate || !caps.Choice || !caps.Score {
+				t.Skip("capabilities Predicate, Choice and Score not all advertised")
+			}
+			withRetry(t, retryAttempts, testDecideMixed(d, m))
+		})
+
+		t.Run("decide/json_state", func(t *testing.T) {
+			if !caps.JSONState {
+				t.Skip("capability JSONState not advertised")
+			}
+			withRetry(t, retryAttempts, testDecideJSONState(d, m))
+		})
+
+		t.Run("decide/image", func(t *testing.T) {
+			if !caps.Images {
+				t.Skip("capability Images not advertised")
+			}
+			withRetry(t, retryAttempts, testDecideImage(d, m))
 		})
 	})
 }

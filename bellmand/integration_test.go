@@ -28,7 +28,7 @@ const (
 // TestBellmandIntegration exercises the bellmand HTTP boundary end-to-end.
 // Per-provider semantics are covered by the service-level integration tests;
 // this one only needs a single provider to validate auth, request marshaling,
-// streaming, and embeddings over HTTP. OpenAI covers all three capabilities.
+// streaming, embeddings and decisions over HTTP. OpenAI covers all four.
 func TestBellmandIntegration(t *testing.T) {
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		t.Skip("OPENAI_API_KEY not set")
@@ -50,6 +50,8 @@ func TestBellmandIntegration(t *testing.T) {
 		})
 	testsuite.RunEmbed(t, c, openai.EmbedModel_text3_small,
 		testsuite.EmbedCapabilities{Single: true, Many: true})
+	testsuite.RunDecide(t, c, openai.DecideModel_gpt6_luna,
+		testsuite.DecideCapabilities{Predicate: true, Choice: true, Score: true, JSONState: true, Images: true})
 }
 
 func buildBinary(t *testing.T) string {

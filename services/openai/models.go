@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"github.com/modfin/bellman/models/decide"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 )
@@ -546,4 +547,14 @@ var GenModels = map[string]gen.Model{
 	GenModel_gpt4_preview_1106.Name:        GenModel_gpt4_preview_1106,
 	GenModel_gpt4.Name:                     GenModel_gpt4,
 	GenModel_gpt4_0613.Name:                GenModel_gpt4_0613,
+}
+
+// Decision models, https://developers.openai.com/api/docs/guides/decisions
+
+var DecideModel_gpt6_luna = decide.Model{
+	Provider:       Provider,
+	Name:           "gpt-6-luna",
+	InputMaxTokens: 1_050_000,
+	SupportImages:  true,
+	Description:    "The only model served by OpenAI's Decisions API. Billed on input tokens only; images must be inline.",
 }
