@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/decide"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/tools"
 	"log/slog"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -297,4 +299,73 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Decide interface implementation
+
+// Decide answers deterministically from the state text so tests can assert
+// on the plumbing: a predicate is true when the state contains the word
+// "yes", a choice picks the option whose value appears in the state (else the
+// first), and a score lands on the level whose label appears (else the middle).
+func (m *MockClient) Decide(request *decide.Request) (*decide.Response, error) {
+	if err := request.Validate(); err != nil {
+		return nil, err
+	}
+	m.log("[decide] request", "model", request.Model.FQN(), "questions", len(request.Questions))
+
+	state := strings.ToLower(request.StateText())
+	contains := func(s string) bool { return s != "" && strings.Contains(state, strings.ToLower(s)) }
+
+	response := &decide.Response{
+		Answers: make(map[string]decide.Answer, len(request.Questions)),
+		Metadata: models.Metadata{
+			Model:       request.Model.FQN(),
+			InputTokens: len(state) / 4,
+			TotalTokens: len(state) / 4,
+		},
+	}
+	for _, q := range request.Questions {
+		a := decide.Answer{Name: q.Name, Type: q.Type}
+		switch q.Type {
+		case decide.TypePredicate:
+			a.Probability = 0.1
+			if contains("yes") {
+				a.Probability = 0.9
+			}
+		case decide.TypeChoice:
+			pick := 0
+			for i, o := range q.Options {
+				if contains(o.Value) {
+					pick = i
+					break
+				}
+			}
+			a.Probabilities = make(map[string]float64, len(q.Options))
+			for i, o := range q.Options {
+				a.Probabilities[o.Value] = 0
+				if i == pick {
+					a.Probabilities[o.Value] = 1
+					a.Choice = o.Value
+				}
+			}
+			a.Confidence = 1
+		case decide.TypeScore:
+			pick := len(q.Levels) / 2
+			for i, l := range q.Levels {
+				if contains(l.Label) {
+					pick = i
+					break
+				}
+			}
+			a.Probabilities = make(map[string]float64, len(q.Levels))
+			for i := range q.Levels {
+				a.Probabilities[strconv.Itoa(i)] = 0
+			}
+			a.Probabilities[strconv.Itoa(pick)] = 1
+			a.Score = float64(pick)
+			a.Confidence = 1
+		}
+		response.Answers[q.Name] = a
+	}
+	return response, nil
 }

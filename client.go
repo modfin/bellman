@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"github.com/modfin/bellman/internal/sse"
+	"github.com/modfin/bellman/models/decide"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/prompt"
@@ -629,4 +630,67 @@ func (g *generator) processStreamingResponse(streamResp *gen.StreamResponse, too
 			"token-total", streamResp.Metadata.TotalTokens,
 		)
 	}
+}
+
+// Decide proxies a decision request through bellmand. The Bellman client
+// therefore satisfies decide.Decider and can stand in for a provider.
+func (v *Bellman) Decide(request *decide.Request) (*decide.Response, error) {
+	var reqc = atomic.AddInt64(&bellmanRequestNo, 1)
+
+	if err := request.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid decide request; %w", err)
+	}
+
+	u, err := url.JoinPath(v.url, "decide")
+	if err != nil {
+		return nil, fmt.Errorf("could not join url %s; %w", v.url, err)
+	}
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal bellman request; %w", err)
+	}
+
+	v.log("[decide] request",
+		"request", reqc,
+		"model", request.Model.FQN(),
+		"questions", len(request.Questions),
+	)
+
+	req, err := http.NewRequestWithContext(request.Context(), "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("could not create bellman request; %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+v.key.String())
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("could not post bellman request to %s; %w", u, err)
+	}
+	defer res.Body.Close()
+
+	body, err = io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read bellman response; %w", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d; %s", res.StatusCode, string(body))
+	}
+
+	var response decide.Response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		v.log("[decide] unmarshal response error", "error", err, "body", string(body))
+		return nil, fmt.Errorf("could not unmarshal bellman response; %w", err)
+	}
+
+	v.log("[decide] response",
+		"request", reqc,
+		"model", request.Model.FQN(),
+		"answers", len(response.Answers),
+		"token-input", response.Metadata.InputTokens,
+		"token-total", response.Metadata.TotalTokens,
+	)
+
+	return &response, nil
 }

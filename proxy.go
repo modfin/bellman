@@ -3,6 +3,7 @@ package bellman
 import (
 	"errors"
 	"fmt"
+	"github.com/modfin/bellman/models/decide"
 	"github.com/modfin/bellman/models/embed"
 	"github.com/modfin/bellman/models/gen"
 )
@@ -13,12 +14,14 @@ var ErrClientNotFound = errors.New("client not found")
 type Proxy struct {
 	embeders map[string]embed.Embeder
 	gens     map[string]gen.Gen
+	deciders map[string]decide.Decider
 }
 
 func NewProxy() *Proxy {
 	p := &Proxy{
 		embeders: map[string]embed.Embeder{},
 		gens:     map[string]gen.Gen{},
+		deciders: map[string]decide.Decider{},
 	}
 
 	return p
@@ -29,6 +32,9 @@ func (p *Proxy) RegisterEmbeder(embeder embed.Embeder) {
 }
 func (p *Proxy) RegisterGen(llm gen.Gen) {
 	p.gens[llm.Provider()] = llm
+}
+func (p *Proxy) RegisterDecider(decider decide.Decider) {
+	p.deciders[decider.Provider()] = decider
 }
 
 func (p *Proxy) Embed(embed *embed.Request) (*embed.Response, error) {
@@ -78,4 +84,20 @@ func (p *Proxy) Gen(model gen.Model) (*gen.Generator, error) {
 	}
 
 	return client.Generator(gen.WithModel(model)), nil
+}
+
+func (p *Proxy) Decide(req *decide.Request) (*decide.Response, error) {
+	client, ok := p.deciders[req.Model.Provider]
+	if !ok {
+		return nil, fmt.Errorf("no client registerd for provider '%s', %w", req.Model.Provider, ErrClientNotFound)
+	}
+
+	if client == nil {
+		return nil, ErrClientNotFound
+	}
+
+	if req.Model.Name == "" {
+		return nil, fmt.Errorf("decide.Model.Name is not set, %w", ErrNoModelProvided)
+	}
+	return client.Decide(req)
 }
