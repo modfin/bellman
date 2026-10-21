@@ -38,7 +38,7 @@ func TestVertexAIIntegration(t *testing.T) {
 		StreamThinkingTools: true,
 		StreamAgentMultiHop: true,
 	})
-	g = client.Generator(gen.WithModel(vertexai.GenModel_gemini_3_8_flash_latest))
+	g = client.Generator(gen.WithModel(vertexai.GenModel_gemini_3_5_flash_lite_latest))
 	testsuite.Run(t, g, testsuite.Capabilities{
 		Tools:               true,
 		StructuredOutput:    true,
