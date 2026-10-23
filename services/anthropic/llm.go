@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync/atomic"
 
@@ -48,7 +49,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 		"anthropic-version", Version,
 	)
@@ -350,7 +351,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 		"anthropic-version", Version,
 	)
@@ -474,16 +475,13 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 		}
 	}
 
-	if g.request.ThinkingBudget != nil {
-		model.Thinking = &reqExtendedThinking{
-			BudgetTokens: *g.request.ThinkingBudget,
-			Type:         ExtendedThinkingTypeEnabled,
+	var effort string
+	model.Thinking, effort = toThinking(g.request, model.MaxTokens)
+	if effort != "" {
+		if model.OutputConfig == nil {
+			model.OutputConfig = &reqOutputConfig{}
 		}
-	}
-	if g.request.ThinkingBudget != nil && *g.request.ThinkingBudget == 0 {
-		model.Thinking = &reqExtendedThinking{
-			Type: ExtendedThinkingTypeDisabled,
-		}
+		model.OutputConfig.Effort = effort
 	}
 
 	// appendBlock appends a content block to the last message when it already
@@ -601,4 +599,84 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 		req.Header.Add("anthropic-beta", "pdfs-2024-09-25")
 	}
 	return req, model, nil
+}
+
+// budgetThinkingModel matches the models from before adaptive thinking (claude 3.x and 4.0-4.5),
+// which take a thinking budget instead of an effort.
+var budgetThinkingModel = regexp.MustCompile(`^claude-(3-|(opus|sonnet|haiku)-4-(1|5)(-|$)|(opus|sonnet)-4-\d{8})`)
+
+// canDisableThinking lists the adaptive models that accept thinking type disabled. Newer models
+// always think, so ThinkingLevelNone falls back to the lowest effort for anything not listed.
+var canDisableThinking = map[string]bool{
+	GenModel_4_6_opus_latest.Name:   true,
+	GenModel_4_7_opus_latest.Name:   true,
+	GenModel_4_8_opus_latest.Name:   true,
+	GenModel_4_6_sonnet_latest.Name: true,
+	GenModel_5_0_opus_latest.Name:   true,
+	GenModel_5_0_sonnet_latest.Name: true,
+	"claude-haiku-5-5":              true,
+}
+
+// efforts are the levels used when an adaptive model does not list its own.
+var efforts = []gen.ThinkingLevel{
+	gen.ThinkingLevelLow,
+	gen.ThinkingLevelMedium,
+	gen.ThinkingLevelHigh,
+	gen.ThinkingLevelXHigh,
+	gen.ThinkingLevelMax,
+}
+
+// thinkingBudgets translates levels into budget_tokens for models without adaptive thinking.
+var thinkingBudgets = map[gen.ThinkingLevel]int{
+	gen.ThinkingLevelMinimal: 1024,
+	gen.ThinkingLevelLow:     2048,
+	gen.ThinkingLevelMedium:  8192,
+	gen.ThinkingLevelHigh:    16384,
+	gen.ThinkingLevelXHigh:   24576,
+	gen.ThinkingLevelMax:     32000,
+}
+
+// toThinking maps the bellman thinking options onto anthropic's thinking config and output effort.
+func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, string) {
+	level := request.ThinkingLevel
+	parts := request.ThinkingParts != nil && *request.ThinkingParts
+
+	if budgetThinkingModel.MatchString(request.Model.Name) {
+		switch level {
+		case "":
+			return nil, ""
+		case gen.ThinkingLevelNone:
+			return &reqExtendedThinking{Type: ExtendedThinkingTypeDisabled}, ""
+		}
+		// budget_tokens must be at least 1024 and below max_tokens, keep half of max_tokens for the answer
+		budget := min(thinkingBudgets[level], maxTokens/2)
+		if budget < 1024 {
+			return nil, ""
+		}
+		return &reqExtendedThinking{Type: ExtendedThinkingTypeEnabled, BudgetTokens: budget}, ""
+	}
+
+	if level == gen.ThinkingLevelNone {
+		if canDisableThinking[request.Model.Name] {
+			return &reqExtendedThinking{Type: ExtendedThinkingTypeDisabled}, ""
+		}
+		level = gen.ThinkingLevelLow
+	}
+	if level == "" && !parts {
+		return nil, ""
+	}
+
+	thinking := &reqExtendedThinking{Type: ExtendedThinkingTypeAdaptive}
+	if parts {
+		// newer models default to omitted, which returns thinking blocks without text
+		thinking.Display = "summarized"
+	}
+	if level == "" {
+		return thinking, ""
+	}
+	supported := request.Model.ThinkingLevels
+	if len(supported) == 0 {
+		supported = efforts
+	}
+	return thinking, string(level.Resolve(supported))
 }

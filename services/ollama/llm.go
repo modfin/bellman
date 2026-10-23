@@ -56,8 +56,8 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		Stream: false,
 	}
 
-	if g.request.ThinkingBudget != nil {
-		reqModel.Think = *g.request.ThinkingBudget > 0
+	if g.request.ThinkingLevel != "" {
+		reqModel.Think = g.request.ThinkingLevel != gen.ThinkingLevelNone
 	}
 
 	if g.request.Model.Name == "" {

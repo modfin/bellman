@@ -1,0 +1,44 @@
+package anthropic
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/modfin/bellman/models/gen"
+)
+
+func TestToThinking(t *testing.T) {
+	parts := true
+
+	tests := []struct {
+		name       string
+		request    gen.Request
+		maxTokens  int
+		want       string
+		wantEffort string
+	}{
+		{"unset", gen.Request{Model: GenModel_5_5_opus_latest}, 8192, `null`, ""},
+		{"adaptive", gen.Request{Model: GenModel_5_5_opus_latest, ThinkingLevel: gen.ThinkingLevelHigh}, 8192, `{"type":"adaptive"}`, "high"},
+		{"parts only", gen.Request{Model: GenModel_5_5_opus_latest, ThinkingParts: &parts}, 8192, `{"type":"adaptive","display":"summarized"}`, ""},
+		{"minimal rounds up", gen.Request{Model: GenModel_5_1_fable_latest, ThinkingLevel: gen.ThinkingLevelMinimal}, 8192, `{"type":"adaptive"}`, "low"},
+		{"none on always thinking model", gen.Request{Model: GenModel_5_5_opus_latest, ThinkingLevel: gen.ThinkingLevelNone}, 8192, `{"type":"adaptive"}`, "low"},
+		{"none disables", gen.Request{Model: GenModel_4_8_opus_latest, ThinkingLevel: gen.ThinkingLevelNone}, 8192, `{"type":"disabled"}`, ""},
+		{"no xhigh on 4.6", gen.Request{Model: GenModel_4_6_sonnet_latest, ThinkingLevel: gen.ThinkingLevelXHigh}, 8192, `{"type":"adaptive"}`, "high"},
+		{"legacy budget", gen.Request{Model: GenModel_4_5_haiku_latest, ThinkingLevel: gen.ThinkingLevelLow}, 8192, `{"budget_tokens":2048,"type":"enabled"}`, ""},
+		{"legacy budget capped by max tokens", gen.Request{Model: GenModel_4_5_sonnet_latest, ThinkingLevel: gen.ThinkingLevelMax}, 5000, `{"budget_tokens":2500,"type":"enabled"}`, ""},
+		{"legacy max tokens too low", gen.Request{Model: GenModel_4_0_sonnet_20250514, ThinkingLevel: gen.ThinkingLevelLow}, 2000, `null`, ""},
+		{"legacy none", gen.Request{Model: GenModel_3_7_sonnet_latest, ThinkingLevel: gen.ThinkingLevelNone}, 8192, `{"type":"disabled"}`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			thinking, effort := toThinking(tt.request, tt.maxTokens)
+			got, err := json.Marshal(thinking)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if string(got) != tt.want || effort != tt.wantEffort {
+				t.Errorf("got %s effort %q, want %s effort %q", got, effort, tt.want, tt.wantEffort)
+			}
+		})
+	}
+}

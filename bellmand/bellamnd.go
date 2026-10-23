@@ -602,8 +602,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				return
 			}
 
-			var req gen.FullRequest
-			err = json.Unmarshal(body, &req)
+			req, err := decodeGenRequest(body)
 			if err != nil {
 				err = fmt.Errorf("could not decode request, %w", err)
 				httpErr(w, err, http.StatusBadRequest)
@@ -677,8 +676,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				return
 			}
 
-			var req gen.FullRequest
-			err = json.Unmarshal(body, &req)
+			req, err := decodeGenRequest(body)
 			if err != nil {
 				err = fmt.Errorf("could not decode request, %w", err)
 				httpErr(w, err, http.StatusBadRequest)

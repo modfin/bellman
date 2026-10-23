@@ -55,6 +55,7 @@ var GenModel_4_6_sonnet_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelMax},
 }
 var GenModel_5_0_sonnet_latest = gen.Model{
 	Provider:                Provider,
@@ -192,6 +193,7 @@ var GenModel_4_6_opus_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelMax},
 }
 var GenModel_4_7_opus_latest = gen.Model{
 	Provider:                Provider,

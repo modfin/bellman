@@ -71,12 +71,14 @@ var GenModel_gemini_3_pro_preview = gen.Model{
 	Name:           "gemini-3-pro-preview",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelHigh},
 }
 var GenModel_gemini_3_1_pro_preview = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-3.1-pro-preview",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh},
 }
 var GenModel_gemini_3_flash_preview = gen.Model{
 	Provider:       Provider,

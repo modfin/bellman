@@ -55,7 +55,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 	)
 
@@ -304,7 +304,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 	)
 
@@ -495,18 +495,12 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 		}
 	}
 
-	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingBudget != nil {
-		var reffort ReasoningEffort
-		switch true {
-		case *g.request.ThinkingBudget == 0:
-			reffort = ReasoningEffortNone
-		case *g.request.ThinkingBudget < 2_000:
-			reffort = ReasoningEffortLow
-		case *g.request.ThinkingBudget < 10_000:
-			reffort = ReasoningEffortMedium
-		default:
-			reffort = ReasoningEffortHigh
+	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingLevel != "" {
+		supported := g.request.Model.ThinkingLevels
+		if len(supported) == 0 {
+			supported = reasoningEfforts
 		}
+		reffort := ReasoningEffort(g.request.ThinkingLevel.Resolve(supported))
 		reqModel.Reasoning = &reasoningConfig{Effort: &reffort}
 	}
 	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingParts != nil && *g.request.ThinkingParts {

@@ -44,7 +44,7 @@ func testAgentRun(g *gen.Generator, withThinking bool) func(tester) {
 			System("You look up stock prices using the available tool, then return the result as JSON.").
 			SetTools(priceTool)
 		if withThinking {
-			sg = sg.ThinkingBudget(1024).IncludeThinkingParts(true)
+			sg = sg.ThinkingLevel(gen.ThinkingLevelLow).IncludeThinkingParts(true)
 		}
 
 		res, err := agent.Run[Result](5, 1, sg,
@@ -111,7 +111,7 @@ func testAgentRunMultiHop(g *gen.Generator, withThinking bool) func(tester) {
 			System("You compare stock prices. Call the get_stock_price tool once per symbol, then return the ticker of the cheaper stock as JSON.").
 			SetTools(priceTool)
 		if withThinking {
-			sg = sg.ThinkingBudget(1024).IncludeThinkingParts(true)
+			sg = sg.ThinkingLevel(gen.ThinkingLevelLow).IncludeThinkingParts(true)
 		}
 
 		res, err := agent.Run[Result](6, 2, sg,

@@ -49,7 +49,7 @@ func testStreamAgentMultiHop(g *gen.Generator, withThinking bool) func(tester) {
 			SetTools(priceTool).
 			Output(schema.From(result))
 		if withThinking {
-			sg = sg.ThinkingBudget(1024).IncludeThinkingParts(true)
+			sg = sg.ThinkingLevel(gen.ThinkingLevelLow).IncludeThinkingParts(true)
 		}
 
 		prompts := []prompt.Prompt{

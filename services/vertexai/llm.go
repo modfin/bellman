@@ -417,7 +417,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 		"url", model.url,
 	)
@@ -726,30 +726,44 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 	return resp, model, nil
 }
 
+// toThinkingConfig maps the bellman thinking options onto gemini's thinkingConfig. Gemini 2.x only
+// supports thinkingBudget, while gemini 3+ uses thinkingLevel and newer models reject thinkingBudget.
 func toThinkingConfig(request gen.Request) *thinkingConfig {
-	if request.ThinkingBudget == nil && request.ThinkingParts == nil {
+	if request.ThinkingLevel == "" && request.ThinkingParts == nil {
 		return nil
 	}
 	cfg := &thinkingConfig{IncludeThoughts: request.ThinkingParts}
-	if request.ThinkingBudget == nil {
+	if request.ThinkingLevel == "" {
 		return cfg
 	}
 	if strings.HasPrefix(request.Model.Name, "gemini-2") {
-		cfg.ThinkingBudget = request.ThinkingBudget
+		cfg.ThinkingBudget = new(thinkingBudgets[request.ThinkingLevel])
 		return cfg
 	}
 
-	budget := *request.ThinkingBudget
-	switch {
-	case budget < 0: // dynamic, let the model use its default level
-	case budget == 0:
-		cfg.ThinkingLevel = new("minimal")
-	case budget < 2_000:
-		cfg.ThinkingLevel = new("low")
-	case budget < 10_000:
-		cfg.ThinkingLevel = new("medium")
-	default:
-		cfg.ThinkingLevel = new("high")
+	supported := request.Model.ThinkingLevels
+	if len(supported) == 0 {
+		supported = thinkingLevels
 	}
+	cfg.ThinkingLevel = new(string(request.ThinkingLevel.Resolve(supported)))
 	return cfg
+}
+
+// thinkingLevels are the levels used when a gemini 3+ model does not list its own.
+var thinkingLevels = []gen.ThinkingLevel{
+	gen.ThinkingLevelMinimal,
+	gen.ThinkingLevelLow,
+	gen.ThinkingLevelMedium,
+	gen.ThinkingLevelHigh,
+}
+
+// thinkingBudgets translates levels into token budgets for gemini 2.x, capped at the 24576 flash maximum.
+var thinkingBudgets = map[gen.ThinkingLevel]int{
+	gen.ThinkingLevelNone:    0,
+	gen.ThinkingLevelMinimal: 512,
+	gen.ThinkingLevelLow:     1024,
+	gen.ThinkingLevelMedium:  8192,
+	gen.ThinkingLevelHigh:    16384,
+	gen.ThinkingLevelXHigh:   24576,
+	gen.ThinkingLevelMax:     24576,
 }

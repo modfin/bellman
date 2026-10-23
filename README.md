@@ -425,14 +425,16 @@ fmt.Println(res.AsText())
 
 ## Reasoning
 
-Control reasoning by setting the budget for the reasoning tokens. Determine whether to return the reasoning data or not.
+Control reasoning by setting a thinking level, and whether to return the reasoning data or not.
+The levels are `none`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`. Each provider translates the level into its own
+setting, e.g. reasoning effort, thinking level or a token budget for older models, and rounds it to the nearest level the model supports.
 The default thinking/reasoning behaviour is different depending on the model you are using.
 
 ```go
 res, err := anthropic.New(apiKey).Generator().
-    Model(anthropic.GenModel_4_5_sonnet_latest).
+    Model(anthropic.GenModel_5_5_sonnet_latest).
     MaxTokens(3000).
-    ThinkingBudget(2000). // the budget for reasoning tokens, set to 0 to disable reasoning if supported by the selected model
+    ThinkingLevel(gen.ThinkingLevelLow). // use gen.ThinkingLevelNone to disable reasoning if supported by the selected model
     IncludeThinkingParts(true). // if available, includes the reasoning parts in the response (will be summaries for some models)
     Prompt(
         prompt.AsUser("What is 27 * 453?"),
