@@ -41,8 +41,9 @@ type functionResponse struct {
 }
 
 type thinkingConfig struct {
-	ThinkingBudget  *int  `json:"thinkingBudget,omitempty"` // -1 for dynamic
-	IncludeThoughts *bool `json:"includeThoughts,omitempty"`
+	ThinkingBudget  *int    `json:"thinkingBudget,omitempty"` // -1 for dynamic
+	ThinkingLevel   *string `json:"thinkingLevel,omitempty"`  // gemini 3+: minimal, low, medium, high
+	IncludeThoughts *bool   `json:"includeThoughts,omitempty"`
 }
 
 type genConfig struct {

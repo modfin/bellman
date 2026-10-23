@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -582,15 +583,7 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		}
 	}
 
-	if g.request.ThinkingBudget != nil || g.request.ThinkingParts != nil {
-		model.GenerationConfig.ThinkingConfig = &thinkingConfig{}
-	}
-	if g.request.ThinkingBudget != nil {
-		model.GenerationConfig.ThinkingConfig.ThinkingBudget = g.request.ThinkingBudget
-	}
-	if g.request.ThinkingParts != nil {
-		model.GenerationConfig.ThinkingConfig.IncludeThoughts = g.request.ThinkingParts
-	}
+	model.GenerationConfig.ThinkingConfig = toThinkingConfig(g.request)
 
 	// Append a part into the current Content of the given role, merging with
 	// the previous Content when it already has the same role. Gemini requires
@@ -731,4 +724,32 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		return nil, model, fmt.Errorf("could not post google request, %w", err)
 	}
 	return resp, model, nil
+}
+
+func toThinkingConfig(request gen.Request) *thinkingConfig {
+	if request.ThinkingBudget == nil && request.ThinkingParts == nil {
+		return nil
+	}
+	cfg := &thinkingConfig{IncludeThoughts: request.ThinkingParts}
+	if request.ThinkingBudget == nil {
+		return cfg
+	}
+	if strings.HasPrefix(request.Model.Name, "gemini-2") {
+		cfg.ThinkingBudget = request.ThinkingBudget
+		return cfg
+	}
+
+	budget := *request.ThinkingBudget
+	switch {
+	case budget < 0: // dynamic, let the model use its default level
+	case budget == 0:
+		cfg.ThinkingLevel = new("minimal")
+	case budget < 2_000:
+		cfg.ThinkingLevel = new("low")
+	case budget < 10_000:
+		cfg.ThinkingLevel = new("medium")
+	default:
+		cfg.ThinkingLevel = new("high")
+	}
+	return cfg
 }
