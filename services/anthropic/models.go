@@ -14,6 +14,8 @@ var (
 	effortLevels         = []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelXHigh, gen.ThinkingLevelMax}
 	effortLevelsWithNone = append([]gen.ThinkingLevel{gen.ThinkingLevelNone}, effortLevels...)
 	effortLevels46       = []gen.ThinkingLevel{gen.ThinkingLevelNone, gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelMax}
+	// noThinking is for the models that can't think at all
+	noThinking = []gen.ThinkingLevel{gen.ThinkingLevelNone}
 )
 
 //type GenModel string
@@ -99,6 +101,7 @@ var GenModel_3_5_sonnet_latest = gen.Model{
 	OutputMaxToken:          0,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
+	ThinkingLevels:          noThinking,
 }
 var GenModel_3_5_sonnet_20241022 = gen.Model{
 	Provider:                Provider,
@@ -109,6 +112,7 @@ var GenModel_3_5_sonnet_20241022 = gen.Model{
 	OutputMaxToken:          0,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
+	ThinkingLevels:          noThinking,
 }
 var GenModel_3_5_sonnet_20240620 = gen.Model{
 	Provider:                Provider,
@@ -119,6 +123,7 @@ var GenModel_3_5_sonnet_20240620 = gen.Model{
 	OutputMaxToken:          0,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
+	ThinkingLevels:          noThinking,
 }
 
 var GenModel_5_5_haiku_latest = gen.Model{
@@ -163,6 +168,7 @@ var GenModel_3_5_haiku_latest = gen.Model{
 	OutputMaxToken:          0,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
+	ThinkingLevels:          noThinking,
 }
 var GenModel_3_5_haiku_20241022 = gen.Model{
 	Provider:                Provider,
@@ -173,6 +179,7 @@ var GenModel_3_5_haiku_20241022 = gen.Model{
 	OutputMaxToken:          0,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
+	ThinkingLevels:          noThinking,
 }
 var GenModel_4_0_opus_20250514 = gen.Model{
 	Provider:                Provider,
@@ -291,14 +298,23 @@ var GenModel_5_1_fable_latest = gen.Model{
 var GenModels = map[string]gen.Model{
 	GenModel_3_5_sonnet_latest.Name:   GenModel_3_5_sonnet_latest,
 	GenModel_3_5_sonnet_20241022.Name: GenModel_3_5_sonnet_20241022,
+	GenModel_3_5_sonnet_20240620.Name: GenModel_3_5_sonnet_20240620,
 	GenModel_3_5_haiku_latest.Name:    GenModel_3_5_haiku_latest,
 	GenModel_3_5_haiku_20241022.Name:  GenModel_3_5_haiku_20241022,
+	GenModel_3_7_sonnet_latest.Name:   GenModel_3_7_sonnet_latest,
+	GenModel_3_7_sonnet_20250219.Name: GenModel_3_7_sonnet_20250219,
+	GenModel_4_0_sonnet_20250514.Name: GenModel_4_0_sonnet_20250514,
+	GenModel_4_0_opus_20250514.Name:   GenModel_4_0_opus_20250514,
+	GenModel_4_1_opus_20250805.Name:   GenModel_4_1_opus_20250805,
 	GenModel_4_6_opus_latest.Name:     GenModel_4_6_opus_latest,
 	GenModel_4_6_sonnet_latest.Name:   GenModel_4_6_sonnet_latest,
 	GenModel_4_5_haiku_latest.Name:    GenModel_4_5_haiku_latest,
+	GenModel_4_5_haiku_20251001.Name:  GenModel_4_5_haiku_20251001,
 	GenModel_5_5_haiku_latest.Name:    GenModel_5_5_haiku_latest,
 	GenModel_4_5_sonnet_latest.Name:   GenModel_4_5_sonnet_latest,
+	GenModel_4_5_sonnet_20250929.Name: GenModel_4_5_sonnet_20250929,
 	GenModel_4_5_opus_latest.Name:     GenModel_4_5_opus_latest,
+	GenModel_4_5_opus_20251101.Name:   GenModel_4_5_opus_20251101,
 	GenModel_4_7_opus_latest.Name:     GenModel_4_7_opus_latest,
 	GenModel_4_8_opus_latest.Name:     GenModel_4_8_opus_latest,
 	GenModel_5_0_sonnet_latest.Name:   GenModel_5_0_sonnet_latest,

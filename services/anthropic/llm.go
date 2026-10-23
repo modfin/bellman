@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -616,6 +617,9 @@ func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, strin
 	parts := request.ThinkingParts != nil && *request.ThinkingParts
 	model := request.Model.Lookup(GenModels)
 
+	if slices.Equal(model.ThinkingLevels, noThinking) {
+		return nil, ""
+	}
 	if model.UsesThinkingBudget {
 		switch level {
 		case "":
