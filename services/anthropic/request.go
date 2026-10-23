@@ -36,6 +36,7 @@ type request struct {
 
 type reqOutputConfig struct {
 	Format *reqOutputFormat `json:"format,omitempty"`
+	Effort string           `json:"effort,omitempty"` // low, medium, high, xhigh or max
 }
 
 type reqOutputFormat struct {
@@ -88,9 +89,13 @@ type ExtendedThinkingType string
 const (
 	ExtendedThinkingTypeEnabled  ExtendedThinkingType = "enabled"
 	ExtendedThinkingTypeDisabled ExtendedThinkingType = "disabled"
+	ExtendedThinkingTypeAdaptive ExtendedThinkingType = "adaptive"
+	// ExtendedThinkingTypeBetweenTools turns off up-front thinking, claude sonnet 5.5 only
+	ExtendedThinkingTypeBetweenTools ExtendedThinkingType = "between_tools"
 )
 
 type reqExtendedThinking struct {
 	BudgetTokens int                  `json:"budget_tokens,omitempty"`
 	Type         ExtendedThinkingType `json:"type,omitempty"`
+	Display      string               `json:"display,omitempty"` // adaptive only, summarized or omitted
 }

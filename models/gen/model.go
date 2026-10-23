@@ -36,6 +36,15 @@ type Model struct {
 	// rejects any reasoning_effort / thinking-budget config. When true,
 	// bellman omits the reasoning block from the request.
 	UsesAdaptiveThinking bool `json:"uses_adaptive_thinking,omitempty"`
+
+	// ThinkingLevels lists the thinking levels the model accepts, including ThinkingLevelNone when
+	// thinking can be turned off. When empty, the provider's default set is used, and a model that
+	// only lists ThinkingLevelNone can't think at all.
+	ThinkingLevels []ThinkingLevel `json:"thinking_levels,omitempty"`
+
+	// UsesThinkingBudget indicates the model takes a thinking token budget instead of a level, and
+	// providers translate the level into a budget.
+	UsesThinkingBudget bool `json:"uses_thinking_budget,omitempty"`
 }
 
 func (m Model) FQN() string {

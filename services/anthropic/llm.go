@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -48,7 +49,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 		"anthropic-version", Version,
 	)
@@ -350,7 +351,7 @@ func (g *generator) Prompt(conversation ...prompt.Prompt) (*gen.Response, error)
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 		"anthropic-version", Version,
 	)
@@ -474,16 +475,13 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 		}
 	}
 
-	if g.request.ThinkingBudget != nil {
-		model.Thinking = &reqExtendedThinking{
-			BudgetTokens: *g.request.ThinkingBudget,
-			Type:         ExtendedThinkingTypeEnabled,
+	var effort string
+	model.Thinking, effort = toThinking(g.request, model.MaxTokens)
+	if effort != "" {
+		if model.OutputConfig == nil {
+			model.OutputConfig = &reqOutputConfig{}
 		}
-	}
-	if g.request.ThinkingBudget != nil && *g.request.ThinkingBudget == 0 {
-		model.Thinking = &reqExtendedThinking{
-			Type: ExtendedThinkingTypeDisabled,
-		}
+		model.OutputConfig.Effort = effort
 	}
 
 	// appendBlock appends a content block to the last message when it already
@@ -601,4 +599,63 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 		req.Header.Add("anthropic-beta", "pdfs-2024-09-25")
 	}
 	return req, model, nil
+}
+
+// thinkingBudgets translates levels into budget_tokens for models without adaptive thinking.
+var thinkingBudgets = map[gen.ThinkingLevel]int{
+	gen.ThinkingLevelMinimal: 1024,
+	gen.ThinkingLevelLow:     2048,
+	gen.ThinkingLevelMedium:  8192,
+	gen.ThinkingLevelHigh:    16384,
+	gen.ThinkingLevelXHigh:   24576,
+	gen.ThinkingLevelMax:     32000,
+}
+
+// toThinking maps the bellman thinking options onto anthropic's thinking config and output effort.
+func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, string) {
+	level := request.ThinkingLevel
+	parts := request.ThinkingParts != nil && *request.ThinkingParts
+	model := request.Model.Lookup(GenModels)
+
+	if slices.Equal(model.ThinkingLevels, noThinking) {
+		return nil, ""
+	}
+	// models missing from GenModels get a budget, like every model did before thinking levels,
+	// since the older models among them reject adaptive thinking
+	if model.UsesThinkingBudget || len(model.ThinkingLevels) == 0 {
+		switch level {
+		case "":
+			return nil, ""
+		case gen.ThinkingLevelNone:
+			return &reqExtendedThinking{Type: ExtendedThinkingTypeDisabled}, ""
+		}
+		// budget_tokens must be at least 1024 and below max_tokens, keep half of max_tokens for the answer
+		budget := min(thinkingBudgets[level], maxTokens/2)
+		if budget < 1024 {
+			return nil, ""
+		}
+		return &reqExtendedThinking{Type: ExtendedThinkingTypeEnabled, BudgetTokens: budget}, ""
+	}
+
+	supported := model.ThinkingLevels
+	level = level.Resolve(supported)
+	if level == gen.ThinkingLevelNone {
+		if model.Name == GenModel_5_5_sonnet_latest.Name {
+			// sonnet 5.5 rejects disabled, between_tools skips up-front thinking instead
+			return &reqExtendedThinking{Type: ExtendedThinkingTypeBetweenTools}, ""
+		}
+		return &reqExtendedThinking{Type: ExtendedThinkingTypeDisabled}, ""
+	}
+	// parts alone only sets the display on models that always think, so it doesn't turn thinking on,
+	// which would bring thinking's restrictions on temperature, top_k and tool_choice with it
+	if level == "" && (!parts || slices.Contains(supported, gen.ThinkingLevelNone)) {
+		return nil, ""
+	}
+
+	thinking := &reqExtendedThinking{Type: ExtendedThinkingTypeAdaptive}
+	if parts {
+		// newer models default to omitted, which returns thinking blocks without text
+		thinking.Display = "summarized"
+	}
+	return thinking, string(level)
 }

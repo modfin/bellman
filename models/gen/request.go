@@ -21,8 +21,8 @@ type Request struct {
 	Tools      []tools.Tool `json:"tools,omitempty"`
 	ToolConfig *tools.ToolChoice `json:"tool,omitempty"`
 
-	ThinkingBudget *int  `json:"thinking_budget,omitempty"`
-	ThinkingParts  *bool `json:"thinking_parts,omitempty"`
+	ThinkingLevel ThinkingLevel `json:"thinking_level,omitempty"`
+	ThinkingParts *bool         `json:"thinking_parts,omitempty"`
 
 	TopP             *float64 `json:"top_p,omitempty"`
 	TopK             *int     `json:"top_k,omitempty"`

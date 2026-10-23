@@ -8,6 +8,15 @@ import (
 
 const Provider = "OpenAI"
 
+// reasoning effort levels per model, from the model pages at https://developers.openai.com/api/docs/models
+var (
+	effortsLowToMax      = []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelXHigh, gen.ThinkingLevelMax}
+	effortsNoneToMax     = []gen.ThinkingLevel{gen.ThinkingLevelNone, gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelXHigh, gen.ThinkingLevelMax}
+	effortsNoneToXHigh   = []gen.ThinkingLevel{gen.ThinkingLevelNone, gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelXHigh}
+	effortsLowToXHigh    = []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelXHigh}
+	effortsMediumToXHigh = []gen.ThinkingLevel{gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelXHigh}
+)
+
 // curl https://api.openai.com/v1/models \                                                                                                                                                                           130 master!
 // -H "Authorization: Bearer $OPENAI_API_KEY" | jq
 //{
@@ -25,108 +34,126 @@ var GenModel_gpt6_1_sol_latest = gen.Model{
 	Name:           "gpt-6.1-sol",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsLowToMax,
 }
 var GenModel_gpt6_astra_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-6-astra",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsLowToMax,
 }
 var GenModel_gpt6_sol_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-6-sol",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToMax,
 }
 var GenModel_gpt6_luna_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-6-luna",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToMax,
 }
 var GenModel_gpt5_6_sol_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.6-sol",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToMax,
 }
 var GenModel_gpt5_6_terra_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.6-terra",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToMax,
 }
 var GenModel_gpt5_6_luna_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.6-luna",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToMax,
 }
 var GenModel_gpt5_5_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.5",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToXHigh,
 }
 var GenModel_gpt5_5_pro_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.5-pro",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsMediumToXHigh,
 }
 var GenModel_gpt5_4_pro_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.4-pro",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsMediumToXHigh,
 }
 var GenModel_gpt5_4_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.4",
 	InputMaxToken:  1_050_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToXHigh,
 }
 var GenModel_gpt5_4_mini_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.4-mini",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToXHigh,
 }
 var GenModel_gpt5_4_nano_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.4-nano",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToXHigh,
 }
 var GenModel_gpt5_3_codex_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.3-codex",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsLowToXHigh,
 }
 var GenModel_gpt5_2_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.2",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsNoneToXHigh,
 }
 var GenModel_gpt5_2_pro_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.2-pro",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsMediumToXHigh,
 }
 var GenModel_gpt5_2_codex_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.2-codex",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: effortsLowToXHigh,
 }
 var GenModel_gpt5_1_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5.1",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: []gen.ThinkingLevel{gen.ThinkingLevelNone, gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh},
 }
 var GenModel_gpt5_1_codex_latest = gen.Model{
 	Provider:       Provider,
@@ -151,12 +178,14 @@ var GenModel_gpt5_latest = gen.Model{
 	Name:           "gpt-5",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 128_000,
+	ThinkingLevels: []gen.ThinkingLevel{gen.ThinkingLevelMinimal, gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh},
 }
 var GenModel_gpt5_pro_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gpt-5-pro",
 	InputMaxToken:  400_000,
 	OutputMaxToken: 272_000,
+	ThinkingLevels: []gen.ThinkingLevel{gen.ThinkingLevelHigh},
 }
 var GenModel_gpt5_codex_latest = gen.Model{
 	Provider:       Provider,

@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -416,7 +417,7 @@ func (g *generator) Prompt(prompts ...prompt.Prompt) (*gen.Response, error) {
 		"top_p", g.request.TopP,
 		"max_tokens", g.request.MaxTokens,
 		"stop_sequences", g.request.StopSequences,
-		"thinking_budget", g.request.ThinkingBudget != nil,
+		"thinking_level", g.request.ThinkingLevel,
 		"thinking_parts", g.request.ThinkingParts != nil,
 		"url", model.url,
 	)
@@ -582,15 +583,7 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		}
 	}
 
-	if g.request.ThinkingBudget != nil || g.request.ThinkingParts != nil {
-		model.GenerationConfig.ThinkingConfig = &thinkingConfig{}
-	}
-	if g.request.ThinkingBudget != nil {
-		model.GenerationConfig.ThinkingConfig.ThinkingBudget = g.request.ThinkingBudget
-	}
-	if g.request.ThinkingParts != nil {
-		model.GenerationConfig.ThinkingConfig.IncludeThoughts = g.request.ThinkingParts
-	}
+	model.GenerationConfig.ThinkingConfig = toThinkingConfig(g.request)
 
 	// Append a part into the current Content of the given role, merging with
 	// the previous Content when it already has the same role. Gemini requires
@@ -731,4 +724,53 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		return nil, model, fmt.Errorf("could not post google request, %w", err)
 	}
 	return resp, model, nil
+}
+
+// toThinkingConfig maps the bellman thinking options onto gemini's thinkingConfig. Gemini 2.x only
+// supports thinkingBudget, while gemini 3+ uses thinkingLevel and newer models reject thinkingBudget.
+func toThinkingConfig(request gen.Request) *thinkingConfig {
+	if request.ThinkingLevel == "" && request.ThinkingParts == nil {
+		return nil
+	}
+	cfg := &thinkingConfig{IncludeThoughts: request.ThinkingParts}
+	if request.ThinkingLevel == "" {
+		return cfg
+	}
+
+	model := request.Model.Lookup(GenModels)
+	supported := model.ThinkingLevels
+	// gemini 2.x models missing from GenModels still need a budget
+	unknownGemini2 := len(supported) == 0 && strings.HasPrefix(model.Name, "gemini-2")
+	if model.UsesThinkingBudget || unknownGemini2 {
+		if len(supported) == 0 {
+			supported = gen.ThinkingLevels
+		}
+		cfg.ThinkingBudget = new(thinkingBudgets[request.ThinkingLevel.Resolve(supported)])
+		return cfg
+	}
+	if len(supported) == 0 {
+		supported = thinkingLevels
+	}
+	cfg.ThinkingLevel = new(string(request.ThinkingLevel.Resolve(supported)))
+	return cfg
+}
+
+// thinkingLevels are the levels used when a gemini 3+ model does not list its own. Minimal is left
+// out since gemini 4 and 3.7+ flash reject it.
+var thinkingLevels = []gen.ThinkingLevel{
+	gen.ThinkingLevelLow,
+	gen.ThinkingLevelMedium,
+	gen.ThinkingLevelHigh,
+}
+
+// thinkingBudgets translates levels into token budgets for gemini 2.5, within the 512-24576 range all of them accept,
+// with 0 turning thinking off where the model allows it.
+var thinkingBudgets = map[gen.ThinkingLevel]int{
+	gen.ThinkingLevelNone:    0,
+	gen.ThinkingLevelMinimal: 512,
+	gen.ThinkingLevelLow:     1024,
+	gen.ThinkingLevelMedium:  8192,
+	gen.ThinkingLevelHigh:    16384,
+	gen.ThinkingLevelXHigh:   24576,
+	gen.ThinkingLevelMax:     24576,
 }

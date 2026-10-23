@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"github.com/modfin/bellman/models/gen"
 	"github.com/modfin/bellman/tools"
 )
 
@@ -54,7 +55,7 @@ type reasoningInputItem struct {
 
 func (reasoningInputItem) isInputItem() {}
 
-// ReasoningEffort is a string that can be "minimal", "low", "medium", "high", or "none" (model-dependent).
+// ReasoningEffort is a string that can be "none", "minimal", "low", "medium", "high", "xhigh" or "max" (model-dependent).
 type ReasoningEffort string
 
 const (
@@ -63,7 +64,18 @@ const (
 	ReasoningEffortLow     ReasoningEffort = "low"
 	ReasoningEffortMedium  ReasoningEffort = "medium"
 	ReasoningEffortHigh    ReasoningEffort = "high"
+	ReasoningEffortXHigh   ReasoningEffort = "xhigh"
+	ReasoningEffortMax     ReasoningEffort = "max"
 )
+
+// reasoningEfforts are the levels used when the model does not list its own, kept to the ones
+// bellman sent before models listed their levels, since older reasoning models reject xhigh and max.
+var reasoningEfforts = []gen.ThinkingLevel{
+	gen.ThinkingLevelNone,
+	gen.ThinkingLevelLow,
+	gen.ThinkingLevelMedium,
+	gen.ThinkingLevelHigh,
+}
 
 type reasoningConfig struct {
 	Effort  *ReasoningEffort `json:"effort,omitempty"`

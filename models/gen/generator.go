@@ -3,6 +3,7 @@ package gen
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
@@ -30,6 +31,9 @@ func (b *Generator) Stream(prompts ...prompt.Prompt) (<-chan *StreamResponse, er
 	if prompter == nil {
 		return nil, errors.New("prompter is required")
 	}
+	if err := checkThinkingLevel(b.Request.ThinkingLevel); err != nil {
+		return nil, err
+	}
 	r := b.clone().Request
 	r.Stream = true
 	prompter.SetRequest(r)
@@ -41,8 +45,19 @@ func (b *Generator) Prompt(prompts ...prompt.Prompt) (*Response, error) {
 	if prompter == nil {
 		return nil, errors.New("prompter is required")
 	}
+	if err := checkThinkingLevel(b.Request.ThinkingLevel); err != nil {
+		return nil, err
+	}
 	prompter.SetRequest(b.clone().Request)
 	return prompter.Prompt(prompts...)
+}
+
+// checkThinkingLevel rejects unknown levels, which providers would otherwise send as is or turn into no thinking.
+func checkThinkingLevel(level ThinkingLevel) error {
+	if level != "" && !level.Valid() {
+		return fmt.Errorf("unknown thinking level %q", level)
+	}
+	return nil
 }
 
 func (b *Generator) clone() *Generator {
@@ -85,10 +100,6 @@ func (b *Generator) clone() *Generator {
 	}
 	if b.Request.Context != nil {
 		bb.Request.Context = b.Request.Context
-	}
-	if b.Request.ThinkingBudget != nil {
-		cp := *b.Request.ThinkingBudget
-		bb.Request.ThinkingBudget = &cp
 	}
 	if b.Request.ThinkingParts != nil {
 		cp := *b.Request.ThinkingParts
@@ -196,11 +207,12 @@ func (b *Generator) MaxTokens(maxTokens int) *Generator {
 	return bb
 }
 
-// ThinkingBudget sets the thinking budget for the generator. For models which do not support tokens as thinking budget,
-// the number of tokens is translated into enums "low", "medium", "high". Where "low" is <2.000, "medium" is 2.000-10.000, and "high" is 10.001+.
-func (b *Generator) ThinkingBudget(thinkingBudget int) *Generator {
+// ThinkingLevel sets how much the model should reason. Providers round the level to the nearest one the model
+// supports, and translate it into a token budget for models that only support budgets. Leave it unset to use the
+// model's default, and use ThinkingLevelNone to disable reasoning where the model allows it.
+func (b *Generator) ThinkingLevel(level ThinkingLevel) *Generator {
 	bb := b.clone()
-	bb.Request.ThinkingBudget = &thinkingBudget
+	bb.Request.ThinkingLevel = level
 
 	return bb
 }
@@ -298,9 +310,9 @@ func WithContext(ctx context.Context) Option {
 		return g.WithContext(ctx)
 	}
 }
-func WithThinkingBudget(thinkingBudget int) Option {
+func WithThinkingLevel(level ThinkingLevel) Option {
 	return func(g *Generator) *Generator {
-		return g.ThinkingBudget(thinkingBudget)
+		return g.ThinkingLevel(level)
 	}
 }
 func WithThinkingParts(thinkingParts bool) Option {
