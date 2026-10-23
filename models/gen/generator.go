@@ -3,6 +3,7 @@ package gen
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
@@ -30,6 +31,9 @@ func (b *Generator) Stream(prompts ...prompt.Prompt) (<-chan *StreamResponse, er
 	if prompter == nil {
 		return nil, errors.New("prompter is required")
 	}
+	if err := checkThinkingLevel(b.Request.ThinkingLevel); err != nil {
+		return nil, err
+	}
 	r := b.clone().Request
 	r.Stream = true
 	prompter.SetRequest(r)
@@ -41,8 +45,19 @@ func (b *Generator) Prompt(prompts ...prompt.Prompt) (*Response, error) {
 	if prompter == nil {
 		return nil, errors.New("prompter is required")
 	}
+	if err := checkThinkingLevel(b.Request.ThinkingLevel); err != nil {
+		return nil, err
+	}
 	prompter.SetRequest(b.clone().Request)
 	return prompter.Prompt(prompts...)
+}
+
+// checkThinkingLevel rejects unknown levels, which providers would otherwise send as is or turn into no thinking.
+func checkThinkingLevel(level ThinkingLevel) error {
+	if level != "" && !level.Valid() {
+		return fmt.Errorf("unknown thinking level %q", level)
+	}
+	return nil
 }
 
 func (b *Generator) clone() *Generator {

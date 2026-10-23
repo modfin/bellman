@@ -15,6 +15,8 @@ func TestThinkingLevelResolve(t *testing.T) {
 		{ThinkingLevelXHigh, gemini3Pro, ThinkingLevelHigh},
 		{ThinkingLevelNone, gemini3Pro, ThinkingLevelLow},
 		{ThinkingLevelMax, []ThinkingLevel{ThinkingLevelNone, ThinkingLevelHigh, ThinkingLevelXHigh}, ThinkingLevelXHigh},
+		{ThinkingLevelMinimal, []ThinkingLevel{ThinkingLevelNone, ThinkingLevelLow, ThinkingLevelHigh}, ThinkingLevelLow},
+		{ThinkingLevelHigh, []ThinkingLevel{ThinkingLevelNone}, ThinkingLevelNone},
 		{ThinkingLevelMedium, nil, ThinkingLevelMedium},
 		{"", gemini3Pro, ""},
 		{"bogus", gemini3Pro, "bogus"},
@@ -43,5 +45,18 @@ func TestModelLookup(t *testing.T) {
 	}
 	if got := (Model{Name: "unknown"}).Lookup(registry); got.Name != "unknown" || got.ThinkingLevels != nil {
 		t.Errorf("unknown: got %+v", got)
+	}
+}
+
+func TestCheckThinkingLevel(t *testing.T) {
+	for _, level := range []ThinkingLevel{"", ThinkingLevelNone, ThinkingLevelMax} {
+		if err := checkThinkingLevel(level); err != nil {
+			t.Errorf("%q: unexpected error %v", level, err)
+		}
+	}
+	for _, level := range []ThinkingLevel{"High", "medum"} {
+		if err := checkThinkingLevel(level); err == nil {
+			t.Errorf("%q: want error", level)
+		}
 	}
 }

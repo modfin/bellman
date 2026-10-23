@@ -27,6 +27,7 @@ func TestToThinkingConfig(t *testing.T) {
 		{"model levels", gen.Request{Model: GenModel_gemini_3_pro_preview, ThinkingLevel: gen.ThinkingLevelMedium}, `{"thinkingLevel":"low"}`},
 		{"gemini 2 budget", gen.Request{Model: GenModel_gemini_2_5_flash_latest, ThinkingLevel: gen.ThinkingLevelMedium}, `{"thinkingBudget":8192}`},
 		{"gemini 2 budget by name", gen.Request{Model: gen.Model{Provider: Provider, Name: GenModel_gemini_2_5_flash_lite_latest.Name}, ThinkingLevel: gen.ThinkingLevelLow}, `{"thinkingBudget":1024}`},
+		{"unknown gemini 2 uses budget", gen.Request{Model: gen.Model{Provider: Provider, Name: "gemini-2.5-flash-preview-09-2025"}, ThinkingLevel: gen.ThinkingLevelMedium}, `{"thinkingBudget":8192}`},
 		{"gemini 2 none", gen.Request{Model: GenModel_gemini_2_5_flash_latest, ThinkingLevel: gen.ThinkingLevelNone}, `{"thinkingBudget":0}`},
 		{"gemini 2.5 pro can't disable", gen.Request{Model: GenModel_gemini_2_5_pro_latest, ThinkingLevel: gen.ThinkingLevelNone}, `{"thinkingBudget":512}`},
 	}

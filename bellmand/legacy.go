@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/modfin/bellman/models/gen"
 )
@@ -21,6 +22,9 @@ func decodeGenRequest(body []byte) (gen.FullRequest, error) {
 	}
 	if req.ThinkingLevel == "" && req.ThinkingBudget != nil {
 		req.ThinkingLevel = budgetToThinkingLevel(*req.ThinkingBudget)
+	}
+	if req.ThinkingLevel != "" && !req.ThinkingLevel.Valid() {
+		return gen.FullRequest{}, fmt.Errorf("unknown thinking_level %q", req.ThinkingLevel)
 	}
 	return req.FullRequest, nil
 }

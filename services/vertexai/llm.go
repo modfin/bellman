@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -738,7 +739,9 @@ func toThinkingConfig(request gen.Request) *thinkingConfig {
 
 	model := request.Model.Lookup(GenModels)
 	supported := model.ThinkingLevels
-	if model.UsesThinkingBudget {
+	// gemini 2.x models missing from GenModels still need a budget
+	unknownGemini2 := len(supported) == 0 && strings.HasPrefix(model.Name, "gemini-2")
+	if model.UsesThinkingBudget || unknownGemini2 {
 		if len(supported) == 0 {
 			supported = gen.ThinkingLevels
 		}

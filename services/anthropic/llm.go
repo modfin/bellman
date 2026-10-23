@@ -620,7 +620,9 @@ func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, strin
 	if slices.Equal(model.ThinkingLevels, noThinking) {
 		return nil, ""
 	}
-	if model.UsesThinkingBudget {
+	// models missing from GenModels get a budget, like every model did before thinking levels,
+	// since the older models among them reject adaptive thinking
+	if model.UsesThinkingBudget || len(model.ThinkingLevels) == 0 {
 		switch level {
 		case "":
 			return nil, ""
@@ -636,9 +638,6 @@ func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, strin
 	}
 
 	supported := model.ThinkingLevels
-	if len(supported) == 0 {
-		supported = effortLevels
-	}
 	level = level.Resolve(supported)
 	if level == gen.ThinkingLevelNone {
 		if model.Name == GenModel_5_5_sonnet_latest.Name {
@@ -647,7 +646,9 @@ func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, strin
 		}
 		return &reqExtendedThinking{Type: ExtendedThinkingTypeDisabled}, ""
 	}
-	if level == "" && !parts {
+	// parts alone only sets the display on models that always think, so it doesn't turn thinking on,
+	// which would bring thinking's restrictions on temperature, top_k and tool_choice with it
+	if level == "" && (!parts || slices.Contains(supported, gen.ThinkingLevelNone)) {
 		return nil, ""
 	}
 
