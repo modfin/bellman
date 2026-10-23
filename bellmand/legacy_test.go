@@ -11,7 +11,7 @@ func TestDecodeGenRequestThinking(t *testing.T) {
 		body string
 		want gen.ThinkingLevel
 	}{
-		{`{"model":{"provider":"VertexAI","name":"gemini-4-argon"}}`, ""},
+		{`{"prompts":[]}`, ""},
 		{`{"thinking_level":"high"}`, gen.ThinkingLevelHigh},
 		{`{"thinking_budget":0}`, gen.ThinkingLevelNone},
 		{`{"thinking_budget":1024}`, gen.ThinkingLevelLow},

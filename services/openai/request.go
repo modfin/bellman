@@ -55,7 +55,7 @@ type reasoningInputItem struct {
 
 func (reasoningInputItem) isInputItem() {}
 
-// ReasoningEffort is a string that can be "none", "minimal", "low", "medium", "high" or "xhigh" (model-dependent).
+// ReasoningEffort is a string that can be "none", "minimal", "low", "medium", "high", "xhigh" or "max" (model-dependent).
 type ReasoningEffort string
 
 const (
@@ -65,17 +65,11 @@ const (
 	ReasoningEffortMedium  ReasoningEffort = "medium"
 	ReasoningEffortHigh    ReasoningEffort = "high"
 	ReasoningEffortXHigh   ReasoningEffort = "xhigh"
+	ReasoningEffortMax     ReasoningEffort = "max"
 )
 
 // reasoningEfforts are the levels used when the model does not list its own.
-var reasoningEfforts = []gen.ThinkingLevel{
-	gen.ThinkingLevelNone,
-	gen.ThinkingLevelMinimal,
-	gen.ThinkingLevelLow,
-	gen.ThinkingLevelMedium,
-	gen.ThinkingLevelHigh,
-	gen.ThinkingLevelXHigh,
-}
+var reasoningEfforts = gen.ThinkingLevels
 
 type reasoningConfig struct {
 	Effort  *ReasoningEffort `json:"effort,omitempty"`

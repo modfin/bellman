@@ -90,6 +90,8 @@ const (
 	ExtendedThinkingTypeEnabled  ExtendedThinkingType = "enabled"
 	ExtendedThinkingTypeDisabled ExtendedThinkingType = "disabled"
 	ExtendedThinkingTypeAdaptive ExtendedThinkingType = "adaptive"
+	// ExtendedThinkingTypeBetweenTools turns off up-front thinking, claude sonnet 5.5 only
+	ExtendedThinkingTypeBetweenTools ExtendedThinkingType = "between_tools"
 )
 
 type reqExtendedThinking struct {

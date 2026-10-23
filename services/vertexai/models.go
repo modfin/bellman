@@ -5,10 +5,23 @@ import (
 	"github.com/modfin/bellman/models/gen"
 )
 
+// thinkingLevelsWithMinimal is for the gemini 3+ models that, unlike the default, accept minimal.
+var thinkingLevelsWithMinimal = []gen.ThinkingLevel{gen.ThinkingLevelMinimal, gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh}
+
+// thinkingLevelsWithoutNone is for gemini 2.5 pro, which can't turn thinking off.
+var thinkingLevelsWithoutNone = gen.ThinkingLevels[1:]
+
 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-models
 
 const Provider = "VertexAI"
 
+var GenModel_gemini_4_argon_latest = gen.Model{
+	Provider:       Provider,
+	Name:           "gemini-4-argon",
+	InputMaxToken:  1_048_576,
+	OutputMaxToken: 65_536,
+	ThinkingLevels: []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh},
+}
 var GenModel_gemini_3_8_flash_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-3.8-flash",
@@ -26,43 +39,51 @@ var GenModel_gemini_3_6_flash_latest = gen.Model{
 	Name:           "gemini-3.6-flash",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: thinkingLevelsWithMinimal,
 }
 var GenModel_gemini_3_5_flash_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-3.5-flash",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: thinkingLevelsWithMinimal,
 }
 var GenModel_gemini_3_5_flash_lite_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-3.5-flash-lite",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: thinkingLevelsWithMinimal,
 }
 var GenModel_gemini_3_1_flash_lite_latest = gen.Model{
 	Provider:       Provider,
 	Name:           "gemini-3.1-flash-lite",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: thinkingLevelsWithMinimal,
 }
 var GenModel_gemini_2_5_pro_latest = gen.Model{
-	Provider:       Provider,
-	Name:           "gemini-2.5-pro",
-	InputMaxToken:  1_048_576,
-	OutputMaxToken: 65_536,
+	Provider:           Provider,
+	Name:               "gemini-2.5-pro",
+	InputMaxToken:      1_048_576,
+	OutputMaxToken:     65_536,
+	ThinkingLevels:     thinkingLevelsWithoutNone,
+	UsesThinkingBudget: true,
 }
 var GenModel_gemini_2_5_flash_latest = gen.Model{
-	Provider:       Provider,
-	Name:           "gemini-2.5-flash",
-	InputMaxToken:  1_048_576,
-	OutputMaxToken: 65_536,
+	Provider:           Provider,
+	Name:               "gemini-2.5-flash",
+	InputMaxToken:      1_048_576,
+	OutputMaxToken:     65_536,
+	UsesThinkingBudget: true,
 }
 
 var GenModel_gemini_2_5_flash_lite_latest = gen.Model{
-	Provider:       Provider,
-	Name:           "gemini-2.5-flash-lite",
-	InputMaxToken:  1_048_576,
-	OutputMaxToken: 65_536,
+	Provider:           Provider,
+	Name:               "gemini-2.5-flash-lite",
+	InputMaxToken:      1_048_576,
+	OutputMaxToken:     65_536,
+	UsesThinkingBudget: true,
 }
 
 // Deprecated: gemini-3-pro-preview has been shut down; use GenModel_gemini_3_1_pro_preview.
@@ -85,6 +106,7 @@ var GenModel_gemini_3_flash_preview = gen.Model{
 	Name:           "gemini-3-flash-preview",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: thinkingLevelsWithMinimal,
 }
 
 var GenModel_gemini_3_1_flash_lite_preview = gen.Model{
@@ -92,6 +114,7 @@ var GenModel_gemini_3_1_flash_lite_preview = gen.Model{
 	Name:           "gemini-3.1-flash-lite-preview",
 	InputMaxToken:  1_048_576,
 	OutputMaxToken: 65_536,
+	ThinkingLevels: thinkingLevelsWithMinimal,
 }
 
 // https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#supported-models
@@ -179,4 +202,5 @@ var GenModels = map[string]gen.Model{
 	GenModel_gemini_3_6_flash_latest.Name:      GenModel_gemini_3_6_flash_latest,
 	GenModel_gemini_3_7_flash_latest.Name:      GenModel_gemini_3_7_flash_latest,
 	GenModel_gemini_3_8_flash_latest.Name:      GenModel_gemini_3_8_flash_latest,
+	GenModel_gemini_4_argon_latest.Name:        GenModel_gemini_4_argon_latest,
 }

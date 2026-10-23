@@ -8,26 +8,37 @@ const Provider = "Anthropic"
 
 const Version = "2023-06-01"
 
+// effort levels per model, https://platform.claude.com/docs/en/build-with-claude/effort. ThinkingLevelNone is
+// listed for the models that accept turning thinking off.
+var (
+	effortLevels         = []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelXHigh, gen.ThinkingLevelMax}
+	effortLevelsWithNone = append([]gen.ThinkingLevel{gen.ThinkingLevelNone}, effortLevels...)
+	effortLevels46       = []gen.ThinkingLevel{gen.ThinkingLevelNone, gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelMax}
+)
+
 //type GenModel string
 
 // https://docs.anthropic.com/en/docs/about-claude/models
 var GenModel_3_7_sonnet_latest = gen.Model{
-	Provider:       Provider,
-	Name:           "claude-3-7-sonnet-latest",
-	InputMaxToken:  200_000,
-	OutputMaxToken: 64_000,
+	Provider:           Provider,
+	Name:               "claude-3-7-sonnet-latest",
+	InputMaxToken:      200_000,
+	OutputMaxToken:     64_000,
+	UsesThinkingBudget: true,
 }
 var GenModel_3_7_sonnet_20250219 = gen.Model{
-	Provider:       Provider,
-	Name:           "claude-3-7-sonnet-20250219",
-	InputMaxToken:  200_000,
-	OutputMaxToken: 64_000,
+	Provider:           Provider,
+	Name:               "claude-3-7-sonnet-20250219",
+	InputMaxToken:      200_000,
+	OutputMaxToken:     64_000,
+	UsesThinkingBudget: true,
 }
 var GenModel_4_0_sonnet_20250514 = gen.Model{
-	Provider:       Provider,
-	Name:           "claude-sonnet-4-20250514",
-	InputMaxToken:  200_000,
-	OutputMaxToken: 64_000,
+	Provider:           Provider,
+	Name:               "claude-sonnet-4-20250514",
+	InputMaxToken:      200_000,
+	OutputMaxToken:     64_000,
+	UsesThinkingBudget: true,
 }
 var GenModel_4_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
@@ -37,6 +48,7 @@ var GenModel_4_5_sonnet_latest = gen.Model{
 	OutputMaxToken:          64_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	UsesThinkingBudget:      true,
 }
 var GenModel_4_5_sonnet_20250929 = gen.Model{
 	Provider:                Provider,
@@ -46,6 +58,7 @@ var GenModel_4_5_sonnet_20250929 = gen.Model{
 	OutputMaxToken:          64_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	UsesThinkingBudget:      true,
 }
 var GenModel_4_6_sonnet_latest = gen.Model{
 	Provider:                Provider,
@@ -55,7 +68,7 @@ var GenModel_4_6_sonnet_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
-	ThinkingLevels:          []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelMax},
+	ThinkingLevels:          effortLevels46,
 }
 var GenModel_5_0_sonnet_latest = gen.Model{
 	Provider:                Provider,
@@ -65,6 +78,7 @@ var GenModel_5_0_sonnet_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevelsWithNone,
 }
 var GenModel_5_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
@@ -74,6 +88,7 @@ var GenModel_5_5_sonnet_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevelsWithNone,
 }
 var GenModel_3_5_sonnet_latest = gen.Model{
 	Provider:                Provider,
@@ -106,6 +121,16 @@ var GenModel_3_5_sonnet_20240620 = gen.Model{
 	SupportStructuredOutput: false,
 }
 
+var GenModel_5_5_haiku_latest = gen.Model{
+	Provider:                Provider,
+	Name:                    "claude-haiku-5-5",
+	Description:             "Fast and low cost, with thinking on by default",
+	InputMaxToken:           1_000_000,
+	OutputMaxToken:          128_000,
+	SupportTools:            true,
+	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevelsWithNone,
+}
 var GenModel_4_5_haiku_latest = gen.Model{
 	Provider:                Provider,
 	Name:                    "claude-haiku-4-5",
@@ -115,6 +140,7 @@ var GenModel_4_5_haiku_latest = gen.Model{
 	OutputMaxToken:          64_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	UsesThinkingBudget:      true,
 }
 var GenModel_4_5_haiku_20251001 = gen.Model{
 	Provider:                Provider,
@@ -125,6 +151,7 @@ var GenModel_4_5_haiku_20251001 = gen.Model{
 	OutputMaxToken:          64_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	UsesThinkingBudget:      true,
 }
 
 var GenModel_3_5_haiku_latest = gen.Model{
@@ -156,6 +183,7 @@ var GenModel_4_0_opus_20250514 = gen.Model{
 	OutputMaxToken:          0,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
+	UsesThinkingBudget:      true,
 }
 var GenModel_4_1_opus_20250805 = gen.Model{
 	Provider:                Provider,
@@ -166,6 +194,7 @@ var GenModel_4_1_opus_20250805 = gen.Model{
 	OutputMaxToken:          32_000,
 	SupportTools:            false,
 	SupportStructuredOutput: false,
+	UsesThinkingBudget:      true,
 }
 var GenModel_4_5_opus_latest = gen.Model{
 	Provider:                Provider,
@@ -175,6 +204,7 @@ var GenModel_4_5_opus_latest = gen.Model{
 	OutputMaxToken:          64_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	UsesThinkingBudget:      true,
 }
 var GenModel_4_5_opus_20251101 = gen.Model{
 	Provider:                Provider,
@@ -184,6 +214,7 @@ var GenModel_4_5_opus_20251101 = gen.Model{
 	OutputMaxToken:          64_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	UsesThinkingBudget:      true,
 }
 var GenModel_4_6_opus_latest = gen.Model{
 	Provider:                Provider,
@@ -193,7 +224,7 @@ var GenModel_4_6_opus_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
-	ThinkingLevels:          []gen.ThinkingLevel{gen.ThinkingLevelLow, gen.ThinkingLevelMedium, gen.ThinkingLevelHigh, gen.ThinkingLevelMax},
+	ThinkingLevels:          effortLevels46,
 }
 var GenModel_4_7_opus_latest = gen.Model{
 	Provider:                Provider,
@@ -203,6 +234,7 @@ var GenModel_4_7_opus_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevelsWithNone,
 }
 
 var GenModel_4_8_opus_latest = gen.Model{
@@ -213,6 +245,7 @@ var GenModel_4_8_opus_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevelsWithNone,
 }
 var GenModel_5_0_opus_latest = gen.Model{
 	Provider:                Provider,
@@ -222,6 +255,7 @@ var GenModel_5_0_opus_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevelsWithNone,
 }
 var GenModel_5_5_opus_latest = gen.Model{
 	Provider:                Provider,
@@ -231,6 +265,7 @@ var GenModel_5_5_opus_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevels,
 }
 var GenModel_5_0_fable_latest = gen.Model{
 	Provider:                Provider,
@@ -240,6 +275,7 @@ var GenModel_5_0_fable_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevels,
 }
 var GenModel_5_1_fable_latest = gen.Model{
 	Provider:                Provider,
@@ -249,6 +285,7 @@ var GenModel_5_1_fable_latest = gen.Model{
 	OutputMaxToken:          128_000,
 	SupportTools:            true,
 	SupportStructuredOutput: true,
+	ThinkingLevels:          effortLevels,
 }
 
 var GenModels = map[string]gen.Model{
@@ -259,6 +296,7 @@ var GenModels = map[string]gen.Model{
 	GenModel_4_6_opus_latest.Name:     GenModel_4_6_opus_latest,
 	GenModel_4_6_sonnet_latest.Name:   GenModel_4_6_sonnet_latest,
 	GenModel_4_5_haiku_latest.Name:    GenModel_4_5_haiku_latest,
+	GenModel_5_5_haiku_latest.Name:    GenModel_5_5_haiku_latest,
 	GenModel_4_5_sonnet_latest.Name:   GenModel_4_5_sonnet_latest,
 	GenModel_4_5_opus_latest.Name:     GenModel_4_5_opus_latest,
 	GenModel_4_7_opus_latest.Name:     GenModel_4_7_opus_latest,

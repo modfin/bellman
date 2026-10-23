@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -736,12 +735,16 @@ func toThinkingConfig(request gen.Request) *thinkingConfig {
 	if request.ThinkingLevel == "" {
 		return cfg
 	}
-	if strings.HasPrefix(request.Model.Name, "gemini-2") {
-		cfg.ThinkingBudget = new(thinkingBudgets[request.ThinkingLevel])
+
+	model := request.Model.Lookup(GenModels)
+	supported := model.ThinkingLevels
+	if model.UsesThinkingBudget {
+		if len(supported) == 0 {
+			supported = gen.ThinkingLevels
+		}
+		cfg.ThinkingBudget = new(thinkingBudgets[request.ThinkingLevel.Resolve(supported)])
 		return cfg
 	}
-
-	supported := request.Model.ThinkingLevels
 	if len(supported) == 0 {
 		supported = thinkingLevels
 	}
@@ -749,15 +752,16 @@ func toThinkingConfig(request gen.Request) *thinkingConfig {
 	return cfg
 }
 
-// thinkingLevels are the levels used when a gemini 3+ model does not list its own.
+// thinkingLevels are the levels used when a gemini 3+ model does not list its own. Minimal is left
+// out since gemini 4 and 3.7+ flash reject it.
 var thinkingLevels = []gen.ThinkingLevel{
-	gen.ThinkingLevelMinimal,
 	gen.ThinkingLevelLow,
 	gen.ThinkingLevelMedium,
 	gen.ThinkingLevelHigh,
 }
 
-// thinkingBudgets translates levels into token budgets for gemini 2.x, capped at the 24576 flash maximum.
+// thinkingBudgets translates levels into token budgets for gemini 2.5, within the 512-24576 range all of them accept,
+// with 0 turning thinking off where the model allows it.
 var thinkingBudgets = map[gen.ThinkingLevel]int{
 	gen.ThinkingLevelNone:    0,
 	gen.ThinkingLevelMinimal: 512,

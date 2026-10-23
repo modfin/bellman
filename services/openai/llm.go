@@ -496,7 +496,7 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, genReq
 	}
 
 	if !g.request.Model.UsesAdaptiveThinking && g.request.ThinkingLevel != "" {
-		supported := g.request.Model.ThinkingLevels
+		supported := g.request.Model.Lookup(GenModels).ThinkingLevels
 		if len(supported) == 0 {
 			supported = reasoningEfforts
 		}

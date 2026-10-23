@@ -26,6 +26,18 @@ var ThinkingLevels = []ThinkingLevel{
 	ThinkingLevelMax,
 }
 
+// Lookup returns the model with the same name in registry when m carries no thinking details, since models built
+// from a name alone (e.g. through bellmand) don't. Otherwise, or when the name is unknown, m is returned as is.
+func (m Model) Lookup(registry map[string]Model) Model {
+	if len(m.ThinkingLevels) > 0 || m.UsesThinkingBudget {
+		return m
+	}
+	if known, ok := registry[m.Name]; ok {
+		return known
+	}
+	return m
+}
+
 func (l ThinkingLevel) rank() int {
 	for i, level := range ThinkingLevels {
 		if level == l {

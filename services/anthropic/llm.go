@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync/atomic"
 
@@ -601,31 +600,6 @@ func (g *generator) prompt(conversation ...prompt.Prompt) (*http.Request, reques
 	return req, model, nil
 }
 
-// budgetThinkingModel matches the models from before adaptive thinking (claude 3.x and 4.0-4.5),
-// which take a thinking budget instead of an effort.
-var budgetThinkingModel = regexp.MustCompile(`^claude-(3-|(opus|sonnet|haiku)-4-(1|5)(-|$)|(opus|sonnet)-4-\d{8})`)
-
-// canDisableThinking lists the adaptive models that accept thinking type disabled. Newer models
-// always think, so ThinkingLevelNone falls back to the lowest effort for anything not listed.
-var canDisableThinking = map[string]bool{
-	GenModel_4_6_opus_latest.Name:   true,
-	GenModel_4_7_opus_latest.Name:   true,
-	GenModel_4_8_opus_latest.Name:   true,
-	GenModel_4_6_sonnet_latest.Name: true,
-	GenModel_5_0_opus_latest.Name:   true,
-	GenModel_5_0_sonnet_latest.Name: true,
-	"claude-haiku-5-5":              true,
-}
-
-// efforts are the levels used when an adaptive model does not list its own.
-var efforts = []gen.ThinkingLevel{
-	gen.ThinkingLevelLow,
-	gen.ThinkingLevelMedium,
-	gen.ThinkingLevelHigh,
-	gen.ThinkingLevelXHigh,
-	gen.ThinkingLevelMax,
-}
-
 // thinkingBudgets translates levels into budget_tokens for models without adaptive thinking.
 var thinkingBudgets = map[gen.ThinkingLevel]int{
 	gen.ThinkingLevelMinimal: 1024,
@@ -640,8 +614,9 @@ var thinkingBudgets = map[gen.ThinkingLevel]int{
 func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, string) {
 	level := request.ThinkingLevel
 	parts := request.ThinkingParts != nil && *request.ThinkingParts
+	model := request.Model.Lookup(GenModels)
 
-	if budgetThinkingModel.MatchString(request.Model.Name) {
+	if model.UsesThinkingBudget {
 		switch level {
 		case "":
 			return nil, ""
@@ -656,11 +631,17 @@ func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, strin
 		return &reqExtendedThinking{Type: ExtendedThinkingTypeEnabled, BudgetTokens: budget}, ""
 	}
 
+	supported := model.ThinkingLevels
+	if len(supported) == 0 {
+		supported = effortLevels
+	}
+	level = level.Resolve(supported)
 	if level == gen.ThinkingLevelNone {
-		if canDisableThinking[request.Model.Name] {
-			return &reqExtendedThinking{Type: ExtendedThinkingTypeDisabled}, ""
+		if model.Name == GenModel_5_5_sonnet_latest.Name {
+			// sonnet 5.5 rejects disabled, between_tools skips up-front thinking instead
+			return &reqExtendedThinking{Type: ExtendedThinkingTypeBetweenTools}, ""
 		}
-		level = gen.ThinkingLevelLow
+		return &reqExtendedThinking{Type: ExtendedThinkingTypeDisabled}, ""
 	}
 	if level == "" && !parts {
 		return nil, ""
@@ -671,12 +652,5 @@ func toThinking(request gen.Request, maxTokens int) (*reqExtendedThinking, strin
 		// newer models default to omitted, which returns thinking blocks without text
 		thinking.Display = "summarized"
 	}
-	if level == "" {
-		return thinking, ""
-	}
-	supported := request.Model.ThinkingLevels
-	if len(supported) == 0 {
-		supported = efforts
-	}
-	return thinking, string(level.Resolve(supported))
+	return thinking, string(level)
 }

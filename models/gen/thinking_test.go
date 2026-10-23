@@ -25,3 +25,23 @@ func TestThinkingLevelResolve(t *testing.T) {
 		}
 	}
 }
+
+func TestModelLookup(t *testing.T) {
+	known := Model{Name: "known", ThinkingLevels: []ThinkingLevel{ThinkingLevelHigh}}
+	registry := map[string]Model{known.Name: known}
+
+	own := Model{Name: "known", ThinkingLevels: []ThinkingLevel{ThinkingLevelLow}}
+	if got := own.Lookup(registry); got.ThinkingLevels[0] != ThinkingLevelLow {
+		t.Errorf("own details: got %v", got.ThinkingLevels)
+	}
+	budget := Model{Name: "known", UsesThinkingBudget: true}
+	if got := budget.Lookup(registry); !got.UsesThinkingBudget {
+		t.Errorf("own budget: got %+v", got)
+	}
+	if got := (Model{Name: "known"}).Lookup(registry); got.ThinkingLevels[0] != ThinkingLevelHigh {
+		t.Errorf("registry details: got %v", got.ThinkingLevels)
+	}
+	if got := (Model{Name: "unknown"}).Lookup(registry); got.Name != "unknown" || got.ThinkingLevels != nil {
+		t.Errorf("unknown: got %+v", got)
+	}
+}
