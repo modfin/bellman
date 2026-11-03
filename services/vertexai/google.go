@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/modfin/bellman/models"
-	"github.com/modfin/bellman/models/embed"
-	"github.com/modfin/bellman/models/gen"
-	"golang.org/x/oauth2"
 	"io"
 	"log/slog"
 	"net/http"
 	"regexp"
 	"sync/atomic"
+
+	"github.com/modfin/bellman/models"
+	"github.com/modfin/bellman/models/embed"
+	"github.com/modfin/bellman/models/gen"
+	"golang.org/x/oauth2"
 
 	"golang.org/x/oauth2/google"
 )
@@ -89,7 +90,7 @@ func (g *Google) Provider() string {
 }
 
 var projectIdPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{4,28}[a-z0-9])?$`)
-var regionPattern = regexp.MustCompile(`^(global)|([a-z]+-[a-z]+[1-9][0-9]*)$`)
+var regionPattern = regexp.MustCompile(`^(global)|(eu)|([a-z]+-[a-z]+[1-9][0-9]*)$`)
 var modelNamePattern = regexp.MustCompile(`^[\w.-]+$`) // should probably be gemini-[\w.-]
 
 func (g *Google) Embed(request *embed.Request) (*embed.Response, error) {
@@ -153,6 +154,10 @@ func (g *Google) Embed(request *embed.Request) (*embed.Response, error) {
 
 	if region == "global" {
 		u = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/google/models/%s:predict",
+			project, request.Model.Name)
+	}
+	if region == "eu" {
+		u = fmt.Sprintf("https://aiplatform.eu.rep.googleapis.com/v1/projects/%s/locations/eu/publishers/google/models/%s:predict",
 			project, request.Model.Name)
 	}
 

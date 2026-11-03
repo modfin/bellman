@@ -703,6 +703,10 @@ func (g *generator) prompt(prompts ...prompt.Prompt) (*http.Response, genRequest
 		model.url = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/google/models/%s:%s",
 			project, g.request.Model.Name, mode)
 	}
+	if region == "eu" {
+		model.url = fmt.Sprintf("https://aiplatform.eu.rep.googleapis.com/v1/projects/%s/locations/eu/publishers/google/models/%s:%s",
+			project, g.request.Model.Name, mode)
+	}
 
 	body, err := json.Marshal(model)
 	if err != nil {
