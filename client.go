@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync/atomic"
+	"time"
 
 	"github.com/modfin/bellman/internal/sse"
 	"github.com/modfin/bellman/models/decide"
@@ -389,8 +390,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
-	client := g.createStreamingHTTPClient()
-	res, err := client.Do(req)
+	res, err := streamingHTTPClient.Do(req)
 	if err != nil {
 		return nil, g.handleStreamingError(fmt.Errorf("could not post bellman request to %s; %w", u, err), reqc)
 	}
@@ -408,20 +408,36 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 	stream := make(chan *gen.StreamResponse, 100)
 
 	go func() {
-		defer res.Body.Close()
-		defer close(stream)
-
 		defer func() {
-			stream <- &gen.StreamResponse{
-				Type: gen.TYPE_EOF,
-			}
+			// Read what is left of the body (the chunked terminator after
+			// [DONE]) so the Transport can return the connection to the
+			// pool; closing an unread body discards the connection.
+			_, _ = io.Copy(io.Discard, io.LimitReader(reader, 64<<10))
+			res.Body.Close()
 		}()
+		defer close(stream)
 
 		// Handle context cancellation
 		ctx := g.request.Context
 		if ctx == nil {
 			ctx = context.Background()
 		}
+
+		// send never blocks past ctx cancellation, so the goroutine can
+		// always reach the deferred Body.Close even if the consumer has
+		// stopped reading a full channel.
+		send := func(r *gen.StreamResponse) bool {
+			select {
+			case stream <- r:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
+		defer send(&gen.StreamResponse{
+			Type: gen.TYPE_EOF,
+		})
 		readLine := func() ([]byte, error) {
 			var buf []byte
 			for {
@@ -444,10 +460,10 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			select {
 			case <-ctx.Done():
 				g.bellman.log("[gen] stream cancelled by context", "request", reqc, "error", ctx.Err())
-				stream <- &gen.StreamResponse{
+				send(&gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
 					Content: fmt.Sprintf("stream cancelled: %v", ctx.Err()),
-				}
+				})
 				return
 			default:
 				// Continue processing
@@ -465,10 +481,10 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 					break
 				}
 				g.bellman.log("[gen] error reading from stream", "request", reqc, "error", err)
-				stream <- &gen.StreamResponse{
+				send(&gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
 					Content: fmt.Sprintf("error reading stream: %v", err),
-				}
+				})
 				break // Exit the loop on any other error
 			}
 
@@ -483,10 +499,10 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 				// says what arrived rather than just that it was not SSE.
 				msg := sse.Describe(sse.Drain(line, reader))
 				g.bellman.log("[gen] non-sse content in stream", "request", reqc, "error", msg)
-				stream <- &gen.StreamResponse{
+				send(&gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
 					Content: msg,
-				}
+				})
 				break
 			}
 			line = payload
@@ -500,10 +516,10 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 			err = json.Unmarshal(line, &streamResp)
 			if err != nil {
 				g.bellman.log("[gen] could not unmarshal stream chunk", "request", reqc, "error", err, "line", string(line))
-				stream <- &gen.StreamResponse{
+				send(&gen.StreamResponse{
 					Type:    gen.TYPE_ERROR,
 					Content: fmt.Sprintf("could not unmarshal stream chunk: %v", err),
-				}
+				})
 				break
 			}
 
@@ -563,18 +579,12 @@ func (g *generator) validateStreamingRequest(request *gen.FullRequest) error {
 	return nil
 }
 
-// createStreamingHTTPClient creates an HTTP client optimized for streaming
-func (g *generator) createStreamingHTTPClient() *http.Client {
-	// Use a longer timeout for streaming requests
-	transport := &http.Transport{
-		DisableCompression: true,  // Disable compression for streaming
-		DisableKeepAlives:  false, // Keep connections alive for streaming
-	}
-
-	return &http.Client{
-		Transport: transport,
-		// No timeout for streaming - let context handle cancellation
-	}
+var streamingHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		DisableCompression:  true,
+		MaxIdleConnsPerHost: 16,
+		IdleConnTimeout:     90 * time.Second,
+	},
 }
 
 // isRetryableError checks if an error is retryable for streaming requests
