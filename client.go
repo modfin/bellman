@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync/atomic"
+	"time"
 
 	"github.com/modfin/bellman/internal/sse"
 	"github.com/modfin/bellman/models/decide"
@@ -389,8 +390,7 @@ func (g *generator) Stream(conversation ...prompt.Prompt) (<-chan *gen.StreamRes
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
-	client := g.createStreamingHTTPClient()
-	res, err := client.Do(req)
+	res, err := streamingHTTPClient.Do(req)
 	if err != nil {
 		return nil, g.handleStreamingError(fmt.Errorf("could not post bellman request to %s; %w", u, err), reqc)
 	}
@@ -563,18 +563,12 @@ func (g *generator) validateStreamingRequest(request *gen.FullRequest) error {
 	return nil
 }
 
-// createStreamingHTTPClient creates an HTTP client optimized for streaming
-func (g *generator) createStreamingHTTPClient() *http.Client {
-	// Use a longer timeout for streaming requests
-	transport := &http.Transport{
-		DisableCompression: true,  // Disable compression for streaming
-		DisableKeepAlives:  false, // Keep connections alive for streaming
-	}
-
-	return &http.Client{
-		Transport: transport,
-		// No timeout for streaming - let context handle cancellation
-	}
+var streamingHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		DisableCompression:  true,
+		MaxIdleConnsPerHost: 16,
+		IdleConnTimeout:     90 * time.Second,
+	},
 }
 
 // isRetryableError checks if an error is retryable for streaming requests

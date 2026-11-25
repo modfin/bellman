@@ -443,7 +443,7 @@ func serve(cfg Config, apiKeyConfigs map[string]ApiKeyConfig) error {
 		r.Route("/decide", Decide(proxy, apiKeyConfigs, rateLimiter))
 	}
 
-	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: h}
+	server := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HttpPort), Handler: h, IdleTimeout: 2 * time.Minute}
 	go func() {
 		logger.Info("Start", "action", "starting server", "port", cfg.HttpPort)
 		err := server.ListenAndServe()
