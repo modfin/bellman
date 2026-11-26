@@ -27,7 +27,7 @@ func TestGeneratorPurpose(t *testing.T) {
 	if p.request.Purpose != "report.summarize" {
 		t.Errorf("got purpose %q, want %q", p.request.Purpose, "report.summarize")
 	}
-	if _, err := g.Purpose("Report Summary").Prompt(); err == nil {
-		t.Error("want error for invalid purpose")
+	if _, err := g.Purpose("Report Summary").Prompt(); err != nil {
+		t.Errorf("prompt with invalid purpose: %v", err)
 	}
 }

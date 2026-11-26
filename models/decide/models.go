@@ -335,9 +335,6 @@ func (r *Request) Validate() error {
 	if r.Model.Name == "" {
 		return errors.New("model name is required")
 	}
-	if err := models.ValidatePurpose(r.Purpose); err != nil {
-		return err
-	}
 	if len(r.State) == 0 {
 		return errors.New("state is required")
 	}

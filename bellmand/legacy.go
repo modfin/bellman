@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/models/gen"
 )
 
@@ -26,9 +25,6 @@ func decodeGenRequest(body []byte) (gen.FullRequest, error) {
 	}
 	if req.ThinkingLevel != "" && !req.ThinkingLevel.Valid() {
 		return gen.FullRequest{}, fmt.Errorf("unknown thinking_level %q", req.ThinkingLevel)
-	}
-	if err := models.ValidatePurpose(req.Purpose); err != nil {
-		return gen.FullRequest{}, err
 	}
 	return req.FullRequest, nil
 }

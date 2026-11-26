@@ -1,21 +1,21 @@
-package models
+package main
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestValidatePurpose(t *testing.T) {
+func TestValidPurpose(t *testing.T) {
 	valid := []string{"", "a", "report.summarize", "batch_job-2", "0abc", strings.Repeat("a", 64)}
 	for _, p := range valid {
-		if err := ValidatePurpose(p); err != nil {
-			t.Errorf("ValidatePurpose(%q): unexpected error %v", p, err)
+		if !validPurpose(p) {
+			t.Errorf("validPurpose(%q) = false, want true", p)
 		}
 	}
 	invalid := []string{"Report", ".report", "-report", "report summarize", "report/summarize", "ö", strings.Repeat("a", 65)}
 	for _, p := range invalid {
-		if err := ValidatePurpose(p); err == nil {
-			t.Errorf("ValidatePurpose(%q): want error", p)
+		if validPurpose(p) {
+			t.Errorf("validPurpose(%q) = true, want false", p)
 		}
 	}
 }
