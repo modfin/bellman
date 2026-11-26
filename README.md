@@ -451,9 +451,8 @@ fmt.Println(answer, err)
 ## Purpose
 
 Set a purpose to say what a request is for. `bellmand` adds it as the `purpose` label on its request and token metrics, and
-to its logs, so consumption can be broken down below the API key. Use lowercase letters, digits, `.`, `_` and `-`, at most
-64 characters, e.g. `report.summarize`. Other values are still recorded as sent, but `bellmand` logs a warning for them. Keep
-the set of values small and fixed, never put ids in it.
+to its logs, so consumption can be broken down below the API key. Use short, lowercase values such as `report.summarize`.
+Keep the set of values small and fixed, never put ids in it.
 
 ```go
 client := bellman.New(bellmanUrl, bellman.Key{Name: "reports", Token: token})

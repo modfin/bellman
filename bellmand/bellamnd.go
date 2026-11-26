@@ -656,7 +656,6 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			)
 
 			// Taking some metrics...
-			warnInvalidPurpose(req.Purpose, apiKeyId, keyName)
 			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "total").Add(float64(response.Metadata.TotalTokens))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "input").Add(float64(response.Metadata.InputTokens))
@@ -810,7 +809,6 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			)
 
 			// Update metrics
-			warnInvalidPurpose(req.Purpose, apiKeyId, keyName)
 			streamReqCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose).Inc()
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "total").Add(float64(totalTokens))
 			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "input").Add(float64(tokenMetadata.InputTokens))
@@ -907,7 +905,6 @@ func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLim
 			)
 
 			// Taking some metrics...
-			warnInvalidPurpose(req.Purpose, apiKeyId, keyName)
 			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose).Inc()
 			questionCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose).Add(float64(len(req.Questions)))
 			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "total").Add(float64(response.Metadata.TotalTokens))
@@ -987,7 +984,6 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 			)
 
 			// Taking some metrics...
-			warnInvalidPurpose(req.Purpose, apiKeyId, keyName)
 			reqCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Add(float64(response.Metadata.TotalTokens))
 
@@ -1039,7 +1035,6 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 				"token-total", response.Metadata.TotalTokens,
 			)
 
-			warnInvalidPurpose(req.Purpose, apiKeyId, keyName)
 			reqCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Inc()
 			tokensCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Add(float64(response.Metadata.TotalTokens))
 
