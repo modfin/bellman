@@ -277,6 +277,7 @@ type Request struct {
 	Ctx context.Context `json:"-"`
 
 	Model     Model      `json:"model"`
+	Purpose   string     `json:"purpose,omitempty"`
 	State     []Part     `json:"state"`
 	Questions []Question `json:"questions"`
 }
@@ -290,6 +291,11 @@ func NewRequest(ctx context.Context, model Model, state ...Part) *Request {
 // Ask appends questions to the request and returns it for chaining.
 func (r *Request) Ask(questions ...Question) *Request {
 	r.Questions = append(r.Questions, questions...)
+	return r
+}
+
+func (r *Request) WithPurpose(purpose string) *Request {
+	r.Purpose = purpose
 	return r
 }
 

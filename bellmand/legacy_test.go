@@ -35,3 +35,20 @@ func TestDecodeGenRequestThinking(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeGenRequestPurpose(t *testing.T) {
+	req, err := decodeGenRequest([]byte(`{"purpose":"report.summarize"}`))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if req.Purpose != "report.summarize" {
+		t.Errorf("got purpose %q, want %q", req.Purpose, "report.summarize")
+	}
+	req, err = decodeGenRequest([]byte(`{"purpose":"Report Summary"}`))
+	if err != nil {
+		t.Fatalf("decode with invalid purpose: %v", err)
+	}
+	if req.Purpose != "Report Summary" {
+		t.Errorf("got purpose %q, want %q", req.Purpose, "Report Summary")
+	}
+}

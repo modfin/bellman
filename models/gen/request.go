@@ -13,6 +13,7 @@ type Request struct {
 	Stream bool `json:"stream"`
 
 	Model        Model  `json:"model"`
+	Purpose      string `json:"purpose,omitempty"`
 	SystemPrompt string `json:"system_prompt,omitempty"`
 
 	OutputSchema *schema.JSON `json:"output_schema,omitempty"`

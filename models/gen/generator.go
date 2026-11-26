@@ -118,6 +118,17 @@ func (b *Generator) Model(model Model) *Generator {
 	return bb
 }
 
+// Purpose becomes a Prometheus label value in bellmand, and every distinct value creates new time series that are
+// kept for good. Pass a fixed string, never a variable holding ids, names, dates or user input.
+//
+//	g.Purpose("report.summarize")        // good
+//	g.Purpose("report.summarize." + id) // bad, one new series per id
+func (b *Generator) Purpose(purpose string) *Generator {
+	bb := b.clone()
+	bb.Request.Purpose = purpose
+	return bb
+}
+
 func (b *Generator) System(prompt string) *Generator {
 	bb := b.clone()
 	bb.Request.SystemPrompt = prompt
@@ -246,6 +257,12 @@ func WithTools(tools ...tools.Tool) Option {
 func WithToolConfig(choice tools.ToolChoice) Option {
 	return func(g *Generator) *Generator {
 		return g.SetToolConfig(choice)
+	}
+}
+
+func WithPurpose(purpose string) Option {
+	return func(g *Generator) *Generator {
+		return g.Purpose(purpose)
 	}
 }
 
