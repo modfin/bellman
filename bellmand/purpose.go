@@ -8,11 +8,12 @@ func validPurpose(purpose string) bool {
 	return purpose == "" || purposePattern.MatchString(purpose)
 }
 
-func warnInvalidPurpose(purpose, keyName string) {
+func warnInvalidPurpose(purpose, apiKeyId, keyName string) {
 	if validPurpose(purpose) {
 		return
 	}
 	logger.Warn("purpose does not match pattern",
+		"apiKeyId", apiKeyId,
 		"key", keyName,
 		"purpose", purpose,
 		"pattern", purposePattern.String(),
