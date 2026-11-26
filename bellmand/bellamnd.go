@@ -559,7 +559,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			Help:        "Number of request per key",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key_id", "key_name"},
+		[]string{"model", "key_id", "key_name", "purpose"},
 	)
 
 	var tokensCounter = prometheus.NewCounterVec(
@@ -568,7 +568,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			Help:        "Number of tokens processed by model and key; cache_read_input and cache_creation_input are subsets of input",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key_id", "key_name", "type"},
+		[]string{"model", "key_id", "key_name", "purpose", "type"},
 	)
 
 	var streamReqCounter = prometheus.NewCounterVec(
@@ -577,7 +577,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			Help:        "Number of streaming request per key",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key_id", "key_name"},
+		[]string{"model", "key_id", "key_name", "purpose"},
 	)
 
 	var streamTokensCounter = prometheus.NewCounterVec(
@@ -586,7 +586,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			Help:        "Number of tokens processed by model and key in streaming mode; cache_read_input and cache_creation_input are subsets of input",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key_id", "key_name", "type"},
+		[]string{"model", "key_id", "key_name", "purpose", "type"},
 	)
 	prometheus.MustRegister(reqCounter, tokensCounter, streamReqCounter, streamTokensCounter)
 
@@ -617,6 +617,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 					"apiKeyId", apiKeyId,
 					"key", keyName,
 					"model", req.Model.FQN(),
+					"purpose", req.Purpose,
 				)
 				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
 				return
@@ -645,6 +646,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"apiKeyId", apiKeyId,
 				"key", keyName,
 				"model", req.Model.FQN(),
+				"purpose", req.Purpose,
 				"token-input", response.Metadata.InputTokens,
 				"token-cache-read-input", response.Metadata.CacheReadInputTokens,
 				"token-cache-creation-input", response.Metadata.CacheCreationInputTokens,
@@ -654,13 +656,13 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			)
 
 			// Taking some metrics...
-			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName).Inc()
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "total").Add(float64(response.Metadata.TotalTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "input").Add(float64(response.Metadata.InputTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "cache_read_input").Add(float64(response.Metadata.CacheReadInputTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "cache_creation_input").Add(float64(response.Metadata.CacheCreationInputTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "thinking").Add(float64(response.Metadata.ThinkingTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "output").Add(float64(response.Metadata.OutputTokens))
+			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose).Inc()
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "total").Add(float64(response.Metadata.TotalTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "input").Add(float64(response.Metadata.InputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "cache_read_input").Add(float64(response.Metadata.CacheReadInputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "cache_creation_input").Add(float64(response.Metadata.CacheCreationInputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "thinking").Add(float64(response.Metadata.ThinkingTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "output").Add(float64(response.Metadata.OutputTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -694,6 +696,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 					"apiKeyId", apiKeyId,
 					"key", keyName,
 					"model", req.Model.FQN(),
+					"purpose", req.Purpose,
 				)
 				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
 				return
@@ -721,6 +724,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"apiKeyId", apiKeyId,
 				"key", keyName,
 				"model", req.Model.FQN(),
+				"purpose", req.Purpose,
 			)
 
 			// Set SSE headers
@@ -795,6 +799,7 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 				"apiKeyId", apiKeyId,
 				"key", keyName,
 				"model", req.Model.FQN(),
+				"purpose", req.Purpose,
 				"token-input", tokenMetadata.InputTokens,
 				"token-cache-read-input", tokenMetadata.CacheReadInputTokens,
 				"token-cache-creation-input", tokenMetadata.CacheCreationInputTokens,
@@ -804,13 +809,13 @@ func Gen(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimite
 			)
 
 			// Update metrics
-			streamReqCounter.WithLabelValues(modelName, apiKeyId, keyName).Inc()
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "total").Add(float64(totalTokens))
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "input").Add(float64(tokenMetadata.InputTokens))
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "cache_read_input").Add(float64(tokenMetadata.CacheReadInputTokens))
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "cache_creation_input").Add(float64(tokenMetadata.CacheCreationInputTokens))
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "thinking").Add(float64(tokenMetadata.ThinkingTokens))
-			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, "output").Add(float64(tokenMetadata.OutputTokens))
+			streamReqCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose).Inc()
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "total").Add(float64(totalTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "input").Add(float64(tokenMetadata.InputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "cache_read_input").Add(float64(tokenMetadata.CacheReadInputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "cache_creation_input").Add(float64(tokenMetadata.CacheCreationInputTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "thinking").Add(float64(tokenMetadata.ThinkingTokens))
+			streamTokensCounter.WithLabelValues(modelName, apiKeyId, keyName, req.Purpose, "output").Add(float64(tokenMetadata.OutputTokens))
 		})
 	}
 }
@@ -823,7 +828,7 @@ func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLim
 			Help:        "Number of decision requests per key",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key_id", "key_name"},
+		[]string{"model", "key_id", "key_name", "purpose"},
 	)
 
 	var questionCounter = prometheus.NewCounterVec(
@@ -832,7 +837,7 @@ func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLim
 			Help:        "Number of questions answered by model and key",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key_id", "key_name"},
+		[]string{"model", "key_id", "key_name", "purpose"},
 	)
 
 	var tokensCounter = prometheus.NewCounterVec(
@@ -841,7 +846,7 @@ func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLim
 			Help:        "Number of tokens processed by model and key",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key_id", "key_name", "type"},
+		[]string{"model", "key_id", "key_name", "purpose", "type"},
 	)
 	prometheus.MustRegister(reqCounter, questionCounter, tokensCounter)
 
@@ -872,6 +877,7 @@ func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLim
 					"apiKeyId", apiKeyId,
 					"key", keyName,
 					"model", req.Model.FQN(),
+					"purpose", req.Purpose,
 				)
 				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
 				return
@@ -891,6 +897,7 @@ func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLim
 				"apiKeyId", apiKeyId,
 				"key", keyName,
 				"model", req.Model.FQN(),
+				"purpose", req.Purpose,
 				"questions", len(req.Questions),
 				"token-input", response.Metadata.InputTokens,
 				"token-output", response.Metadata.OutputTokens,
@@ -898,11 +905,11 @@ func Decide(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLim
 			)
 
 			// Taking some metrics...
-			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName).Inc()
-			questionCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName).Add(float64(len(req.Questions)))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "total").Add(float64(response.Metadata.TotalTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "input").Add(float64(response.Metadata.InputTokens))
-			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, "output").Add(float64(response.Metadata.OutputTokens))
+			reqCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose).Inc()
+			questionCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose).Add(float64(len(req.Questions)))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "total").Add(float64(response.Metadata.TotalTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "input").Add(float64(response.Metadata.InputTokens))
+			tokensCounter.WithLabelValues(response.Metadata.Model, apiKeyId, keyName, req.Purpose, "output").Add(float64(response.Metadata.OutputTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -919,7 +926,7 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 			Help:        "Number of request per key",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key"},
+		[]string{"model", "key", "purpose"},
 	)
 
 	var tokensCounter = prometheus.NewCounterVec(
@@ -928,7 +935,7 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 			Help:        "Number of token processed by model and key",
 			ConstLabels: nil,
 		},
-		[]string{"model", "key"},
+		[]string{"model", "key", "purpose"},
 	)
 	prometheus.MustRegister(reqCounter, tokensCounter)
 
@@ -945,6 +952,11 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 			}
 			req.Ctx = r.Context()
 
+			if err := models.ValidatePurpose(req.Purpose); err != nil {
+				httpErr(w, fmt.Errorf("invalid request, %w", err), http.StatusBadRequest)
+				return
+			}
+
 			apiKeyId := r.Context().Value("api-key-id").(string)
 			keyName := r.Context().Value("api-key-name").(string)
 
@@ -952,6 +964,7 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 				logger.Warn("rate limit exceeded (pre-check)",
 					"key", keyName,
 					"model", req.Model.FQN(),
+					"purpose", req.Purpose,
 				)
 				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
 				return
@@ -970,13 +983,14 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 				"apiKeyId", apiKeyId,
 				"key", keyName,
 				"model", req.Model.FQN(),
+				"purpose", req.Purpose,
 				"texts", len(req.Texts),
 				"token-total", response.Metadata.TotalTokens,
 			)
 
 			// Taking some metrics...
-			reqCounter.WithLabelValues(response.Metadata.Model, keyName).Inc()
-			tokensCounter.WithLabelValues(response.Metadata.Model, keyName).Add(float64(response.Metadata.TotalTokens))
+			reqCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Inc()
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Add(float64(response.Metadata.TotalTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -994,6 +1008,11 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 			}
 			req.Ctx = r.Context()
 
+			if err := models.ValidatePurpose(req.Purpose); err != nil {
+				httpErr(w, fmt.Errorf("invalid request, %w", err), http.StatusBadRequest)
+				return
+			}
+
 			apiKeyId := r.Context().Value("api-key-id").(string)
 			keyName := r.Context().Value("api-key-name").(string)
 
@@ -1002,6 +1021,7 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 					"apiKeyId", apiKeyId,
 					"key", keyName,
 					"model", req.Model.FQN(),
+					"purpose", req.Purpose,
 				)
 				httpErr(w, fmt.Errorf("rate limit exceeded"), http.StatusTooManyRequests)
 				return
@@ -1020,12 +1040,13 @@ func Embed(proxy *bellman.Proxy, apiKeyConfigs map[string]ApiKeyConfig, rateLimi
 				"apiKeyId", apiKeyId,
 				"key", keyName,
 				"model", req.Model.FQN(),
+				"purpose", req.Purpose,
 				"chunks", len(req.DocumentChunks),
 				"token-total", response.Metadata.TotalTokens,
 			)
 
-			reqCounter.WithLabelValues(response.Metadata.Model, keyName).Inc()
-			tokensCounter.WithLabelValues(response.Metadata.Model, keyName).Add(float64(response.Metadata.TotalTokens))
+			reqCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Inc()
+			tokensCounter.WithLabelValues(response.Metadata.Model, keyName, req.Purpose).Add(float64(response.Metadata.TotalTokens))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)

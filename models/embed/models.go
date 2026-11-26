@@ -60,9 +60,15 @@ func ToModel(fqn string) (Model, error) {
 }
 
 type Request struct {
-	Ctx   context.Context `json:"-"`
-	Model Model           `json:"model"`
-	Texts []string        `json:"texts"`
+	Ctx     context.Context `json:"-"`
+	Model   Model           `json:"model"`
+	Purpose string          `json:"purpose,omitempty"`
+	Texts   []string        `json:"texts"`
+}
+
+func (r *Request) WithPurpose(purpose string) *Request {
+	r.Purpose = purpose
+	return r
 }
 
 func NewSingleRequest(ctx context.Context, model Model, text string) *Request {
@@ -153,7 +159,13 @@ func (r *Response) SingleAsFloat32() ([]float32, error) {
 type DocumentRequest struct {
 	Ctx            context.Context `json:"-"`
 	Model          Model           `json:"model"`
+	Purpose        string          `json:"purpose,omitempty"`
 	DocumentChunks []string        `json:"document_chunks"`
+}
+
+func (r *DocumentRequest) WithPurpose(purpose string) *DocumentRequest {
+	r.Purpose = purpose
+	return r
 }
 
 func NewDocumentRequest(ctx context.Context, model Model, chunks []string) *DocumentRequest {

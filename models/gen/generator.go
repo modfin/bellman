@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/modfin/bellman/models"
 	"github.com/modfin/bellman/prompt"
 	"github.com/modfin/bellman/schema"
 	"github.com/modfin/bellman/tools"
@@ -31,7 +32,7 @@ func (b *Generator) Stream(prompts ...prompt.Prompt) (<-chan *StreamResponse, er
 	if prompter == nil {
 		return nil, errors.New("prompter is required")
 	}
-	if err := checkThinkingLevel(b.Request.ThinkingLevel); err != nil {
+	if err := checkRequest(b.Request); err != nil {
 		return nil, err
 	}
 	r := b.clone().Request
@@ -45,7 +46,7 @@ func (b *Generator) Prompt(prompts ...prompt.Prompt) (*Response, error) {
 	if prompter == nil {
 		return nil, errors.New("prompter is required")
 	}
-	if err := checkThinkingLevel(b.Request.ThinkingLevel); err != nil {
+	if err := checkRequest(b.Request); err != nil {
 		return nil, err
 	}
 	prompter.SetRequest(b.clone().Request)
@@ -53,6 +54,13 @@ func (b *Generator) Prompt(prompts ...prompt.Prompt) (*Response, error) {
 }
 
 // checkThinkingLevel rejects unknown levels, which providers would otherwise send as is or turn into no thinking.
+func checkRequest(r Request) error {
+	if err := checkThinkingLevel(r.ThinkingLevel); err != nil {
+		return err
+	}
+	return models.ValidatePurpose(r.Purpose)
+}
+
 func checkThinkingLevel(level ThinkingLevel) error {
 	if level != "" && !level.Valid() {
 		return fmt.Errorf("unknown thinking level %q", level)
@@ -115,6 +123,17 @@ func (b *Generator) clone() *Generator {
 func (b *Generator) Model(model Model) *Generator {
 	bb := b.clone()
 	bb.Request.Model = model
+	return bb
+}
+
+// Purpose becomes a Prometheus label value in bellmand, and every distinct value creates new time series that are
+// kept for good. Pass a fixed string, never a variable holding ids, names, dates or user input.
+//
+//	g.Purpose("report.summarize")        // good
+//	g.Purpose("report.summarize." + id) // bad, one new series per id
+func (b *Generator) Purpose(purpose string) *Generator {
+	bb := b.clone()
+	bb.Request.Purpose = purpose
 	return bb
 }
 
@@ -246,6 +265,12 @@ func WithTools(tools ...tools.Tool) Option {
 func WithToolConfig(choice tools.ToolChoice) Option {
 	return func(g *Generator) *Generator {
 		return g.SetToolConfig(choice)
+	}
+}
+
+func WithPurpose(purpose string) Option {
+	return func(g *Generator) *Generator {
+		return g.Purpose(purpose)
 	}
 }
 

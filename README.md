@@ -448,6 +448,25 @@ answer, err := res.AsText()
 fmt.Println(answer, err)
 ```
 
+## Purpose
+
+Set a purpose to say what a request is for. `bellmand` adds it as the `purpose` label on its request and token metrics, and
+to its logs, so consumption can be broken down below the API key. A purpose is lowercase letters, digits, `.`, `_` and `-`,
+at most 64 characters, e.g. `report.summarize`. Keep the set of values small and fixed, never put ids in it.
+
+```go
+client := bellman.New(bellmanUrl, bellman.Key{Name: "reports", Token: token})
+
+res, err := client.Generator().
+    Model(openai.GenModel_gpt4o_mini).
+    Purpose("report.summarize").
+    Prompt(prompt.AsUser("Summarize the meeting notes"))
+
+emb, err := client.Embed(embed.NewSingleRequest(ctx, model, text).WithPurpose("report.search"))
+
+dec, err := client.Decide(decide.NewRequest(ctx, model, state...).Ask(questions...).WithPurpose("report.classify"))
+```
+
 ## Provider specific config
 Some providers have specific configuration that is not supported by the common interface.
 You can set these options manually on the `gen.Model.Config` struct.

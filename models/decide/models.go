@@ -277,6 +277,7 @@ type Request struct {
 	Ctx context.Context `json:"-"`
 
 	Model     Model      `json:"model"`
+	Purpose   string     `json:"purpose,omitempty"`
 	State     []Part     `json:"state"`
 	Questions []Question `json:"questions"`
 }
@@ -290,6 +291,11 @@ func NewRequest(ctx context.Context, model Model, state ...Part) *Request {
 // Ask appends questions to the request and returns it for chaining.
 func (r *Request) Ask(questions ...Question) *Request {
 	r.Questions = append(r.Questions, questions...)
+	return r
+}
+
+func (r *Request) WithPurpose(purpose string) *Request {
+	r.Purpose = purpose
 	return r
 }
 
@@ -328,6 +334,9 @@ func (r *Request) StateText() string {
 func (r *Request) Validate() error {
 	if r.Model.Name == "" {
 		return errors.New("model name is required")
+	}
+	if err := models.ValidatePurpose(r.Purpose); err != nil {
+		return err
 	}
 	if len(r.State) == 0 {
 		return errors.New("state is required")
